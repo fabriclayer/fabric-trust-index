@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700&family=DM+Mono:wght@300;400;500&display=swap');
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    @apply font-sans bg-fabric-50 text-fabric-800 antialiased min-h-screen;
+  }
+  ::selection {
+    @apply bg-blue text-white;
+  }
+}
+
+/* ── Rating box fill animation ── */
+.rating-fill {
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Signal bar animation ── */
+.signal-bar-fill {
+  transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Chart area gradient ── */
+.chart-grad-stop-top { stop-color: #3d8af7; stop-opacity: 0.12; }
+.chart-grad-stop-bottom { stop-color: #3d8af7; stop-opacity: 0; }
+
+/* ── Scrollbar styling ── */
+.modal-terms::-webkit-scrollbar { width: 4px; }
+.modal-terms::-webkit-scrollbar-track { background: transparent; }
+.modal-terms::-webkit-scrollbar-thumb { background: #c8c8c4; border-radius: 100px; }
+
+/* ── Spinner ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e2df;
+  border-top-color: #3d8af7;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}
+
+/* ── Code syntax colors ── */
+.c-method { color: #f7931e; }
+.c-url { color: #ffffff; }
+.c-key { color: #6aa4f9; }
+.c-str { color: #0dc956; }
+.c-num { color: #f7931e; }
+.c-comment { color: #787874; }
+.c-type { color: #fe83e0; }

@@ -1,0 +1,62 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import FabricLogo from './FabricLogo'
+
+export default function Nav() {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const links = [
+    { href: 'https://fabriclayer.dev', label: 'Home' },
+    { href: 'https://fabriclayer.dev/api', label: 'API' },
+    { href: 'https://fabriclayer.dev/docs', label: 'Docs' },
+    { href: 'https://fabriclayer.dev/blog', label: 'Blog' },
+  ]
+
+  return (
+    <>
+      <nav className="sticky top-0 z-[100] bg-white border-b border-fabric-200 px-8 h-14 max-md:px-4">
+        <div className="max-w-container mx-auto h-full flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <Link href="/" className="flex items-center gap-2.5 text-black no-underline">
+              <FabricLogo className="h-[18px] w-auto" />
+            </Link>
+            <span className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 pointer-events-none">
+              trust index
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-6">
+              {links.map(l => (
+                <a key={l.href} href={l.href} className="font-mono text-[0.78rem] font-normal text-fabric-500 no-underline transition-colors hover:text-pink">
+                  {l.label}
+                </a>
+              ))}
+            </div>
+            <button
+              className="flex md:hidden flex-col gap-1 bg-transparent border-none cursor-pointer p-1.5 rounded-md transition-colors hover:bg-fabric-100"
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label="Menu"
+            >
+              <span className={`block w-[18px] h-[1.5px] bg-fabric-700 rounded-sm transition-all ${menuOpen ? 'translate-y-[5.5px] rotate-45' : ''}`} />
+              <span className={`block w-[18px] h-[1.5px] bg-fabric-700 rounded-sm transition-all ${menuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block w-[18px] h-[1.5px] bg-fabric-700 rounded-sm transition-all ${menuOpen ? '-translate-y-[5.5px] -rotate-45' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile menu */}
+      {menuOpen && (
+        <div className="fixed top-14 right-0 z-[99] bg-white border border-fabric-200 rounded-bl-xl shadow-lg py-2 min-w-[180px] md:hidden">
+          {links.map(l => (
+            <a key={l.href} href={l.href} className="block font-mono text-[0.78rem] text-fabric-600 no-underline py-2 px-5 transition-all hover:bg-fabric-50 hover:text-black">
+              {l.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
