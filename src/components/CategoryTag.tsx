@@ -21,14 +21,14 @@ export default function CategoryTag({ tag, category, active = false }: CategoryT
           : { color: '#c8c8c4', borderColor: '#f0f0ee', background: 'transparent' }
       }
       onMouseEnter={e => {
-        if (!active && colors) {
-          (e.target as HTMLElement).style.color = colors.text;
-          (e.target as HTMLElement).style.borderColor = colors.border;
-          (e.target as HTMLElement).style.background = colors.bg
+        if (!active) {
+          (e.target as HTMLElement).style.color = '#fe83e0';
+          (e.target as HTMLElement).style.borderColor = '#fe83e0';
+          (e.target as HTMLElement).style.background = 'rgba(254,131,224,0.08)'
         }
       }}
       onMouseLeave={e => {
-        if (!active && colors) {
+        if (!active) {
           (e.target as HTMLElement).style.color = '#c8c8c4';
           (e.target as HTMLElement).style.borderColor = '#f0f0ee';
           (e.target as HTMLElement).style.background = 'transparent'

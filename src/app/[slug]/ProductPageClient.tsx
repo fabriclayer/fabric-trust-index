@@ -173,19 +173,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
                   <Link
                     key={t}
                     href={`/?category=${service.category}`}
-                    className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 cursor-pointer transition-all hover:border-current no-underline"
-                    onMouseEnter={e => {
-                      if (tagColor) {
-                        (e.target as HTMLElement).style.color = tagColor.text;
-                        (e.target as HTMLElement).style.borderColor = tagColor.border;
-                        (e.target as HTMLElement).style.background = tagColor.bg
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      (e.target as HTMLElement).style.color = '';
-                      (e.target as HTMLElement).style.borderColor = '';
-                      (e.target as HTMLElement).style.background = ''
-                    }}
+                    className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 cursor-pointer transition-all hover:text-pink hover:border-pink hover:bg-[rgba(254,131,224,0.08)] no-underline"
                   >
                     {t}
                   </Link>
