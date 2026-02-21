@@ -46,7 +46,12 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatuses, setActiveStatuses] = useState<Set<string>>(new Set(['trusted', 'caution', 'blocked']))
   const searchParams = useSearchParams()
-  const [activeCategory, setActiveCategory] = useState(searchParams.get('category') || 'all')
+  const categoryParam = searchParams.get('category') || 'all'
+  const [activeCategory, setActiveCategory] = useState(categoryParam)
+
+  useEffect(() => {
+    setActiveCategory(categoryParam)
+  }, [categoryParam])
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
