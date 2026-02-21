@@ -116,7 +116,14 @@ const DATA_SOURCES = [
   { icon: '⬡', label: 'npm / PyPI Registry', meta: 'Downloads, versions, dependency scan' },
   { icon: '◎', label: 'Advisory Databases', meta: 'NVD, GitHub Advisories, OSV' },
   { icon: '◎', label: 'Publisher Identity', meta: 'Cross-registry verification · domain linked' },
+  { icon: '◇', label: 'Docker Hub', meta: 'Image pulls, tags, vulnerability scan' },
+  { icon: '△', label: 'StackOverflow', meta: 'Community questions, sentiment analysis' },
+  { icon: '◈', label: 'HuggingFace', meta: 'Model downloads, likes, community activity' },
+  { icon: '⬡', label: 'Status Pages', meta: 'Public status page monitoring' },
+  { icon: '◎', label: 'DNS & SSL', meta: 'Certificate chain, DNSSEC, domain age' },
+  { icon: '◇', label: 'WHOIS Registry', meta: 'Domain ownership, registrar history' },
 ]
+const DATA_SOURCES_INITIAL = 6
 
 // Tags that appear on the hero for various categories
 const HERO_TAGS: Record<string, string[]> = {
@@ -141,6 +148,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
   const [incidentsCount, setIncidentsCount] = useState(INCIDENTS_INITIAL)
   const [depsCount, setDepsCount] = useState(SUPPLY_CHAIN_INITIAL)
   const [versionsCount, setVersionsCount] = useState(VERSIONS_INITIAL)
+  const [sourcesCount, setSourcesCount] = useState(DATA_SOURCES_INITIAL)
 
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
@@ -550,10 +558,10 @@ export default function ProductPageClient({ service }: { service: Service }) {
           <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">12 indexed</span>
+              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{DATA_SOURCES.length} indexed</span>
             </div>
-            <div className="flex flex-col gap-2.5">
-              {DATA_SOURCES.map(src => (
+            <div className="flex flex-col gap-2.5 max-h-[400px] overflow-y-auto no-scrollbar">
+              {DATA_SOURCES.slice(0, sourcesCount).map(src => (
                 <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                   <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
                   <div className="flex flex-col gap-px">
@@ -562,6 +570,23 @@ export default function ProductPageClient({ service }: { service: Service }) {
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
+              <span className="font-mono text-[0.65rem] text-fabric-400">
+                Showing {Math.min(sourcesCount, DATA_SOURCES.length)} of {DATA_SOURCES.length} sources
+              </span>
+              <div className="flex gap-3">
+                {sourcesCount > DATA_SOURCES_INITIAL && (
+                  <button onClick={() => setSourcesCount(DATA_SOURCES_INITIAL)} className="font-mono text-[0.68rem] text-fabric-400 cursor-pointer hover:text-fabric-600 transition-opacity bg-transparent border-none p-0">
+                    ← Show less
+                  </button>
+                )}
+                {sourcesCount < DATA_SOURCES.length && (
+                  <button onClick={() => setSourcesCount(c => Math.min(c + LOAD_MORE_BATCH, DATA_SOURCES.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                    Show more →
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
