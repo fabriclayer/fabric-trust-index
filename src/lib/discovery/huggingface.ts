@@ -79,17 +79,17 @@ function hfHeaders(): Record<string, string> {
  * Fetch a page of HF models sorted by downloads (descending).
  * HF API returns up to 100 models per request.
  */
-async function fetchHFPage(offset: number, limit: number): Promise<any[]> {
+async function fetchHFPage(skip: number, limit: number): Promise<any[]> {
   try {
-    const url = `${HF_API}/models?sort=downloads&direction=-1&limit=${Math.min(limit, 100)}&offset=${offset}`
+    const url = `${HF_API}/models?sort=downloads&direction=-1&limit=${Math.min(limit, 100)}&skip=${skip}`
     const res = await fetch(url, { headers: hfHeaders() })
     if (!res.ok) {
-      console.error(`HF API returned ${res.status} at offset ${offset}`)
+      console.error(`HF API returned ${res.status} at skip ${skip}`)
       return []
     }
     return await res.json()
   } catch (err) {
-    console.error(`HF API fetch failed at offset ${offset}:`, err)
+    console.error(`HF API fetch failed at skip ${skip}:`, err)
     return []
   }
 }
