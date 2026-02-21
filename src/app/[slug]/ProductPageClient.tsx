@@ -135,11 +135,12 @@ const HERO_TAGS: Record<string, string[]> = {
 const INCIDENTS_INITIAL = 6
 const SUPPLY_CHAIN_INITIAL = 5
 const VERSIONS_INITIAL = 5
+const LOAD_MORE_BATCH = 10
 
 export default function ProductPageClient({ service }: { service: Service }) {
-  const [showAllIncidents, setShowAllIncidents] = useState(false)
-  const [showAllDeps, setShowAllDeps] = useState(false)
-  const [showAllVersions, setShowAllVersions] = useState(false)
+  const [incidentsCount, setIncidentsCount] = useState(INCIDENTS_INITIAL)
+  const [depsCount, setDepsCount] = useState(SUPPLY_CHAIN_INITIAL)
+  const [versionsCount, setVersionsCount] = useState(VERSIONS_INITIAL)
 
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
@@ -375,7 +376,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">last 90 days</span>
           </div>
           <div className="flex flex-col">
-            {(showAllIncidents ? INCIDENTS : INCIDENTS.slice(0, INCIDENTS_INITIAL)).map((inc, i) => (
+            {INCIDENTS.slice(0, incidentsCount).map((inc, i) => (
               <div key={i} className="flex gap-4 py-3 border-b border-fabric-100 last:border-b-0 items-start">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${inc.dot}`} />
                 <span className="font-mono text-[0.65rem] text-fabric-400 min-w-[56px] flex-shrink-0 mt-px">{inc.date}</span>
@@ -386,11 +387,20 @@ export default function ProductPageClient({ service }: { service: Service }) {
           </div>
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
             <span className="font-mono text-[0.65rem] text-fabric-400">
-              {showAllIncidents ? `Showing all ${INCIDENTS.length} events` : `Showing ${INCIDENTS_INITIAL} of ${INCIDENTS.length} events`}
+              Showing {Math.min(incidentsCount, INCIDENTS.length)} of {INCIDENTS.length} events
             </span>
-            <button onClick={() => setShowAllIncidents(!showAllIncidents)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
-              {showAllIncidents ? '← Show less' : 'View all events →'}
-            </button>
+            <div className="flex gap-3">
+              {incidentsCount > INCIDENTS_INITIAL && (
+                <button onClick={() => setIncidentsCount(INCIDENTS_INITIAL)} className="font-mono text-[0.68rem] text-fabric-400 cursor-pointer hover:text-fabric-600 transition-opacity bg-transparent border-none p-0">
+                  ← Show less
+                </button>
+              )}
+              {incidentsCount < INCIDENTS.length && (
+                <button onClick={() => setIncidentsCount(c => Math.min(c + LOAD_MORE_BATCH, INCIDENTS.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  Show more →
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -469,7 +479,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">trust chain</span>
           </div>
           <div className="flex flex-col gap-2">
-            {(showAllDeps ? SUPPLY_CHAIN : SUPPLY_CHAIN.slice(0, SUPPLY_CHAIN_INITIAL)).map(dep => (
+            {SUPPLY_CHAIN.slice(0, depsCount).map(dep => (
               <div key={dep.name} className="flex items-center gap-2 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                 <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{dep.emoji}</div>
                 <div className="flex-1 min-w-0">
@@ -483,11 +493,20 @@ export default function ProductPageClient({ service }: { service: Service }) {
           </div>
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
             <span className="font-mono text-[0.65rem] text-fabric-400">
-              {showAllDeps ? `Showing all ${SUPPLY_CHAIN.length} dependencies` : `Showing ${SUPPLY_CHAIN_INITIAL} of ${SUPPLY_CHAIN.length} dependencies`}
+              Showing {Math.min(depsCount, SUPPLY_CHAIN.length)} of {SUPPLY_CHAIN.length} dependencies
             </span>
-            <button onClick={() => setShowAllDeps(!showAllDeps)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
-              {showAllDeps ? '← Show less' : 'View all dependencies →'}
-            </button>
+            <div className="flex gap-3">
+              {depsCount > SUPPLY_CHAIN_INITIAL && (
+                <button onClick={() => setDepsCount(SUPPLY_CHAIN_INITIAL)} className="font-mono text-[0.68rem] text-fabric-400 cursor-pointer hover:text-fabric-600 transition-opacity bg-transparent border-none p-0">
+                  ← Show less
+                </button>
+              )}
+              {depsCount < SUPPLY_CHAIN.length && (
+                <button onClick={() => setDepsCount(c => Math.min(c + LOAD_MORE_BATCH, SUPPLY_CHAIN.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  Show more →
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -591,7 +610,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">SCORE</span>
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">DELTA</span>
           </div>
-          {(showAllVersions ? VERSIONS : VERSIONS.slice(0, VERSIONS_INITIAL)).map(v => (
+          {VERSIONS.slice(0, versionsCount).map(v => (
             <div key={v.tag} className="grid grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px] gap-4 max-md:gap-2 py-2.5 border-b border-fabric-100 last:border-b-0">
               <span className="font-mono text-[0.72rem] text-fabric-700">{v.tag}</span>
               <span className="font-mono text-[0.65rem] text-fabric-400">{v.date}</span>
@@ -601,11 +620,20 @@ export default function ProductPageClient({ service }: { service: Service }) {
           ))}
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
             <span className="font-mono text-[0.65rem] text-fabric-400">
-              {showAllVersions ? `Showing all ${VERSIONS.length} releases` : `Showing ${VERSIONS_INITIAL} of ${VERSIONS.length} releases`}
+              Showing {Math.min(versionsCount, VERSIONS.length)} of {VERSIONS.length} releases
             </span>
-            <button onClick={() => setShowAllVersions(!showAllVersions)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
-              {showAllVersions ? '← Show less' : 'View all releases →'}
-            </button>
+            <div className="flex gap-3">
+              {versionsCount > VERSIONS_INITIAL && (
+                <button onClick={() => setVersionsCount(VERSIONS_INITIAL)} className="font-mono text-[0.68rem] text-fabric-400 cursor-pointer hover:text-fabric-600 transition-opacity bg-transparent border-none p-0">
+                  ← Show less
+                </button>
+              )}
+              {versionsCount < VERSIONS.length && (
+                <button onClick={() => setVersionsCount(c => Math.min(c + LOAD_MORE_BATCH, VERSIONS.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  Show more →
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
