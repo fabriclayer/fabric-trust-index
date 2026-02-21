@@ -195,24 +195,8 @@ export async function runAllCollectors(service: DbService): Promise<{
   // Recompute composite score
   const rawScore = signals.reduce((sum, s, i) => sum + s * WEIGHTS[i], 0)
 
-  // Apply modifiers
-  let compositeScore = rawScore
+  const compositeScore = Math.round(rawScore * 100) / 100
   const modifiers: string[] = []
-
-  if (service.transaction_count < 10) {
-    compositeScore *= 0.8
-    modifiers.push('new_provider')
-  }
-
-  if (service.last_activity_at) {
-    const daysSince = (Date.now() - new Date(service.last_activity_at).getTime()) / 86400000
-    if (daysSince > 7) {
-      compositeScore *= 0.7
-      modifiers.push('inactive')
-    }
-  }
-
-  compositeScore = Math.round(compositeScore * 100) / 100
   const oldComposite = service.composite_score
 
   updates.composite_score = compositeScore
