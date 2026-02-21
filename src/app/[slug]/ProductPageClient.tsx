@@ -142,27 +142,35 @@ export default function ProductPageClient({ service }: { service: Service }) {
 
               {/* Hero tags */}
               <div className="w-full flex flex-wrap gap-1.5 items-center -mt-[4px]">
-                {heroTags.map(t => (
-                  <span
-                    key={t}
-                    className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 cursor-default transition-all hover:border-current"
-                    style={tagColor ? { ['--tw-text-opacity' as string]: 1 } : undefined}
-                    onMouseEnter={e => {
+                {heroTags.map((t, i) => {
+                  const cls = "font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 transition-all hover:border-current no-underline"
+                  const hoverHandlers = {
+                    onMouseEnter: (e: React.MouseEvent) => {
                       if (tagColor) {
                         (e.target as HTMLElement).style.color = tagColor.text;
                         (e.target as HTMLElement).style.borderColor = tagColor.border;
                         (e.target as HTMLElement).style.background = tagColor.bg
                       }
-                    }}
-                    onMouseLeave={e => {
+                    },
+                    onMouseLeave: (e: React.MouseEvent) => {
                       (e.target as HTMLElement).style.color = '';
                       (e.target as HTMLElement).style.borderColor = '';
                       (e.target as HTMLElement).style.background = ''
-                    }}
-                  >
-                    {t}
-                  </span>
-                ))}
+                    },
+                  }
+                  if (i === 0) {
+                    return (
+                      <Link key={t} href={`/?category=${service.category}`} className={`${cls} cursor-pointer`} {...hoverHandlers}>
+                        {t}
+                      </Link>
+                    )
+                  }
+                  return (
+                    <span key={t} className={`${cls} cursor-default`} {...hoverHandlers}>
+                      {t}
+                    </span>
+                  )
+                })}
               </div>
 
               {/* Hero links */}

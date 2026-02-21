@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import SearchToolbar from '@/components/SearchToolbar'
@@ -44,7 +45,8 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatuses, setActiveStatuses] = useState<Set<string>>(new Set(['trusted', 'caution', 'blocked']))
-  const [activeCategory, setActiveCategory] = useState('all')
+  const searchParams = useSearchParams()
+  const [activeCategory, setActiveCategory] = useState(searchParams.get('category') || 'all')
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)

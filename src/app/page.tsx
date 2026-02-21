@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import TrustIndexClient from '@/components/TrustIndexClient'
 import { SERVICES } from '@/data/services'
 
@@ -18,5 +19,9 @@ export const revalidate = 300 // ISR: revalidate every 5 minutes
 
 export default async function TrustIndexPage() {
   const services = await loadServices()
-  return <TrustIndexClient services={services} />
+  return (
+    <Suspense>
+      <TrustIndexClient services={services} />
+    </Suspense>
+  )
 }
