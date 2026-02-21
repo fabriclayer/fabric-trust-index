@@ -11,11 +11,12 @@ export function generateStaticParams() {
 }
 
 async function loadService(slug: string) {
-  // Use Supabase if configured
+  // Use Supabase if configured, fall back to static data
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { getServiceBySlug } = await import('@/lib/services')
-      return await getServiceBySlug(slug)
+      const service = await getServiceBySlug(slug)
+      if (service) return service
     } catch (err) {
       console.error('Failed to load from Supabase:', err)
     }
