@@ -56,6 +56,14 @@ const INCIDENTS = [
   { dot: 'bg-[#0dc956]', date: 'Jan 03', text: 'Incident resolved within 4hrs. Uptime restored. Score recovered', score: '4.61', scoreColor: 'text-[#0dc956]' },
   { dot: 'bg-[#0dc956]', date: 'Dec 15', text: 'CVE-2024-51234 patched in dependency tree within 6hrs', score: '4.63', scoreColor: 'text-[#0dc956]' },
   { dot: 'bg-blue', date: 'Nov 28', text: 'Initial indexing complete — provider added to Trust Index', score: '4.58', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-[#0dc956]', date: 'Nov 15', text: 'Dependency update resolved 3 medium-severity advisories', score: '4.55', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-[#f7931e]', date: 'Nov 02', text: 'Latency spike detected — p99 exceeded 8s for 45 minutes', score: '4.48', scoreColor: 'text-[#f7931e]' },
+  { dot: 'bg-[#0dc956]', date: 'Nov 02', text: 'Latency normalized after upstream provider scaling', score: '4.52', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-blue', date: 'Oct 20', text: 'New API version detected — documentation updated', score: '4.50', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-[#0dc956]', date: 'Oct 05', text: 'SOC 2 Type II certification verified', score: '4.50', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-blue', date: 'Sep 22', text: 'Model card published — transparency score improved', score: '4.46', scoreColor: 'text-[#0dc956]' },
+  { dot: 'bg-[#d03a3d]', date: 'Sep 10', text: 'Critical CVE-2024-48901 found in transitive dependency', score: '4.32', scoreColor: 'text-[#d03a3d]' },
+  { dot: 'bg-[#0dc956]', date: 'Sep 10', text: 'CVE-2024-48901 patched within 3hrs — score recovered', score: '4.44', scoreColor: 'text-[#0dc956]' },
 ]
 
 const PRIVACY_ITEMS = [
@@ -80,6 +88,10 @@ const SUPPLY_CHAIN = [
   { emoji: '💳', name: 'Stripe', type: 'Payment processor', score: '4.7' },
   { emoji: '📊', name: 'Datadog', type: 'Monitoring · observability', score: '4.5' },
   { emoji: '🪪', name: 'Auth0 (Okta)', type: 'Identity · authentication', score: '4.6' },
+  { emoji: '📦', name: 'npm Registry', type: 'Package distribution', score: '4.4' },
+  { emoji: '🔑', name: 'HashiCorp Vault', type: 'Secrets management', score: '4.7' },
+  { emoji: '📡', name: 'Fastly', type: 'Edge computing · CDN', score: '4.5' },
+  { emoji: '🗄️', name: 'PostgreSQL (Supabase)', type: 'Database · storage', score: '4.6' },
 ]
 
 const VERSIONS = [
@@ -88,6 +100,13 @@ const VERSIONS = [
   { tag: 'v20241201', date: 'Dec 01, 2024', score: '4.58', delta: '—', deltaClass: 'text-fabric-400' },
   { tag: 'v20241018', date: 'Oct 18, 2024', score: '4.58', delta: '+0.12', deltaClass: 'text-[#0dc956]' },
   { tag: 'v20240901', date: 'Sep 01, 2024', score: '4.46', delta: 'initial', deltaClass: 'text-fabric-400' },
+  { tag: 'v20240715', date: 'Jul 15, 2024', score: '4.40', delta: '+0.08', deltaClass: 'text-[#0dc956]' },
+  { tag: 'v20240601', date: 'Jun 01, 2024', score: '4.32', delta: '+0.04', deltaClass: 'text-[#0dc956]' },
+  { tag: 'v20240420', date: 'Apr 20, 2024', score: '4.28', delta: '-0.03', deltaClass: 'text-[#f7931e]' },
+  { tag: 'v20240310', date: 'Mar 10, 2024', score: '4.31', delta: '+0.11', deltaClass: 'text-[#0dc956]' },
+  { tag: 'v20240201', date: 'Feb 01, 2024', score: '4.20', delta: '+0.06', deltaClass: 'text-[#0dc956]' },
+  { tag: 'v20240105', date: 'Jan 05, 2024', score: '4.14', delta: '+0.14', deltaClass: 'text-[#0dc956]' },
+  { tag: 'v20231115', date: 'Nov 15, 2023', score: '4.00', delta: 'initial', deltaClass: 'text-fabric-400' },
 ]
 
 const DATA_SOURCES = [
@@ -113,7 +132,15 @@ const HERO_TAGS: Record<string, string[]> = {
   infra: ['infra', 'serverless', 'GPU'],
 }
 
+const INCIDENTS_INITIAL = 6
+const SUPPLY_CHAIN_INITIAL = 5
+const VERSIONS_INITIAL = 5
+
 export default function ProductPageClient({ service }: { service: Service }) {
+  const [showAllIncidents, setShowAllIncidents] = useState(false)
+  const [showAllDeps, setShowAllDeps] = useState(false)
+  const [showAllVersions, setShowAllVersions] = useState(false)
+
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
   const heroTags = HERO_TAGS[service.category] || [service.category]
@@ -360,7 +387,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">last 90 days</span>
           </div>
           <div className="flex flex-col">
-            {INCIDENTS.map((inc, i) => (
+            {(showAllIncidents ? INCIDENTS : INCIDENTS.slice(0, INCIDENTS_INITIAL)).map((inc, i) => (
               <div key={i} className="flex gap-4 py-3 border-b border-fabric-100 last:border-b-0 items-start">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${inc.dot}`} />
                 <span className="font-mono text-[0.65rem] text-fabric-400 min-w-[56px] flex-shrink-0 mt-px">{inc.date}</span>
@@ -370,8 +397,12 @@ export default function ProductPageClient({ service }: { service: Service }) {
             ))}
           </div>
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
-            <span className="font-mono text-[0.65rem] text-fabric-400">Showing 6 of 14 events</span>
-            <span className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity">View all events →</span>
+            <span className="font-mono text-[0.65rem] text-fabric-400">
+              {showAllIncidents ? `Showing all ${INCIDENTS.length} events` : `Showing ${INCIDENTS_INITIAL} of ${INCIDENTS.length} events`}
+            </span>
+            <button onClick={() => setShowAllIncidents(!showAllIncidents)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+              {showAllIncidents ? '← Show less' : 'View all events →'}
+            </button>
           </div>
         </div>
 
@@ -450,7 +481,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">trust chain</span>
           </div>
           <div className="flex flex-col gap-2">
-            {SUPPLY_CHAIN.map(dep => (
+            {(showAllDeps ? SUPPLY_CHAIN : SUPPLY_CHAIN.slice(0, SUPPLY_CHAIN_INITIAL)).map(dep => (
               <div key={dep.name} className="flex items-center gap-2 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                 <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{dep.emoji}</div>
                 <div className="flex-1 min-w-0">
@@ -463,8 +494,12 @@ export default function ProductPageClient({ service }: { service: Service }) {
             ))}
           </div>
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
-            <span className="font-mono text-[0.65rem] text-fabric-400">Showing 5 of 9 dependencies</span>
-            <span className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity">View all dependencies →</span>
+            <span className="font-mono text-[0.65rem] text-fabric-400">
+              {showAllDeps ? `Showing all ${SUPPLY_CHAIN.length} dependencies` : `Showing ${SUPPLY_CHAIN_INITIAL} of ${SUPPLY_CHAIN.length} dependencies`}
+            </span>
+            <button onClick={() => setShowAllDeps(!showAllDeps)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+              {showAllDeps ? '← Show less' : 'View all dependencies →'}
+            </button>
           </div>
         </div>
 
@@ -568,7 +603,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">SCORE</span>
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">DELTA</span>
           </div>
-          {VERSIONS.map(v => (
+          {(showAllVersions ? VERSIONS : VERSIONS.slice(0, VERSIONS_INITIAL)).map(v => (
             <div key={v.tag} className="grid grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px] gap-4 max-md:gap-2 py-2.5 border-b border-fabric-100 last:border-b-0">
               <span className="font-mono text-[0.72rem] text-fabric-700">{v.tag}</span>
               <span className="font-mono text-[0.65rem] text-fabric-400">{v.date}</span>
@@ -577,8 +612,12 @@ export default function ProductPageClient({ service }: { service: Service }) {
             </div>
           ))}
           <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
-            <span className="font-mono text-[0.65rem] text-fabric-400">Showing 5 of 12 releases</span>
-            <span className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity">View all releases →</span>
+            <span className="font-mono text-[0.65rem] text-fabric-400">
+              {showAllVersions ? `Showing all ${VERSIONS.length} releases` : `Showing ${VERSIONS_INITIAL} of ${VERSIONS.length} releases`}
+            </span>
+            <button onClick={() => setShowAllVersions(!showAllVersions)} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+              {showAllVersions ? '← Show less' : 'View all releases →'}
+            </button>
           </div>
         </div>
 
