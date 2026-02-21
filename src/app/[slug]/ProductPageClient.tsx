@@ -375,7 +375,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Incidents & Alerts</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">last 90 days</span>
           </div>
-          <div className="flex flex-col max-h-[400px] overflow-y-auto subtle-scroll">
+          <div className="flex flex-col">
             {INCIDENTS.slice(0, incidentsCount).map((inc, i) => (
               <div key={i} className="flex gap-4 py-3 border-b border-fabric-100 last:border-b-0 items-start">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${inc.dot}`} />
@@ -478,7 +478,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Supply Chain & Dependencies</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">trust chain</span>
           </div>
-          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto subtle-scroll">
+          <div className="flex flex-col gap-2">
             {SUPPLY_CHAIN.slice(0, depsCount).map(dep => (
               <div key={dep.name} className="flex items-center gap-2 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                 <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{dep.emoji}</div>
