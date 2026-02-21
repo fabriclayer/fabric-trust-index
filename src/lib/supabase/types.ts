@@ -56,6 +56,11 @@ export interface Database {
         Insert: Omit<DbDiscoveryQueue, 'id' | 'created_at'>
         Update: Partial<Omit<DbDiscoveryQueue, 'id'>>
       }
+      provider_claims: {
+        Row: DbProviderClaim
+        Insert: Omit<DbProviderClaim, 'id' | 'created_at'>
+        Update: Partial<Omit<DbProviderClaim, 'id'>>
+      }
       service_requests: {
         Row: DbServiceRequest
         Insert: Omit<DbServiceRequest, 'id' | 'created_at'>
@@ -226,6 +231,18 @@ export interface DbApiKey {
   active: boolean
   created_at: string
   last_used_at: string | null
+}
+
+export interface DbProviderClaim {
+  id: string
+  service_slug: string
+  service_name: string
+  contact_name: string
+  contact_email: string
+  role: string | null
+  message: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
 }
 
 export interface DbServiceRequest {

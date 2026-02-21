@@ -9,6 +9,7 @@ import Footer from '@/components/Footer'
 import RatingBoxes from '@/components/RatingBoxes'
 import ScoreStatus from '@/components/ScoreStatus'
 import ServiceLogo from '@/components/ServiceLogo'
+import ClaimProviderModal from '@/components/ClaimProviderModal'
 
 const scoreColor = {
   trusted: 'text-[#0dc956]',
@@ -149,6 +150,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
   const [depsCount, setDepsCount] = useState(SUPPLY_CHAIN_INITIAL)
   const [versionsCount, setVersionsCount] = useState(VERSIONS_INITIAL)
   const [sourcesCount, setSourcesCount] = useState(DATA_SOURCES_INITIAL)
+  const [showClaimModal, setShowClaimModal] = useState(false)
 
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
@@ -675,7 +677,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
               <p className="font-mono text-[0.72rem] text-fabric-400 leading-relaxed">Claim this profile to unlock deeper evaluation, real-time monitoring,<br className="max-md:hidden" />and trust signals that help agents discover your service.</p>
             </div>
             <div className="flex gap-3 flex-shrink-0">
-              <span className="font-mono text-[0.72rem] py-2.5 px-5 bg-fabric-700 text-fabric-500 rounded-lg cursor-not-allowed font-medium whitespace-nowrap opacity-50">Claim Provider</span>
+              <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-blue text-white rounded-lg cursor-pointer font-medium whitespace-nowrap transition-all hover:brightness-110 border-none">Claim Provider</button>
               <span className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-fabric-400 border border-fabric-600 rounded-lg cursor-pointer transition-all hover:border-fabric-400 hover:text-white whitespace-nowrap">Report Issue</span>
             </div>
           </div>
@@ -697,6 +699,14 @@ export default function ProductPageClient({ service }: { service: Service }) {
       </div>
 
       <Footer />
+
+      {showClaimModal && (
+        <ClaimProviderModal
+          serviceName={service.name}
+          serviceSlug={service.slug}
+          onClose={() => setShowClaimModal(false)}
+        />
+      )}
     </>
   )
 }

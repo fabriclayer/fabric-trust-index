@@ -177,7 +177,20 @@ CREATE TABLE discovery_queue (
   processed_at TIMESTAMPTZ
 );
 
--- 12. Service Requests — community-submitted requests for new services
+-- 12. Provider Claims — publisher ownership claims for manual review
+CREATE TABLE provider_claims (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  service_slug TEXT NOT NULL,
+  service_name TEXT NOT NULL,
+  contact_name TEXT NOT NULL,
+  contact_email TEXT NOT NULL,
+  role TEXT,
+  message TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 13. Service Requests — community-submitted requests for new services
 CREATE TABLE service_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   service_name TEXT NOT NULL,
@@ -223,6 +236,9 @@ CREATE INDEX idx_feedback_service_id ON feedback(service_id, created_at DESC);
 
 -- Discovery Queue
 CREATE INDEX idx_discovery_queue_status ON discovery_queue(status);
+
+-- Provider Claims
+CREATE INDEX idx_provider_claims_status ON provider_claims(status);
 
 -- Service Requests
 CREATE INDEX idx_service_requests_status ON service_requests(status);
@@ -314,6 +330,13 @@ ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow public insert on service_requests"
   ON service_requests FOR INSERT
+  WITH CHECK (true);
+
+-- Provider Claims — public insert only (no read)
+ALTER TABLE provider_claims ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public insert on provider_claims"
+  ON provider_claims FOR INSERT
   WITH CHECK (true);
 
 -- api_keys and discovery_queue intentionally have NO public read policies.
