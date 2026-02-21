@@ -219,7 +219,7 @@ async function addDiscoveredService(params: {
     .single()
 
   if (!publisher) {
-    return `publisher not found for slug "${publisherSlug}"`
+    return `publisher "${publisherSlug}": upsert=${upsertError?.message ?? 'ok'}, then not found`
   }
 
   const icon = ICON_MAP[params.category] ?? '◇'
