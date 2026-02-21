@@ -14,6 +14,15 @@ function formatUpdatedAt(isoDate: string): string {
   return `${weeks}w ago`
 }
 
+function extractDomain(url?: string | null): string | undefined {
+  if (!url) return undefined
+  try {
+    return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '')
+  } catch {
+    return undefined
+  }
+}
+
 function dbToService(db: any): Service {
   return {
     name: db.name,
@@ -34,6 +43,7 @@ function dbToService(db: any): Service {
     status: db.status,
     icon: db.icon,
     updated: formatUpdatedAt(db.updated_at),
+    domain: extractDomain(db.publisher?.website_url),
   }
 }
 
@@ -41,7 +51,7 @@ export async function getServices(): Promise<Service[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('services')
-    .select('*, publisher:publishers(name)')
+    .select('*, publisher:publishers(name, website_url)')
     .order('composite_score', { ascending: false })
   if (error) throw error
   return (data ?? []).map(dbToService)
@@ -51,7 +61,7 @@ export async function getServiceBySlug(slug: string): Promise<Service | null> {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('services')
-    .select('*, publisher:publishers(name)')
+    .select('*, publisher:publishers(name, website_url)')
     .eq('slug', slug)
     .single()
   if (error || !data) return null

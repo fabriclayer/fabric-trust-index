@@ -8,6 +8,7 @@ import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import RatingBoxes from '@/components/RatingBoxes'
 import ScoreStatus from '@/components/ScoreStatus'
+import ServiceLogo from '@/components/ServiceLogo'
 
 const scoreColor = {
   trusted: 'text-[#0dc956]',
@@ -131,9 +132,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
         <div className="bg-white border border-fabric-200 rounded-2xl p-6 max-md:p-5 mb-5">
           <div className="flex items-start justify-between gap-6 max-md:flex-col max-md:gap-4">
             <div className="flex items-start gap-5 flex-1 min-w-0 flex-wrap">
-              <div className="w-14 h-14 rounded-[14px] flex items-center justify-center text-2xl flex-shrink-0 bg-[rgba(61,138,247,0.08)] text-blue max-md:w-11 max-md:h-11 max-md:rounded-[11px] max-md:text-xl">
-                {service.icon}
-              </div>
+              <ServiceLogo domain={service.domain} name={service.name} size={56} className="rounded-[14px] max-md:!w-11 max-md:!h-11 max-md:!rounded-[11px]" />
               <div className="flex-1 min-w-0">
                 <h1 className="text-3xl font-bold tracking-tight leading-tight max-md:text-xl">{service.name}</h1>
                 <div className="font-mono text-[0.78rem] text-fabric-500 mt-0.5">

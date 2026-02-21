@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { Service } from '@/data/services'
 import RatingBoxes from './RatingBoxes'
 import CategoryTag from './CategoryTag'
+import ServiceLogo from './ServiceLogo'
 
 const scoreNumColor = {
   trusted: 'text-[#0dc956]',
@@ -18,9 +19,7 @@ export default function ServiceCard({ service }: { service: Service }) {
       className="group bg-white border border-fabric-200 rounded-card p-5 cursor-pointer transition-all duration-200 flex flex-col gap-2.5 relative no-underline hover:border-fabric-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] hover:-translate-y-px max-[480px]:p-3.5"
     >
       <div className="flex items-start gap-2.5">
-        <div className="w-10 h-10 rounded-[10px] bg-fabric-100 border border-fabric-200 flex items-center justify-center text-base flex-shrink-0 font-semibold text-fabric-500 font-sans uppercase">
-          {service.name.charAt(0)}
-        </div>
+        <ServiceLogo domain={service.domain} name={service.name} size={40} className="rounded-[10px]" />
         <div className="flex-1 min-w-0">
           <div className="text-[0.92rem] font-semibold text-black tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
             {service.name}

@@ -14,16 +14,23 @@ async function seed() {
   console.log('Seeding database...')
   console.log(`Found ${SERVICES.length} services to seed.\n`)
 
-  // 1. Extract unique publishers
-  const publisherNames = [...new Set(SERVICES.map(s => s.publisher))]
-  console.log(`Upserting ${publisherNames.length} publishers...`)
+  // 1. Extract unique publishers with their domains
+  const publisherMap = new Map<string, string | undefined>()
+  for (const svc of SERVICES) {
+    if (!publisherMap.has(svc.publisher)) {
+      publisherMap.set(svc.publisher, svc.domain ? `https://${svc.domain}` : undefined)
+    }
+  }
+  console.log(`Upserting ${publisherMap.size} publishers...`)
 
   // 2. Upsert publishers
-  for (const name of publisherNames) {
+  for (const [name, website_url] of publisherMap) {
     const slug = toSlug(name)
+    const row: Record<string, string> = { name, slug }
+    if (website_url) row.website_url = website_url
     const { error } = await supabase
       .from('publishers')
-      .upsert({ name, slug }, { onConflict: 'slug' })
+      .upsert(row, { onConflict: 'slug' })
     if (error) console.error(`  Publisher "${name}":`, error.message)
   }
   console.log(`  Done.\n`)
@@ -82,7 +89,7 @@ async function seed() {
 
   console.log(`  Done.\n`)
   console.log('--- Seed Summary ---')
-  console.log(`Publishers: ${publisherNames.length} upserted`)
+  console.log(`Publishers: ${publisherMap.size} upserted`)
   console.log(`Services:  ${successCount} upserted, ${errorCount} errors`)
   console.log(`Total:     ${SERVICES.length} processed`)
 }
