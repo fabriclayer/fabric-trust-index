@@ -527,9 +527,9 @@ export default function ProductPageClient({ service }: { service: Service }) {
             </div>
             <div className="flex flex-col gap-2">
               {[
-                { range: '3.34 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
-                { range: '1.67 – 3.33', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
-                { range: '0.00 – 1.66', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
+                { range: '3.50 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
+                { range: '2.50 – 3.49', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
+                { range: '0.00 – 2.49', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
               ].map(t => (
                 <div key={t.range} className="flex justify-between items-center py-1.5 border-b border-fabric-100">
                   <span className="font-mono text-[0.72rem] text-fabric-600">{t.range}</span>
