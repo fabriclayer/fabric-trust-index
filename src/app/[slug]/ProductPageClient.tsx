@@ -679,8 +679,8 @@ export default function ProductPageClient({ service }: { service: Service }) {
               <p className="font-mono text-[0.72rem] text-fabric-400 leading-relaxed">Claim this profile to unlock deeper evaluation, real-time monitoring,<br className="max-md:hidden" />and trust signals that help agents discover your service.</p>
             </div>
             <div className="flex gap-3 flex-shrink-0">
-              <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:bg-pink hover:text-white hover:border-pink whitespace-nowrap">Claim Provider</button>
-              <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:bg-pink hover:text-white hover:border-pink whitespace-nowrap">Report Issue</button>
+              <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:!bg-pink hover:!text-white hover:!border-pink whitespace-nowrap">Claim Provider</button>
+              <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:!bg-pink hover:!text-white hover:!border-pink whitespace-nowrap">Report Issue</button>
             </div>
           </div>
 
