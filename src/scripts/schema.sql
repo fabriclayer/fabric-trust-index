@@ -177,6 +177,16 @@ CREATE TABLE discovery_queue (
   processed_at TIMESTAMPTZ
 );
 
+-- 12. Service Requests — community-submitted requests for new services
+CREATE TABLE service_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  service_name TEXT NOT NULL,
+  url TEXT,
+  email TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewing', 'indexed', 'declined')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- =============================================================================
 -- INDEXES
 -- =============================================================================
@@ -213,6 +223,9 @@ CREATE INDEX idx_feedback_service_id ON feedback(service_id, created_at DESC);
 
 -- Discovery Queue
 CREATE INDEX idx_discovery_queue_status ON discovery_queue(status);
+
+-- Service Requests
+CREATE INDEX idx_service_requests_status ON service_requests(status);
 
 -- =============================================================================
 -- UPDATED_AT TRIGGER FUNCTION
@@ -295,6 +308,13 @@ CREATE POLICY "Allow public read access on cve_records"
 CREATE POLICY "Allow public read access on feedback"
   ON feedback FOR SELECT
   USING (true);
+
+-- Service Requests — public insert only (no read)
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public insert on service_requests"
+  ON service_requests FOR INSERT
+  WITH CHECK (true);
 
 -- api_keys and discovery_queue intentionally have NO public read policies.
 -- Access to these tables requires authenticated/service-role credentials.

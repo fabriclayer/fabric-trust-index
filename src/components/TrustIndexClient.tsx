@@ -6,6 +6,7 @@ import Footer from '@/components/Footer'
 import SearchToolbar from '@/components/SearchToolbar'
 import ServiceCard from '@/components/ServiceCard'
 import DisclaimerModal from '@/components/DisclaimerModal'
+import SubmitServiceModal from '@/components/SubmitServiceModal'
 import type { Service } from '@/data/services'
 
 const PAGE_SIZE = 24
@@ -46,6 +47,7 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
   const [activeCategory, setActiveCategory] = useState('all')
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
 
   const toggleStatus = useCallback((s: string) => {
     setActiveStatuses(prev => {
@@ -132,7 +134,19 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
               <path d="M8 11h6" />
             </svg>
             <h3 className="text-base font-semibold text-fabric-600 mb-1">No services found</h3>
-            <p className="font-mono text-[0.72rem] text-fabric-400">Try adjusting your search or filters</p>
+            <p className="font-mono text-[0.72rem] text-fabric-400 mb-4">Try adjusting your search or filters</p>
+            {searchQuery.trim() && (
+              <button
+                onClick={() => setShowSubmitModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-fabric-800 text-white font-sans text-[0.78rem] font-semibold rounded-[10px] cursor-pointer transition-all hover:bg-black"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Request this service
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -160,6 +174,13 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
       </div>
 
       <Footer />
+
+      {showSubmitModal && (
+        <SubmitServiceModal
+          initialName={searchQuery}
+          onClose={() => setShowSubmitModal(false)}
+        />
+      )}
     </>
   )
 }
