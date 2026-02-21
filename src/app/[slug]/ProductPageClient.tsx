@@ -375,7 +375,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Incidents & Alerts</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">last 90 days</span>
           </div>
-          <div className="flex flex-col max-h-[400px] overflow-y-auto">
+          <div className="flex flex-col max-h-[400px] overflow-y-auto subtle-scroll">
             {INCIDENTS.slice(0, incidentsCount).map((inc, i) => (
               <div key={i} className="flex gap-4 py-3 border-b border-fabric-100 last:border-b-0 items-start">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${inc.dot}`} />
@@ -478,7 +478,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Supply Chain & Dependencies</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">trust chain</span>
           </div>
-          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto subtle-scroll">
             {SUPPLY_CHAIN.slice(0, depsCount).map(dep => (
               <div key={dep.name} className="flex items-center gap-2 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                 <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{dep.emoji}</div>
@@ -610,7 +610,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">SCORE</span>
             <span className="font-mono text-[0.65rem] text-fabric-400 text-right">DELTA</span>
           </div>
-          <div className="max-h-[400px] overflow-y-auto">
+          <div className="max-h-[400px] overflow-y-auto subtle-scroll">
             {VERSIONS.slice(0, versionsCount).map(v => (
               <div key={v.tag} className="grid grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px] gap-4 max-md:gap-2 py-2.5 border-b border-fabric-100 last:border-b-0">
                 <span className="font-mono text-[0.72rem] text-fabric-700">{v.tag}</span>

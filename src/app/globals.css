@@ -29,9 +29,14 @@
 .chart-grad-stop-bottom { stop-color: #3d8af7; stop-opacity: 0; }
 
 /* ── Scrollbar styling ── */
-.modal-terms::-webkit-scrollbar { width: 4px; }
-.modal-terms::-webkit-scrollbar-track { background: transparent; }
-.modal-terms::-webkit-scrollbar-thumb { background: #c8c8c4; border-radius: 100px; }
+.modal-terms::-webkit-scrollbar,
+.subtle-scroll::-webkit-scrollbar { width: 4px; }
+.modal-terms::-webkit-scrollbar-track,
+.subtle-scroll::-webkit-scrollbar-track { background: transparent; }
+.modal-terms::-webkit-scrollbar-thumb,
+.subtle-scroll::-webkit-scrollbar-thumb { background: #e2e2df; border-radius: 100px; }
+.subtle-scroll::-webkit-scrollbar-thumb:hover { background: #c8c8c4; }
+.subtle-scroll { scrollbar-width: thin; scrollbar-color: #e2e2df transparent; }
 
 /* ── Spinner ── */
 @keyframes spin { to { transform: rotate(360deg); } }
