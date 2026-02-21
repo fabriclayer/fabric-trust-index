@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runDiscoveryPipeline } from '@/lib/discovery/pipeline'
+import { runDiscoveryPipeline, runBatchDiscovery } from '@/lib/discovery/pipeline'
 
 export const maxDuration = 300
 
@@ -9,7 +9,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const source = request.nextUrl.searchParams.get('source')
+
   try {
+    if (source) {
+      // Batched discovery for a specific source (e.g. huggingface)
+      const result = await runBatchDiscovery(source, 500)
+      return NextResponse.json({
+        ok: true,
+        source,
+        ...result,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
+    // Default: run all sources (npm, pypi, github)
     const result = await runDiscoveryPipeline()
     return NextResponse.json({
       ok: true,

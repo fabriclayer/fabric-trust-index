@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { discoverNpmPackages, type NpmCandidate } from './npm'
 import { discoverPyPIPackages, type PyPICandidate } from './pypi'
 import { discoverGitHubRepos, type GitHubCandidate } from './github'
+import { discoverHuggingFaceModels, getHFCategory, type HuggingFaceCandidate } from './huggingface'
 
 // Category classification based on keywords/topics
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -128,6 +129,56 @@ export async function runDiscoveryPipeline(): Promise<{
   }
 
   return { discovered, added, skipped }
+}
+
+/**
+ * Batched discovery for a single source (e.g. huggingface).
+ * Auto-calculates offset from existing services with that source.
+ */
+export async function runBatchDiscovery(
+  source: string,
+  batchSize: number,
+): Promise<{ discovered: number; added: number; skipped: number; offset: number }> {
+  const supabase = createServerClient()
+
+  // Count existing services from this source to determine offset
+  const { count } = await supabase
+    .from('services')
+    .select('id', { count: 'exact', head: true })
+    .eq('discovered_from', source)
+  const offset = count ?? 0
+
+  // Fetch existing slugs for dedup
+  const { data: existing } = await supabase.from('services').select('slug')
+  const existingSlugs = new Set(existing?.map(s => s.slug) ?? [])
+
+  let discovered = 0
+  let added = 0
+  let skipped = 0
+
+  if (source === 'huggingface') {
+    const candidates = await discoverHuggingFaceModels(offset, batchSize)
+
+    for (const candidate of candidates) {
+      discovered++
+      const slug = toSlug(candidate.modelId)
+      if (existingSlugs.has(slug)) { skipped++; continue }
+
+      const category = getHFCategory(candidate)
+      await addDiscoveredService({
+        name: candidate.name,
+        slug,
+        publisher: candidate.author,
+        description: candidate.description,
+        category,
+        source: 'huggingface',
+      })
+      existingSlugs.add(slug)
+      added++
+    }
+  }
+
+  return { discovered, added, skipped, offset }
 }
 
 async function addDiscoveredService(params: {

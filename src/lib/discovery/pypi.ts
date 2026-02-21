@@ -15,8 +15,9 @@ export interface PyPICandidate {
   projectUrl: string
 }
 
-// Well-known AI/ML package prefixes to scan
+// Well-known AI/ML packages to scan
 const KNOWN_PREFIXES = [
+  // Original
   'langchain',
   'llama-index',
   'openai',
@@ -31,6 +32,65 @@ const KNOWN_PREFIXES = [
   'mcp',
   'crewai',
   'autogen',
+  // HuggingFace ecosystem
+  'huggingface-hub',
+  'datasets',
+  'diffusers',
+  'accelerate',
+  'safetensors',
+  'tokenizers',
+  'peft',
+  'trl',
+  // Embeddings & vector
+  'sentence-transformers',
+  'faiss-cpu',
+  'annoy',
+  'pymilvus',
+  // ML frameworks
+  'scikit-learn',
+  'xgboost',
+  'lightgbm',
+  'catboost',
+  'keras',
+  'jax',
+  'flax',
+  // NLP
+  'spacy',
+  'nltk',
+  'gensim',
+  'flair',
+  // Vision
+  'ultralytics',
+  'opencv-python',
+  'pillow',
+  'torchvision',
+  // Audio
+  'whisper',
+  'torchaudio',
+  'librosa',
+  // MLOps
+  'ray',
+  'mlflow',
+  'wandb',
+  'dvc',
+  'bentoml',
+  // LLM tooling
+  'cohere',
+  'replicate',
+  'together',
+  'groq',
+  'instructor',
+  'outlines',
+  'guidance',
+  'dspy-ai',
+  'vllm',
+  'modal',
+  // Web & serving
+  'gradio',
+  'streamlit',
+  'fastapi',
+  'litellm',
+  'ollama',
 ]
 
 export async function getPyPIPackageInfo(packageName: string): Promise<PyPICandidate | null> {

@@ -15,6 +15,7 @@ export interface NpmCandidate {
 }
 
 const SEARCH_QUERIES = [
+  // Original queries
   'keywords:mcp',
   'keywords:ai-agent',
   'keywords:llm',
@@ -23,6 +24,40 @@ const SEARCH_QUERIES = [
   'keywords:anthropic',
   'keywords:embedding',
   'keywords:vector-database',
+  // Frameworks & libraries
+  'keywords:transformers',
+  'keywords:huggingface',
+  'keywords:model-context-protocol',
+  'keywords:tensorflow',
+  'keywords:pytorch',
+  'keywords:machine-learning',
+  // Tasks
+  'keywords:nlp',
+  'keywords:computer-vision',
+  'keywords:text-to-speech',
+  'keywords:stable-diffusion',
+  'keywords:image-generation',
+  'keywords:chatgpt',
+  'keywords:rag',
+  'keywords:retrieval-augmented',
+  'keywords:fine-tuning',
+  // Infrastructure
+  'keywords:mlops',
+  'keywords:inference',
+  'keywords:tokenizer',
+  // Models & providers
+  'keywords:whisper',
+  'keywords:diffusion',
+  'keywords:gpt',
+  'keywords:claude',
+  'keywords:gemini',
+  'keywords:mistral',
+  'keywords:ollama',
+  'keywords:groq',
+  'keywords:replicate',
+  // SDKs
+  'keywords:ai-sdk',
+  'keywords:vercel-ai',
 ]
 
 export async function searchNpm(query: string, limit = 50): Promise<NpmCandidate[]> {
