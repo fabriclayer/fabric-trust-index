@@ -220,6 +220,13 @@ CREATE TABLE service_requests (
 );
 
 -- =============================================================================
+-- UNIQUE CONSTRAINTS (for upsert support)
+-- =============================================================================
+
+ALTER TABLE versions ADD CONSTRAINT versions_service_tag_unique UNIQUE (service_id, tag);
+ALTER TABLE supply_chain ADD CONSTRAINT supply_chain_service_dep_unique UNIQUE (service_id, dependency_name);
+
+-- =============================================================================
 -- INDEXES
 -- =============================================================================
 

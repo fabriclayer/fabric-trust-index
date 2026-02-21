@@ -1,6 +1,7 @@
 import type { DbService } from '@/lib/supabase/types'
 import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
+import { createServerClient } from '@/lib/supabase/server'
 
 /**
  * Maintenance Activity Collector (weight: 0.20)
@@ -133,7 +134,10 @@ export const maintenanceCollector: Collector = {
 
     // 5. Release cadence
     const releases = await githubGet(`/repos/${repo}/releases?per_page=10`) as Array<{
+      tag_name?: string
       published_at?: string
+      prerelease?: boolean
+      draft?: boolean
     }> | null
 
     if (releases && releases.length >= 2) {
@@ -154,6 +158,29 @@ export const maintenanceCollector: Collector = {
         // Monthly releases = good cadence
         if (avgInterval <= 30) score += 0.3
         else if (avgInterval <= 90) score += 0.1
+      }
+    }
+
+    // Insert version records from GitHub releases
+    if (releases && releases.length > 0) {
+      const supabase = createServerClient()
+      const validReleases = releases.filter(
+        r => r.tag_name && r.published_at && !r.draft
+      )
+      for (const release of validReleases.slice(0, 10)) {
+        await supabase
+          .from('versions')
+          .upsert(
+            {
+              service_id: service.id,
+              tag: release.tag_name!,
+              released_at: release.published_at!,
+              score_at_release: service.composite_score,
+              source: 'github',
+              metadata: { prerelease: release.prerelease ?? false },
+            },
+            { onConflict: 'service_id,tag' }
+          )
       }
     }
 

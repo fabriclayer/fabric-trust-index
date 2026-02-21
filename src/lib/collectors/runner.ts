@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import type { DbService } from '@/lib/supabase/types'
+import type { DbService, DbIncident } from '@/lib/supabase/types'
 import type { CollectorResult } from './types'
 import { vulnerabilityCollector } from './vulnerability'
 import { operationalHealthCollector } from './operational-health'
@@ -7,6 +7,7 @@ import { maintenanceCollector } from './maintenance'
 import { adoptionCollector } from './adoption'
 import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
+import { collectSupplyChain } from './supply-chain'
 
 const WEIGHTS = [0.25, 0.20, 0.20, 0.15, 0.10, 0.10]
 const SIGNAL_KEYS = [
@@ -34,9 +35,118 @@ function getStatus(score: number): 'trusted' | 'caution' | 'blocked' {
 }
 
 /**
+ * Create an incident record for a service.
+ */
+async function createIncident(
+  serviceId: string,
+  incident: Omit<DbIncident, 'id' | 'created_at' | 'resolved_at'>
+): Promise<void> {
+  const supabase = createServerClient()
+  await supabase.from('incidents').insert({
+    service_id: incident.service_id,
+    type: incident.type,
+    severity: incident.severity,
+    title: incident.title,
+    description: incident.description,
+    score_at_time: incident.score_at_time,
+  })
+}
+
+/**
+ * Detect and create incidents based on score changes and signal results.
+ */
+async function detectIncidents(
+  service: DbService,
+  oldComposite: number,
+  newComposite: number,
+  collectorResults: Array<{ key: string; result: CollectorResult } | null>
+): Promise<void> {
+  const supabase = createServerClient()
+
+  // Check if this is the first time the service has been scored
+  const { count } = await supabase
+    .from('signal_history')
+    .select('id', { count: 'exact', head: true })
+    .eq('service_id', service.id)
+    .eq('signal_name', 'composite')
+
+  const isFirstRun = (count ?? 0) <= 1
+
+  if (isFirstRun) {
+    await createIncident(service.id, {
+      service_id: service.id,
+      type: 'initial_index',
+      severity: 'info',
+      title: `${service.name} added to Trust Index`,
+      description: `Initial composite score: ${newComposite.toFixed(2)}/5.00`,
+      score_at_time: newComposite,
+    })
+    return // Skip other incident checks on first run
+  }
+
+  // Score change >= 0.5 points
+  const scoreDelta = newComposite - oldComposite
+  if (Math.abs(scoreDelta) >= 0.5) {
+    const direction = scoreDelta > 0 ? 'increased' : 'decreased'
+    const severity = scoreDelta < -0.5 ? 'warning' : 'info'
+    await createIncident(service.id, {
+      service_id: service.id,
+      type: 'score_change',
+      severity,
+      title: `Trust score ${direction} by ${Math.abs(scoreDelta).toFixed(2)}`,
+      description: `Score changed from ${oldComposite.toFixed(2)} to ${newComposite.toFixed(2)}`,
+      score_at_time: newComposite,
+    })
+  }
+
+  // Critical unpatched CVE detected
+  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+  if (vulnResult?.result.metadata.has_critical_unpatched) {
+    await createIncident(service.id, {
+      service_id: service.id,
+      type: 'cve_found',
+      severity: 'critical',
+      title: 'Critical unpatched CVE detected',
+      description: `${vulnResult.result.metadata.total_cves} CVE(s) found, including critical unpatched vulnerabilities`,
+      score_at_time: newComposite,
+    })
+  }
+
+  // Uptime change >= 5%
+  const opResult = collectorResults.find(r => r?.key === 'operational')
+  if (opResult?.result.metadata.uptime_percent != null) {
+    const newUptime = opResult.result.metadata.uptime_percent as number
+    const oldUptime = service.uptime_30d
+    const uptimeDelta = newUptime - oldUptime
+
+    if (oldUptime > 0 && uptimeDelta <= -5) {
+      await createIncident(service.id, {
+        service_id: service.id,
+        type: 'uptime_drop',
+        severity: 'warning',
+        title: `Uptime dropped by ${Math.abs(uptimeDelta).toFixed(1)}%`,
+        description: `30-day uptime decreased from ${oldUptime.toFixed(1)}% to ${newUptime.toFixed(1)}%`,
+        score_at_time: newComposite,
+      })
+    } else if (oldUptime > 0 && uptimeDelta >= 5) {
+      await createIncident(service.id, {
+        service_id: service.id,
+        type: 'uptime_restored',
+        severity: 'info',
+        title: `Uptime restored by ${uptimeDelta.toFixed(1)}%`,
+        description: `30-day uptime increased from ${oldUptime.toFixed(1)}% to ${newUptime.toFixed(1)}%`,
+        score_at_time: newComposite,
+      })
+    }
+  }
+}
+
+/**
  * Run all 6 collectors for a single service.
  * Updates the service's signal scores, composite score, and status.
  * Records a signal_history entry for each successful signal.
+ * Creates incidents for significant changes.
+ * Runs supply-chain collector.
  */
 export async function runAllCollectors(service: DbService): Promise<{
   success: string[]
@@ -52,6 +162,7 @@ export async function runAllCollectors(service: DbService): Promise<{
   const signals: number[] = []
   const success: string[] = []
   const failed: string[] = []
+  const collectorResults: Array<{ key: string; result: CollectorResult } | null> = []
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i]
@@ -62,6 +173,7 @@ export async function runAllCollectors(service: DbService): Promise<{
       updates[`signal_${signalKey}`] = cr.score
       signals.push(cr.score)
       success.push(signalKey)
+      collectorResults.push({ key: signalKey, result: cr })
 
       // Record signal history
       await supabase.from('signal_history').insert({
@@ -75,6 +187,7 @@ export async function runAllCollectors(service: DbService): Promise<{
       const existing = service[`signal_${signalKey}` as keyof DbService] as number
       signals.push(existing)
       failed.push(signalKey)
+      collectorResults.push(null)
       console.error(`Collector ${signalKey} failed for ${service.name}:`, result.reason)
     }
   }
@@ -100,6 +213,7 @@ export async function runAllCollectors(service: DbService): Promise<{
   }
 
   compositeScore = Math.round(compositeScore * 100) / 100
+  const oldComposite = service.composite_score
 
   updates.composite_score = compositeScore
   updates.status = getStatus(compositeScore)
@@ -118,6 +232,16 @@ export async function runAllCollectors(service: DbService): Promise<{
     score: compositeScore,
     metadata: { modifiers, raw_score: rawScore },
   })
+
+  // Detect and create incidents
+  await detectIncidents(service, oldComposite, compositeScore, collectorResults)
+
+  // Run supply-chain collector (informational, non-scoring)
+  try {
+    await collectSupplyChain(service)
+  } catch (err) {
+    console.error(`Supply-chain collector failed for ${service.name}:`, err)
+  }
 
   return { success, failed }
 }
