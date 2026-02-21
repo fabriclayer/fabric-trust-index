@@ -232,7 +232,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
               <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">{m.label}</div>
               <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
                 {m.value}<span className="text-base text-fabric-500 font-normal ml-0.5">{m.unit}</span>
-                <span className="text-[0.72rem] text-[#0dc956] font-normal ml-1">{m.trend}</span>
+                <span className="text-[0.88rem] text-[#0dc956] font-normal ml-1">{m.trend}</span>
               </div>
               <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">{m.sub}</div>
             </div>
