@@ -138,7 +138,7 @@ export async function runDiscoveryPipeline(): Promise<{
 export async function runBatchDiscovery(
   source: string,
   batchSize: number,
-): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number }> {
+): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number; errors: string[] }> {
   const supabase = createServerClient()
 
   // Count existing services from this source to determine offset
@@ -157,6 +157,7 @@ export async function runBatchDiscovery(
   let added = 0
   let skipped = 0
   let failed = 0
+  const errors: string[] = []
 
   if (source === 'huggingface') {
     const candidates = await discoverHuggingFaceModels(offset, batchSize)
@@ -167,7 +168,7 @@ export async function runBatchDiscovery(
       if (existingSlugs.has(slug)) { skipped++; continue }
 
       const category = getHFCategory(candidate)
-      const ok = await addDiscoveredService({
+      const result = await addDiscoveredService({
         name: candidate.name,
         slug,
         publisher: candidate.author,
@@ -176,11 +177,16 @@ export async function runBatchDiscovery(
         source: 'huggingface',
       })
       existingSlugs.add(slug)
-      if (ok) { added++ } else { failed++ }
+      if (result === true) {
+        added++
+      } else {
+        failed++
+        if (errors.length < 5) errors.push(`${slug}: ${result}`)
+      }
     }
   }
 
-  return { discovered, added, skipped, failed, offset }
+  return { discovered, added, skipped, failed, offset, errors }
 }
 
 async function addDiscoveredService(params: {
@@ -193,7 +199,7 @@ async function addDiscoveredService(params: {
   pypi_package?: string
   github_repo?: string
   source: string
-}): Promise<boolean> {
+}): Promise<true | string> {
   const supabase = createServerClient()
   const publisherSlug = toSlug(params.publisher)
 
@@ -213,8 +219,7 @@ async function addDiscoveredService(params: {
     .single()
 
   if (!publisher) {
-    console.error(`Publisher not found for slug "${publisherSlug}", skipping service "${params.slug}"`)
-    return false
+    return `publisher not found for slug "${publisherSlug}"`
   }
 
   const icon = ICON_MAP[params.category] ?? '◇'
@@ -236,8 +241,7 @@ async function addDiscoveredService(params: {
   })
 
   if (insertError) {
-    console.error(`Service insert failed for "${params.slug}":`, insertError.message)
-    return false
+    return `insert: ${insertError.message}`
   }
 
   // Log the discovery
