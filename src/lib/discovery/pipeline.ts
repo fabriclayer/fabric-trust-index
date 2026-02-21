@@ -138,7 +138,7 @@ export async function runDiscoveryPipeline(): Promise<{
 export async function runBatchDiscovery(
   source: string,
   batchSize: number,
-): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number; errors: string[] }> {
+): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number; errors: string[]; existingSlugsCount: number; sampleSkipped: string[] }> {
   const supabase = createServerClient()
 
   // Count existing services from this source to determine offset
@@ -158,6 +158,8 @@ export async function runBatchDiscovery(
   let skipped = 0
   let failed = 0
   const errors: string[] = []
+  const sampleSkipped: string[] = []
+  const existingSlugsCount = existingSlugs.size
 
   if (source === 'huggingface') {
     const candidates = await discoverHuggingFaceModels(offset, batchSize)
@@ -165,7 +167,11 @@ export async function runBatchDiscovery(
     for (const candidate of candidates) {
       discovered++
       const slug = toSlug(candidate.modelId)
-      if (existingSlugs.has(slug)) { skipped++; continue }
+      if (existingSlugs.has(slug)) {
+        skipped++
+        if (sampleSkipped.length < 5) sampleSkipped.push(`${candidate.modelId} → ${slug}`)
+        continue
+      }
 
       const category = getHFCategory(candidate)
       const result = await addDiscoveredService({
@@ -186,7 +192,7 @@ export async function runBatchDiscovery(
     }
   }
 
-  return { discovered, added, skipped, failed, offset, errors }
+  return { discovered, added, skipped, failed, offset, errors, existingSlugsCount, sampleSkipped }
 }
 
 async function addDiscoveredService(params: {
