@@ -47,6 +47,15 @@ function dbToService(db: any): Service {
   }
 }
 
+export async function getAllSlugs(): Promise<string[]> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('services')
+    .select('slug')
+  if (error) throw error
+  return (data ?? []).map((d: { slug: string }) => d.slug)
+}
+
 export async function getServices(): Promise<Service[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase

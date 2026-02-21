@@ -4,9 +4,21 @@ import type { Metadata } from 'next'
 import ProductPageClient from './ProductPageClient'
 
 export const revalidate = 300 // ISR: revalidate every 5 minutes
+export const dynamicParams = true // Allow ISR for services added after build
 
-// Generate static params from static data for build time
-export function generateStaticParams() {
+// Generate static params — prefer Supabase, fall back to static data
+export async function generateStaticParams() {
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const { getAllSlugs } = await import('@/lib/services')
+      const slugs = await getAllSlugs()
+      if (slugs.length > 0) {
+        return slugs.map(slug => ({ slug }))
+      }
+    } catch (err) {
+      console.error('generateStaticParams: Supabase failed, using static data:', err)
+    }
+  }
   return SERVICES.map(s => ({ slug: s.slug }))
 }
 
