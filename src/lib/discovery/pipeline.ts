@@ -138,14 +138,15 @@ export async function runDiscoveryPipeline(): Promise<{
 export async function runBatchDiscovery(
   source: string,
   batchSize: number,
-): Promise<{ discovered: number; added: number; skipped: number; offset: number }> {
+): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number }> {
   const supabase = createServerClient()
 
   // Count existing services from this source to determine offset
-  const { count } = await supabase
+  const { count, error: countError } = await supabase
     .from('services')
-    .select('id', { count: 'exact', head: true })
+    .select('*', { count: 'exact', head: true })
     .eq('discovered_from', source)
+  if (countError) console.error('Count query failed:', countError)
   const offset = count ?? 0
 
   // Fetch existing slugs for dedup
@@ -155,6 +156,7 @@ export async function runBatchDiscovery(
   let discovered = 0
   let added = 0
   let skipped = 0
+  let failed = 0
 
   if (source === 'huggingface') {
     const candidates = await discoverHuggingFaceModels(offset, batchSize)
@@ -165,7 +167,7 @@ export async function runBatchDiscovery(
       if (existingSlugs.has(slug)) { skipped++; continue }
 
       const category = getHFCategory(candidate)
-      await addDiscoveredService({
+      const ok = await addDiscoveredService({
         name: candidate.name,
         slug,
         publisher: candidate.author,
@@ -174,11 +176,11 @@ export async function runBatchDiscovery(
         source: 'huggingface',
       })
       existingSlugs.add(slug)
-      added++
+      if (ok) { added++ } else { failed++ }
     }
   }
 
-  return { discovered, added, skipped, offset }
+  return { discovered, added, skipped, failed, offset }
 }
 
 async function addDiscoveredService(params: {
@@ -191,14 +193,18 @@ async function addDiscoveredService(params: {
   pypi_package?: string
   github_repo?: string
   source: string
-}) {
+}): Promise<boolean> {
   const supabase = createServerClient()
   const publisherSlug = toSlug(params.publisher)
 
-  // Ensure publisher exists
-  await supabase
+  // Ensure publisher exists — try upsert on slug, fall back to lookup by slug
+  const { error: upsertError } = await supabase
     .from('publishers')
     .upsert({ name: params.publisher, slug: publisherSlug }, { onConflict: 'slug' })
+  if (upsertError) {
+    // Name conflict — publisher exists with same slug but different name. Just look it up.
+    console.warn(`Publisher upsert warning for "${params.publisher}":`, upsertError.message)
+  }
 
   const { data: publisher } = await supabase
     .from('publishers')
@@ -206,11 +212,14 @@ async function addDiscoveredService(params: {
     .eq('slug', publisherSlug)
     .single()
 
-  if (!publisher) return
+  if (!publisher) {
+    console.error(`Publisher not found for slug "${publisherSlug}", skipping service "${params.slug}"`)
+    return false
+  }
 
   const icon = ICON_MAP[params.category] ?? '◇'
 
-  await supabase.from('services').insert({
+  const { error: insertError } = await supabase.from('services').insert({
     name: params.name,
     slug: params.slug,
     publisher_id: publisher.id,
@@ -226,6 +235,11 @@ async function addDiscoveredService(params: {
     status: 'caution',
   })
 
+  if (insertError) {
+    console.error(`Service insert failed for "${params.slug}":`, insertError.message)
+    return false
+  }
+
   // Log the discovery
   await supabase.from('discovery_queue').insert({
     source: params.source,
@@ -235,4 +249,6 @@ async function addDiscoveredService(params: {
     result: { slug: params.slug, category: params.category },
     processed_at: new Date().toISOString(),
   })
+
+  return true
 }
