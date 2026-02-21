@@ -36,6 +36,41 @@ async function loadService(slug: string) {
   return getStaticServiceBySlug(slug) ?? null
 }
 
+async function loadDetailData(slug: string) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+
+  try {
+    const {
+      getServiceId,
+      getServiceIncidents,
+      getSignalHistory,
+      getServiceVersions,
+      getServiceSupplyChain,
+      getLatestSignalMeta,
+    } = await import('@/lib/services')
+
+    const serviceId = await getServiceId(slug)
+    if (!serviceId) return null
+
+    const [incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta] = await Promise.all([
+      getServiceIncidents(serviceId),
+      getSignalHistory(serviceId, 'composite'),
+      getServiceVersions(serviceId),
+      getServiceSupplyChain(serviceId),
+      getLatestSignalMeta(serviceId, 'transparency'),
+      getLatestSignalMeta(serviceId, 'adoption'),
+      getLatestSignalMeta(serviceId, 'maintenance'),
+    ])
+
+    return { incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta }
+  } catch (err) {
+    console.error('Failed to load detail data:', err)
+    return null
+  }
+}
+
 // Dynamic metadata
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
@@ -56,5 +91,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const service = await loadService(slug)
   if (!service) notFound()
 
-  return <ProductPageClient service={service} />
+  const detailData = await loadDetailData(slug)
+
+  return (
+    <ProductPageClient
+      service={service}
+      incidents={detailData?.incidents ?? []}
+      signalHistory={detailData?.signalHistory ?? []}
+      versions={detailData?.versions ?? []}
+      supplyChain={detailData?.supplyChain ?? []}
+      transparencyMeta={detailData?.transparencyMeta ?? null}
+      adoptionMeta={detailData?.adoptionMeta ?? null}
+      maintenanceMeta={detailData?.maintenanceMeta ?? null}
+    />
+  )
 }

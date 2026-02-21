@@ -57,6 +57,13 @@ CREATE TABLE services (
   avg_latency_ms INT DEFAULT 0,
   p50_latency_ms INT DEFAULT 0,
   p99_latency_ms INT DEFAULT 0,
+  capabilities TEXT[] DEFAULT '{}',
+  pricing JSONB DEFAULT NULL,
+  request_schema TEXT DEFAULT NULL,
+  response_schema TEXT DEFAULT NULL,
+  tags TEXT[] DEFAULT '{}',
+  language TEXT DEFAULT NULL,
+  homepage_url TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

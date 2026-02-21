@@ -49,6 +49,83 @@ const ICON_MAP: Record<string, string> = {
   'infra': '△',
 }
 
+// Map known tags/pipeline_tags to human-readable capability strings
+const CAPABILITY_MAP: Record<string, string> = {
+  'text-generation': 'Text generation',
+  'text2text-generation': 'Text-to-text generation',
+  'conversational': 'Conversational AI',
+  'text-to-image': 'Image generation',
+  'image-to-image': 'Image transformation',
+  'unconditional-image-generation': 'Image generation',
+  'automatic-speech-recognition': 'Speech recognition',
+  'text-to-speech': 'Text-to-speech',
+  'feature-extraction': 'Feature extraction',
+  'sentence-similarity': 'Semantic similarity',
+  'image-classification': 'Image classification',
+  'object-detection': 'Object detection',
+  'image-segmentation': 'Image segmentation',
+  'token-classification': 'Named entity recognition',
+  'question-answering': 'Question answering',
+  'summarization': 'Summarization',
+  'translation': 'Translation',
+  'fill-mask': 'Masked language modeling',
+  'zero-shot-classification': 'Zero-shot classification',
+  'depth-estimation': 'Depth estimation',
+  'reinforcement-learning': 'Reinforcement learning',
+  'image-to-text': 'Image captioning',
+  'video-classification': 'Video classification',
+  'audio-classification': 'Audio classification',
+  'voice-activity-detection': 'Voice activity detection',
+  // Common tags
+  'pytorch': 'PyTorch',
+  'tensorflow': 'TensorFlow',
+  'transformers': 'Transformers',
+  'onnx': 'ONNX',
+  'safetensors': 'Safetensors',
+  'tool-use': 'Tool use',
+  'function-calling': 'Function calling',
+  'vision': 'Vision',
+  'multilingual': 'Multilingual',
+  'code': 'Code generation',
+  'rag': 'RAG',
+  'embedding': 'Embeddings',
+  'embeddings': 'Embeddings',
+  'fine-tuning': 'Fine-tuning support',
+  'mcp': 'Model Context Protocol',
+  'agent': 'AI Agent',
+  'langchain': 'LangChain',
+  'openai': 'OpenAI compatible',
+  'vector-database': 'Vector database',
+  'semantic-search': 'Semantic search',
+  'web-search': 'Web search',
+  'search': 'Search',
+  'diffusion': 'Diffusion model',
+  'stable-diffusion': 'Stable Diffusion',
+}
+
+export function deriveCapabilities(tags: string[], pipelineTag?: string | null): string[] {
+  const caps: string[] = []
+  const seen = new Set<string>()
+
+  // Pipeline tag first
+  if (pipelineTag && CAPABILITY_MAP[pipelineTag]) {
+    caps.push(CAPABILITY_MAP[pipelineTag])
+    seen.add(CAPABILITY_MAP[pipelineTag])
+  }
+
+  // Then from tags (up to 5 more)
+  for (const tag of tags) {
+    const lower = tag.toLowerCase()
+    const cap = CAPABILITY_MAP[lower]
+    if (cap && !seen.has(cap) && caps.length < 6) {
+      caps.push(cap)
+      seen.add(cap)
+    }
+  }
+
+  return caps
+}
+
 export async function runDiscoveryPipeline(): Promise<{
   discovered: number
   added: number
@@ -85,6 +162,9 @@ export async function runDiscoveryPipeline(): Promise<{
       category: classifyCategory(pkg.keywords),
       npm_package: pkg.name,
       source: 'npm',
+      capabilities: deriveCapabilities(pkg.keywords),
+      pricing: { model: 'open-source' },
+      tags: pkg.keywords,
     })
     existingSlugs.add(slug)
     added++
@@ -104,6 +184,10 @@ export async function runDiscoveryPipeline(): Promise<{
       category: classifyCategory(pkg.keywords),
       pypi_package: pkg.name,
       source: 'pypi',
+      capabilities: deriveCapabilities(pkg.keywords),
+      pricing: { model: 'open-source' },
+      tags: pkg.keywords,
+      homepage_url: pkg.projectUrl !== `https://pypi.org/project/${pkg.name}` ? pkg.projectUrl : undefined,
     })
     existingSlugs.add(slug)
     added++
@@ -123,6 +207,10 @@ export async function runDiscoveryPipeline(): Promise<{
       category: classifyCategory(repo.topics),
       github_repo: repo.fullName,
       source: 'github',
+      capabilities: deriveCapabilities(repo.topics),
+      tags: repo.topics,
+      language: repo.language ?? undefined,
+      homepage_url: repo.homepage ?? undefined,
     })
     existingSlugs.add(slug)
     added++
@@ -182,6 +270,9 @@ export async function runBatchDiscovery(
         description: candidate.description,
         category,
         source: 'huggingface',
+        capabilities: deriveCapabilities(candidate.tags, candidate.pipelineTag),
+        pricing: { model: 'open-weight' },
+        tags: candidate.tags,
       })
       existingSlugs.add(slug)
       if (result === true) {
@@ -217,6 +308,11 @@ async function addDiscoveredService(params: {
   pypi_package?: string
   github_repo?: string
   source: string
+  capabilities?: string[]
+  pricing?: { model: string; tiers?: { label: string; value: string }[] } | null
+  tags?: string[]
+  language?: string
+  homepage_url?: string
 }): Promise<true | string> {
   const supabase = createServerClient()
   const publisherSlug = toSlug(params.publisher)
@@ -253,6 +349,11 @@ async function addDiscoveredService(params: {
     pypi_package: params.pypi_package ?? null,
     github_repo: params.github_repo ?? null,
     discovered_from: params.source,
+    capabilities: params.capabilities?.length ? params.capabilities : [],
+    pricing: params.pricing ?? null,
+    tags: params.tags?.length ? params.tags : [],
+    language: params.language ?? null,
+    homepage_url: params.homepage_url ?? null,
     // Signals default to 3.0 — collectors will update on next daily run
     composite_score: 3.0,
     status: 'caution',

@@ -44,6 +44,21 @@ function dbToService(db: any): Service {
     icon: db.icon,
     updated: formatUpdatedAt(db.updated_at),
     domain: extractDomain(db.publisher?.website_url),
+    uptime_30d: db.uptime_30d || undefined,
+    avg_latency_ms: db.avg_latency_ms || undefined,
+    p50_latency_ms: db.p50_latency_ms || undefined,
+    p99_latency_ms: db.p99_latency_ms || undefined,
+    github_repo: db.github_repo || undefined,
+    npm_package: db.npm_package || undefined,
+    pypi_package: db.pypi_package || undefined,
+    endpoint_url: db.endpoint_url || undefined,
+    capabilities: db.capabilities?.length > 0 ? db.capabilities : undefined,
+    pricing: db.pricing || undefined,
+    request_schema: db.request_schema || undefined,
+    response_schema: db.response_schema || undefined,
+    tags: db.tags?.length > 0 ? db.tags : undefined,
+    language: db.language || undefined,
+    homepage_url: db.homepage_url || undefined,
   }
 }
 
@@ -154,4 +169,17 @@ export async function getSignalHistory(serviceId: string, signalName?: string) {
   }
   const { data } = await query
   return data ?? []
+}
+
+export async function getLatestSignalMeta(serviceId: string, signalName: string): Promise<Record<string, any> | null> {
+  const supabase = createServerClient()
+  const { data } = await supabase
+    .from('signal_history')
+    .select('metadata')
+    .eq('service_id', serviceId)
+    .eq('signal_name', signalName)
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .single()
+  return data?.metadata ?? null
 }
