@@ -38,6 +38,10 @@
 .subtle-scroll::-webkit-scrollbar-thumb:hover { background: #c8c8c4; }
 .subtle-scroll { scrollbar-width: thin; scrollbar-color: #e2e2df transparent; }
 
+/* ── Hidden scrollbar (still scrollable) ── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* ── Spinner ── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner {
