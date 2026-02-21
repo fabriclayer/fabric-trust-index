@@ -10,6 +10,7 @@ import RatingBoxes from '@/components/RatingBoxes'
 import ScoreStatus from '@/components/ScoreStatus'
 import ServiceLogo from '@/components/ServiceLogo'
 import ClaimProviderModal from '@/components/ClaimProviderModal'
+import ReportIssueModal from '@/components/ReportIssueModal'
 
 const scoreColor = {
   trusted: 'text-[#0dc956]',
@@ -151,6 +152,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
   const [versionsCount, setVersionsCount] = useState(VERSIONS_INITIAL)
   const [sourcesCount, setSourcesCount] = useState(DATA_SOURCES_INITIAL)
   const [showClaimModal, setShowClaimModal] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
 
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
@@ -678,7 +680,7 @@ export default function ProductPageClient({ service }: { service: Service }) {
             </div>
             <div className="flex gap-3 flex-shrink-0">
               <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-blue text-white rounded-lg cursor-pointer font-medium whitespace-nowrap transition-all hover:brightness-110 border-none">Claim Provider</button>
-              <span className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-fabric-400 border border-fabric-600 rounded-lg cursor-pointer transition-all hover:border-fabric-400 hover:text-white whitespace-nowrap">Report Issue</span>
+              <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-fabric-400 border border-fabric-600 rounded-lg cursor-pointer transition-all hover:border-fabric-400 hover:text-white whitespace-nowrap">Report Issue</button>
             </div>
           </div>
 
@@ -705,6 +707,14 @@ export default function ProductPageClient({ service }: { service: Service }) {
           serviceName={service.name}
           serviceSlug={service.slug}
           onClose={() => setShowClaimModal(false)}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportIssueModal
+          serviceName={service.name}
+          serviceSlug={service.slug}
+          onClose={() => setShowReportModal(false)}
         />
       )}
     </>
