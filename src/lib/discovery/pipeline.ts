@@ -141,13 +141,14 @@ export async function runBatchDiscovery(
 ): Promise<{ discovered: number; added: number; skipped: number; failed: number; offset: number; errors: string[]; existingSlugsCount: number; sampleSkipped: string[] }> {
   const supabase = createServerClient()
 
-  // Count existing services from this source to determine offset
-  const { count, error: countError } = await supabase
-    .from('services')
+  // Determine offset by counting completed batches for this source
+  const { count: batchCount, error: countError } = await supabase
+    .from('discovery_queue')
     .select('*', { count: 'exact', head: true })
-    .eq('discovered_from', source)
-  if (countError) console.error('Count query failed:', countError)
-  const offset = count ?? 0
+    .eq('source', `${source}_batch`)
+    .eq('status', 'completed')
+  if (countError) console.error('Batch count query failed:', countError)
+  const offset = (batchCount ?? 0) * batchSize
 
   // Fetch existing slugs for dedup
   const { data: existing } = await supabase.from('services').select('slug')
@@ -190,6 +191,17 @@ export async function runBatchDiscovery(
         if (errors.length < 5) errors.push(`${slug}: ${result}`)
       }
     }
+  }
+
+  // Record batch completion so next run advances the offset
+  if (discovered > 0) {
+    await supabase.from('discovery_queue').insert({
+      source: `${source}_batch`,
+      query: `offset_${offset}`,
+      status: 'completed',
+      result: { offset, discovered, added, skipped, failed },
+      processed_at: new Date().toISOString(),
+    })
   }
 
   return { discovered, added, skipped, failed, offset, errors, existingSlugsCount, sampleSkipped }
