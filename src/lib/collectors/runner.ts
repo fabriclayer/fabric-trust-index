@@ -214,12 +214,6 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_zero_override')
   }
 
-  // Any signal scoring exactly 0 forces caution at minimum
-  if (status === 'trusted' && signals.some(s => s === 0)) {
-    status = 'caution'
-    modifiers.push('zero_signal_override')
-  }
-
   updates.composite_score = compositeScore
   updates.status = status
   updates.active_modifiers = modifiers

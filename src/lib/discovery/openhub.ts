@@ -68,6 +68,7 @@ export async function searchOpenHub(query: string, page = 1): Promise<OpenHubCan
     const url = `https://www.openhub.net/projects.xml?api_key=${apiKey}&query=${encodeURIComponent(query)}&sort=new_activity&page=${page}`
     const res = await fetch(url, {
       headers: { 'User-Agent': 'FabricTrustIndex/1.0' },
+      redirect: 'follow',
     })
     if (!res.ok) {
       console.error(`OpenHub search returned ${res.status} for query "${query}" page ${page}`)
@@ -97,7 +98,7 @@ export async function searchOpenHub(query: string, page = 1): Promise<OpenHubCan
 
       return {
         name: p.name ?? '',
-        urlName: p.url_name ?? '',
+        urlName: p.vanity_url ?? p.url_name ?? '',
         description: p.description ?? '',
         homepageUrl: p.homepage_url || null,
         githubRepo: null, // populated later via fetchEnlistments
@@ -124,6 +125,7 @@ export async function fetchEnlistments(urlName: string): Promise<string | null> 
     const url = `https://www.openhub.net/projects/${encodeURIComponent(urlName)}/enlistments.xml?api_key=${apiKey}`
     const res = await fetch(url, {
       headers: { 'User-Agent': 'FabricTrustIndex/1.0' },
+      redirect: 'follow',
     })
     if (!res.ok) return null
 
@@ -156,7 +158,7 @@ export async function discoverOpenHubProjects(): Promise<OpenHubCandidate[]> {
 
   // Phase 1: Search queries
   for (const query of SEARCH_QUERIES) {
-    for (let page = 1; page <= 2; page++) {
+    for (let page = 1; page <= 5; page++) {
       const results = await searchOpenHub(query, page)
       if (results.length === 0) break // no more pages
 
