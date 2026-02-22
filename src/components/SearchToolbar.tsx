@@ -49,8 +49,8 @@ function Dropdown({ label, options, value, onChange, badge }: {
         onClick={() => setOpen(!open)}
         className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-pink shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200'}`}
       >
-        {badge && <span className="text-fabric-400">{badge}</span>}
         <span className="font-medium text-fabric-800">{options[value] || label}</span>
+        {badge && <span className="text-[0.6rem] text-fabric-400 bg-fabric-50 rounded px-1 py-px">{badge}</span>}
         <svg className={`w-2.5 h-2.5 text-fabric-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 1l4 4 4-4" />
         </svg>
