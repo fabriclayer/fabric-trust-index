@@ -61,7 +61,7 @@ function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
       </button>
 
       {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-[80] bg-white border border-fabric-200 rounded-[10px] shadow-lg p-1.5 min-w-[180px]">
+        <div className="absolute top-[calc(100%+6px)] right-0 z-[80] bg-white border border-fabric-200 rounded-[10px] shadow-lg p-1.5 min-w-[180px]">
           {Object.entries(options).map(([k, v]) => (
             <div
               key={k}
