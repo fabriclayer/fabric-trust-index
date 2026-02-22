@@ -133,7 +133,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           options={CATEGORIES}
           value={props.activeCategory}
           onChange={props.onCategoryChange}
-          badge={props.totalCount != null ? (props.filteredCount === props.totalCount ? props.totalCount.toLocaleString() : `${props.filteredCount?.toLocaleString()} / ${props.totalCount.toLocaleString()}`) : undefined}
+          badge={props.filteredCount != null ? props.filteredCount.toLocaleString() : undefined}
         />
 
         {/* Sort dropdown */}
