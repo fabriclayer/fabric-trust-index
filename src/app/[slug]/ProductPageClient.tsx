@@ -235,11 +235,6 @@ export default function ProductPageClient({
       <Nav />
 
       <div className="max-w-page mx-auto px-8 pt-7 pb-16 max-md:px-4 max-md:pt-4">
-        {/* Back link */}
-        <Link href="/" className="inline-flex items-center gap-1.5 font-mono text-[0.72rem] text-fabric-400 no-underline hover:text-pink mb-4 transition-colors">
-          <span>←</span> Back to Trust Index
-        </Link>
-
         {/* ═══ HERO ═══ */}
         <div className="bg-white border border-fabric-200 rounded-2xl p-6 max-md:p-5 mb-5">
           <div className="flex items-start justify-between gap-6 max-md:flex-col max-md:gap-4">
