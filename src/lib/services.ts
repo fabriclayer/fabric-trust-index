@@ -91,7 +91,10 @@ export async function getServices(): Promise<Service[]> {
     from += PAGE
   }
 
-  return all.map(dbToService)
+  // Hide services with no real data sources (all collectors return defaults)
+  return all
+    .filter(db => db.npm_package || db.github_repo || db.endpoint_url || db.pypi_package)
+    .map(dbToService)
 }
 
 export async function getServiceBySlug(slug: string): Promise<Service | null> {
