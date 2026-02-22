@@ -2,8 +2,10 @@ import { createServerClient } from '@/lib/supabase/server'
 import { discoverNpmPackages, type NpmCandidate } from './npm'
 import { discoverPyPIPackages, type PyPICandidate } from './pypi'
 import { discoverGitHubRepos, type GitHubCandidate } from './github'
-import { discoverHuggingFaceModels, getHFCategory, type HuggingFaceCandidate } from './huggingface'
-import { discoverOpenHubProjects, type OpenHubCandidate } from './openhub'
+// HF discovery disabled — 1,452 models imported with no scoreable data sources.
+// Re-enable when model-specific scoring pipeline is built (safetensors check,
+// model card quality, licence, publisher verification).
+// import { discoverHuggingFaceModels, getHFCategory, type HuggingFaceCandidate } from './huggingface'
 
 // Category classification based on keywords/topics
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -138,12 +140,11 @@ export async function runDiscoveryPipeline(): Promise<{
   const { data: existing } = await supabase.from('services').select('slug')
   const existingSlugs = new Set(existing?.map(s => s.slug) ?? [])
 
-  // Run discovery from all sources in parallel
-  const [npmCandidates, pypiCandidates, githubCandidates, openhubCandidates] = await Promise.all([
+  // Run discovery from all active sources in parallel
+  const [npmCandidates, pypiCandidates, githubCandidates] = await Promise.all([
     discoverNpmPackages(),
     discoverPyPIPackages(),
     discoverGitHubRepos(),
-    discoverOpenHubProjects(),
   ])
 
   let discovered = 0
@@ -218,33 +219,6 @@ export async function runDiscoveryPipeline(): Promise<{
     added++
   }
 
-  // Process OpenHub candidates
-  for (const project of openhubCandidates) {
-    discovered++
-    const slug = toSlug(project.name)
-    if (existingSlugs.has(slug)) { skipped++; continue }
-
-    const tags = [...project.tags]
-    if (project.license) tags.push(project.license)
-
-    await addDiscoveredService({
-      name: project.name,
-      slug,
-      publisher: project.urlName,
-      description: project.description,
-      category: classifyCategory(tags),
-      github_repo: project.githubRepo ?? undefined,
-      source: 'openhub',
-      capabilities: deriveCapabilities(tags),
-      pricing: { model: 'open-source' },
-      tags,
-      language: project.language ?? undefined,
-      homepage_url: project.homepageUrl ?? undefined,
-    })
-    existingSlugs.add(slug)
-    added++
-  }
-
   return { discovered, added, skipped }
 }
 
@@ -279,38 +253,11 @@ export async function runBatchDiscovery(
   const sampleSkipped: string[] = []
   const existingSlugsCount = existingSlugs.size
 
+  // HF discovery disabled — 1,452 models imported with no scoreable data sources.
+  // Re-enable when model-specific scoring pipeline is built (safetensors check,
+  // model card quality, licence, publisher verification).
   if (source === 'huggingface') {
-    const candidates = await discoverHuggingFaceModels(offset, batchSize)
-
-    for (const candidate of candidates) {
-      discovered++
-      const slug = toSlug(candidate.modelId)
-      if (existingSlugs.has(slug)) {
-        skipped++
-        if (sampleSkipped.length < 5) sampleSkipped.push(`${candidate.modelId} → ${slug}`)
-        continue
-      }
-
-      const category = getHFCategory(candidate)
-      const result = await addDiscoveredService({
-        name: candidate.name,
-        slug,
-        publisher: candidate.author,
-        description: candidate.description,
-        category,
-        source: 'huggingface',
-        capabilities: deriveCapabilities(candidate.tags, candidate.pipelineTag),
-        pricing: { model: 'open-weight' },
-        tags: candidate.tags,
-      })
-      existingSlugs.add(slug)
-      if (result === true) {
-        added++
-      } else {
-        failed++
-        if (errors.length < 5) errors.push(`${slug}: ${result}`)
-      }
-    }
+    return { discovered: 0, added: 0, skipped: 0, failed: 0, offset, errors: ['HF discovery disabled'], existingSlugsCount, sampleSkipped }
   }
 
   // Record batch completion so next run advances the offset
