@@ -133,6 +133,17 @@ export interface DbService {
   p50_latency_ms: number
   p99_latency_ms: number
 
+  // Metadata
+  homepage_url: string | null
+  docs_url: string | null
+  x_url: string | null
+  discord_url: string | null
+  status_page_url: string | null
+  capabilities: string[]
+  pricing: Record<string, unknown> | null
+  tags: string[]
+  language: string | null
+
   // Discovery
   discovered_from: string | null
   discovery_query: string | null

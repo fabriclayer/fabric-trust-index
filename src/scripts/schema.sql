@@ -64,6 +64,10 @@ CREATE TABLE services (
   tags TEXT[] DEFAULT '{}',
   language TEXT DEFAULT NULL,
   homepage_url TEXT DEFAULT NULL,
+  docs_url TEXT DEFAULT NULL,
+  x_url TEXT DEFAULT NULL,
+  discord_url TEXT DEFAULT NULL,
+  status_page_url TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
