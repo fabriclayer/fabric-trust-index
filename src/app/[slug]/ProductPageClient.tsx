@@ -334,75 +334,6 @@ export default function ProductPageClient({
           </div>
         </div>
 
-        {/* ═══ METRICS CARD ═══ */}
-        {(hasMetrics || hasDownloads) && (
-          <div className="grid grid-cols-3 max-md:grid-cols-1 bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
-            {service.uptime_30d && service.uptime_30d > 0 ? (
-              <div className="p-6">
-                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
-                <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
-                  {service.uptime_30d.toFixed(2)}<span className="text-base text-fabric-500 font-normal ml-0.5">%</span>
-                </div>
-                <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">
-                  {service.p50_latency_ms ? `p50: ${service.p50_latency_ms}ms` : ''}
-                  {service.p50_latency_ms && service.p99_latency_ms ? ' · ' : ''}
-                  {service.p99_latency_ms ? `p99: ${service.p99_latency_ms}ms` : ''}
-                </div>
-              </div>
-            ) : (
-              <div className="p-6">
-                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
-                <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">No endpoint monitored</div>
-                <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">Health checks run when endpoint_url is set</div>
-              </div>
-            )}
-
-            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
-              <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Avg Latency</div>
-              {service.avg_latency_ms && service.avg_latency_ms > 0 ? (
-                <>
-                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
-                    {service.avg_latency_ms < 1000
-                      ? <>{service.avg_latency_ms}<span className="text-base text-fabric-500 font-normal ml-0.5">ms</span></>
-                      : <>{(service.avg_latency_ms / 1000).toFixed(1)}<span className="text-base text-fabric-500 font-normal ml-0.5">s</span></>
-                    }
-                  </div>
-                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">averaged across 30d health checks</div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">—</div>
-                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">awaiting health check data</div>
-                </>
-              )}
-            </div>
-
-            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
-              <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Weekly Downloads</div>
-              {hasDownloads ? (
-                <>
-                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
-                    {formatNumber(adoptionMeta!.weekly_downloads as number)}
-                    {typeof adoptionMeta!.growth_rate === 'number' && (
-                      <span className={`text-[0.88rem] font-normal ml-1 ${(adoptionMeta!.growth_rate as number) >= 0 ? 'text-[#0dc956]' : 'text-[#d03a3d]'}`}>
-                        {(adoptionMeta!.growth_rate as number) >= 0 ? '+' : ''}{(adoptionMeta!.growth_rate as number).toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">
-                    {service.npm_package ? 'npm' : ''}{service.npm_package && service.pypi_package ? ' + ' : ''}{service.pypi_package ? 'PyPI' : ''} weekly
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">—</div>
-                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">no package registry data</div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ═══ ABOUT THIS SERVICE ═══ */}
         <div className="bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
           <div className="p-7 max-md:p-5">
@@ -482,6 +413,75 @@ export default function ProductPageClient({
             )}
           </div>
         </div>
+
+        {/* ═══ METRICS CARD ═══ */}
+        {(hasMetrics || hasDownloads) && (
+          <div className="grid grid-cols-3 max-md:grid-cols-1 bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
+            {service.uptime_30d && service.uptime_30d > 0 ? (
+              <div className="p-6">
+                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
+                <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                  {service.uptime_30d.toFixed(2)}<span className="text-base text-fabric-500 font-normal ml-0.5">%</span>
+                </div>
+                <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">
+                  {service.p50_latency_ms ? `p50: ${service.p50_latency_ms}ms` : ''}
+                  {service.p50_latency_ms && service.p99_latency_ms ? ' · ' : ''}
+                  {service.p99_latency_ms ? `p99: ${service.p99_latency_ms}ms` : ''}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6">
+                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
+                <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">No endpoint monitored</div>
+                <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">Health checks run when endpoint_url is set</div>
+              </div>
+            )}
+
+            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
+              <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Avg Latency</div>
+              {service.avg_latency_ms && service.avg_latency_ms > 0 ? (
+                <>
+                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                    {service.avg_latency_ms < 1000
+                      ? <>{service.avg_latency_ms}<span className="text-base text-fabric-500 font-normal ml-0.5">ms</span></>
+                      : <>{(service.avg_latency_ms / 1000).toFixed(1)}<span className="text-base text-fabric-500 font-normal ml-0.5">s</span></>
+                    }
+                  </div>
+                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">averaged across 30d health checks</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">—</div>
+                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">awaiting health check data</div>
+                </>
+              )}
+            </div>
+
+            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
+              <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Weekly Downloads</div>
+              {hasDownloads ? (
+                <>
+                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                    {formatNumber(adoptionMeta!.weekly_downloads as number)}
+                    {typeof adoptionMeta!.growth_rate === 'number' && (
+                      <span className={`text-[0.88rem] font-normal ml-1 ${(adoptionMeta!.growth_rate as number) >= 0 ? 'text-[#0dc956]' : 'text-[#d03a3d]'}`}>
+                        {(adoptionMeta!.growth_rate as number) >= 0 ? '+' : ''}{(adoptionMeta!.growth_rate as number).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">
+                    {service.npm_package ? 'npm' : ''}{service.npm_package && service.pypi_package ? ' + ' : ''}{service.pypi_package ? 'PyPI' : ''} weekly
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">—</div>
+                  <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">no package registry data</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ═══ TRANSPARENCY & COMPLIANCE ═══ */}
         {hasTransparency && (
