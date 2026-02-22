@@ -97,7 +97,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
 
   const allActive = activeStatuses.size === STATUS_OPTIONS.length
   const label = allActive
-    ? 'All Statuses'
+    ? 'Status'
     : STATUS_OPTIONS.filter(s => activeStatuses.has(s.key)).map(s => s.label).join(', ') || 'None'
 
   return (
