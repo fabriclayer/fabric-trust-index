@@ -7,8 +7,8 @@ export function computeScore(signals: number[]): number {
 }
 
 export function getStatus(score: number): 'trusted' | 'caution' | 'blocked' {
-  if (score >= 3.50) return 'trusted'
-  if (score >= 2.50) return 'caution'
+  if (score >= 2.50) return 'trusted'
+  if (score >= 1.00) return 'caution'
   return 'blocked'
 }
 

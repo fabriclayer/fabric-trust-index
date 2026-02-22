@@ -19,9 +19,9 @@ export const SIGNAL_ORDER = [
 export type SignalName = typeof SIGNAL_ORDER[number]
 
 export const THRESHOLDS = {
-  trusted: 3.50,    // >=3.50
-  caution: 2.50,    // >=2.50
-  // below 2.50 = blocked
+  trusted: 2.50,    // >=2.50
+  caution: 1.00,    // >=1.00
+  // below 1.00 = blocked
 } as const
 
 export const MODIFIERS = {

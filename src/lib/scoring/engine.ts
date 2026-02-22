@@ -29,8 +29,8 @@ export interface ScoreBreakdown {
 }
 
 export function getStatus(score: number): Status {
-  if (score >= THRESHOLDS.trusted) return 'trusted'
-  if (score >= THRESHOLDS.caution) return 'caution'
+  if (score >= 2.50) return 'trusted'
+  if (score >= 1.00) return 'caution'
   return 'blocked'
 }
 
