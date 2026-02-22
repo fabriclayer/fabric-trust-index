@@ -315,6 +315,25 @@ export default function ProductPageClient({
           </div>
         </div>
 
+        {/* ═══ TRUST SIGNAL BREAKDOWN ═══ */}
+        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="flex items-center justify-between mb-5">
+            <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
+            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">6 signals · weighted composite</span>
+          </div>
+          <div className="flex flex-col gap-3.5">
+            {SIGNAL_LABELS.map((signal, i) => (
+              <SignalRow
+                key={signal.name}
+                name={signal.name}
+                score={service.signals[i]}
+                weight={signal.weight}
+                detail={signal.detail}
+              />
+            ))}
+          </div>
+        </div>
+
         {/* ═══ METRICS CARD ═══ */}
         {(hasMetrics || hasDownloads) && (
           <div className="grid grid-cols-3 max-md:grid-cols-1 bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
@@ -383,25 +402,6 @@ export default function ProductPageClient({
             </div>
           </div>
         )}
-
-        {/* ═══ TRUST SIGNAL BREAKDOWN ═══ */}
-        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
-          <div className="flex items-center justify-between mb-5">
-            <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
-            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">6 signals · weighted composite</span>
-          </div>
-          <div className="flex flex-col gap-3.5">
-            {SIGNAL_LABELS.map((signal, i) => (
-              <SignalRow
-                key={signal.name}
-                name={signal.name}
-                score={service.signals[i]}
-                weight={signal.weight}
-                detail={signal.detail}
-              />
-            ))}
-          </div>
-        </div>
 
         {/* ═══ ABOUT THIS SERVICE ═══ */}
         <div className="bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
