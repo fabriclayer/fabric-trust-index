@@ -19,7 +19,7 @@ export default function ServiceCard({ service }: { service: Service }) {
       className="group bg-white border border-fabric-200 rounded-card p-5 cursor-pointer transition-all duration-200 flex flex-col gap-2.5 relative no-underline hover:border-fabric-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] hover:-translate-y-px max-[480px]:p-3.5"
     >
       <div className="flex items-start gap-2.5">
-        <ServiceLogo domain={service.domain} name={service.name} size={40} className="rounded-[10px]" />
+        <ServiceLogo domain={service.domain} githubRepo={service.github_repo} name={service.name} size={40} className="rounded-[10px]" />
         <div className="flex-1 min-w-0">
           <div className="text-[0.92rem] font-semibold text-black tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
             {service.name}
