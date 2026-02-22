@@ -25,14 +25,16 @@ const SORTS: Record<string, string> = {
   'updated': 'Recently updated',
 }
 
-function Dropdown({ label, options, value, onChange, badge }: {
+function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
   label: string
   options: Record<string, string>
   value: string
   onChange: (v: string) => void
   badge?: string
+  defaultValue?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [userChanged, setUserChanged] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,13 +45,15 @@ function Dropdown({ label, options, value, onChange, badge }: {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const displayLabel = (!userChanged && defaultValue && value === defaultValue) ? label : (options[value] || label)
+
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
         className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-pink shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200'}`}
       >
-        <span className="font-medium text-fabric-800">{options[value] || label}</span>
+        <span className="font-medium text-fabric-800">{displayLabel}</span>
         {badge && <span className="text-[0.6rem] text-fabric-400 bg-fabric-50 rounded px-1 py-px">{badge}</span>}
         <svg className={`w-2.5 h-2.5 text-fabric-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 1l4 4 4-4" />
@@ -61,7 +65,7 @@ function Dropdown({ label, options, value, onChange, badge }: {
           {Object.entries(options).map(([k, v]) => (
             <div
               key={k}
-              onClick={() => { onChange(k); setOpen(false) }}
+              onClick={() => { onChange(k); setUserChanged(true); setOpen(false) }}
               className={`font-mono text-[0.72rem] text-fabric-600 py-2 px-2.5 rounded-md cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap hover:bg-fabric-50 hover:text-fabric-800 ${value === k ? 'text-pink bg-[rgba(254,131,224,0.06)]' : ''}`}
             >
               {value === k && <span className="w-[5px] h-[5px] rounded-full bg-pink flex-shrink-0" />}
@@ -184,10 +188,11 @@ export default function SearchToolbar(props: SearchToolbarProps) {
 
         {/* Sort dropdown */}
         <Dropdown
-          label="Highest trust"
+          label="Sort"
           options={SORTS}
           value={props.activeSort}
           onChange={props.onSortChange}
+          defaultValue="score-desc"
         />
       </div>
     </div>
