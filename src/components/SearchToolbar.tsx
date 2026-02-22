@@ -176,7 +176,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
 
         {/* Category dropdown */}
         <Dropdown
-          label="All Categories"
+          label="Categories"
           options={CATEGORIES}
           value={props.activeCategory}
           onChange={props.onCategoryChange}

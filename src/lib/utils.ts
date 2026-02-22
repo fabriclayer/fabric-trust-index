@@ -40,7 +40,7 @@ export function cn(...classes: (string | false | undefined | null)[]): string {
 
 // Category display names
 export const CATEGORIES: Record<string, string> = {
-  'all': 'All Categories',
+  'all': 'Categories',
   'image-generation': 'Image Gen',
   'llm': 'LLMs',
   'web-search': 'Search',
