@@ -13,6 +13,8 @@ interface SearchToolbarProps {
   activeSort: string
   onSortChange: (s: string) => void
   searchInputRef?: React.RefObject<HTMLInputElement | null>
+  totalCount?: number
+  filteredCount?: number
 }
 
 const SORTS: Record<string, string> = {
@@ -123,13 +125,20 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           })}
         </div>
 
-        {/* Category dropdown */}
+        {/* Category dropdown + count */}
         <Dropdown
           label="All Categories"
           options={CATEGORIES}
           value={props.activeCategory}
           onChange={props.onCategoryChange}
         />
+        {props.totalCount != null && (
+          <span className="font-mono text-[0.62rem] text-fabric-400">
+            {props.filteredCount === props.totalCount
+              ? props.totalCount.toLocaleString()
+              : `${props.filteredCount?.toLocaleString()} / ${props.totalCount.toLocaleString()}`}
+          </span>
+        )}
 
         {/* Sort dropdown */}
         <Dropdown
