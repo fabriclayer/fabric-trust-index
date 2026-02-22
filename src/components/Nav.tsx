@@ -9,8 +9,8 @@ export default function Nav() {
 
   const links: { href: string; label: string; disabled?: boolean }[] = [
     { href: '#', label: 'API', disabled: true },
-    { href: 'https://fabriclayer.ai/docs', label: 'Docs' },
     { href: 'https://fabriclayer.ai/blog', label: 'Blog' },
+    { href: 'https://fabriclayer.ai/docs', label: 'Docs' },
   ]
 
   return (
