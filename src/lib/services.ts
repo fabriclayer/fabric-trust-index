@@ -73,12 +73,24 @@ export async function getAllSlugs(): Promise<string[]> {
 
 export async function getServices(): Promise<Service[]> {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('services')
-    .select('*, publisher:publishers(name, website_url)')
-    .order('composite_score', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToService)
+  const all: typeof data = []
+  let from = 0
+  const PAGE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('services')
+      .select('*, publisher:publishers(name, website_url)')
+      .order('composite_score', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  return all.map(dbToService)
 }
 
 export async function getServiceBySlug(slug: string): Promise<Service | null> {
