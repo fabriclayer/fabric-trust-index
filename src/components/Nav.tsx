@@ -9,7 +9,7 @@ export default function Nav() {
 
   const links = [
     { href: 'https://fabriclayer.dev', label: 'Home' },
-    { href: 'https://fabriclayer.dev/api', label: 'API' },
+    { href: '#', label: 'API' },
     { href: 'https://fabriclayer.dev/docs', label: 'Docs' },
     { href: 'https://fabriclayer.dev/blog', label: 'Blog' },
   ]
@@ -19,9 +19,9 @@ export default function Nav() {
       <nav className="sticky top-0 z-[100] bg-white border-b border-fabric-200 px-8 h-14 max-md:px-4">
         <div className="max-w-container mx-auto h-full flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <Link href="/" className="flex items-center gap-2.5 text-black no-underline">
+            <a href="https://fabriclayer.ai" className="flex items-center gap-2.5 text-black no-underline">
               <FabricLogo className="h-[18px] w-auto" />
-            </Link>
+            </a>
             <Link href="/" className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 no-underline hover:text-pink transition-colors">
               trust index
             </Link>
