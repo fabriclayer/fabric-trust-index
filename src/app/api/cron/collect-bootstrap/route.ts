@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const batch = Math.min(parseInt(searchParams.get('batch') ?? '50', 10), 100)
   const offset = parseInt(searchParams.get('offset') ?? '0', 10)
+  const skipSupplyChain = searchParams.get('skipSupplyChain') === '1'
 
   const supabase = createServerClient()
 
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
 
   for (const service of services) {
     try {
-      const result = await runAllCollectors(service)
+      const result = await runAllCollectors(service, { skipSupplyChain })
       results.push({
         name: service.name,
         success: result.success,

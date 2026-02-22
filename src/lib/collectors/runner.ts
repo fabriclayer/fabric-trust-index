@@ -148,7 +148,7 @@ async function detectIncidents(
  * Creates incidents for significant changes.
  * Runs supply-chain collector.
  */
-export async function runAllCollectors(service: DbService): Promise<{
+export async function runAllCollectors(service: DbService, options?: { skipSupplyChain?: boolean }): Promise<{
   success: string[]
   failed: string[]
 }> {
@@ -221,10 +221,12 @@ export async function runAllCollectors(service: DbService): Promise<{
   await detectIncidents(service, oldComposite, compositeScore, collectorResults)
 
   // Run supply-chain collector (informational, non-scoring)
-  try {
-    await collectSupplyChain(service)
-  } catch (err) {
-    console.error(`Supply-chain collector failed for ${service.name}:`, err)
+  if (!options?.skipSupplyChain) {
+    try {
+      await collectSupplyChain(service)
+    } catch (err) {
+      console.error(`Supply-chain collector failed for ${service.name}:`, err)
+    }
   }
 
   return { success, failed }
