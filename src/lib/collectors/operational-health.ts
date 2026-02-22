@@ -15,6 +15,15 @@ import crypto from 'crypto'
  * Frequency: Every 15 minutes for high-traffic services
  */
 
+function headersForUrl(url: string): Record<string, string> {
+  const headers: Record<string, string> = { 'User-Agent': 'FabricTrustMonitor/1.0' }
+  if (url.includes('api.github.com') && process.env.GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
+    headers.Accept = 'application/vnd.github.v3+json'
+  }
+  return headers
+}
+
 async function pingEndpoint(url: string): Promise<{
   statusCode: number | null
   latencyMs: number
@@ -30,7 +39,7 @@ async function pingEndpoint(url: string): Promise<{
     const res = await fetch(url, {
       method: 'GET',
       signal: controller.signal,
-      headers: { 'User-Agent': 'FabricTrustMonitor/1.0' },
+      headers: headersForUrl(url),
     })
     clearTimeout(timeout)
 
@@ -56,12 +65,25 @@ async function pingEndpoint(url: string): Promise<{
   }
 }
 
+/**
+ * Derive a monitoring URL from the service's package registry.
+ * Falls back to null if no registry info is available.
+ */
+function deriveMonitorUrl(service: DbService): string | null {
+  if (service.npm_package) return `https://registry.npmjs.org/${service.npm_package}`
+  if (service.pypi_package) return `https://pypi.org/pypi/${service.pypi_package}/json`
+  if (service.github_repo) return `https://api.github.com/repos/${service.github_repo}`
+  return null
+}
+
 export const operationalHealthCollector: Collector = {
   name: 'operational',
 
   async collect(service: DbService): Promise<CollectorResult> {
-    // No endpoint to check
-    if (!service.endpoint_url) {
+    // Use explicit endpoint, or derive from package registry
+    const monitorUrl = service.endpoint_url || deriveMonitorUrl(service)
+
+    if (!monitorUrl) {
       return {
         signal_name: 'operational',
         score: 4.0,
@@ -71,7 +93,7 @@ export const operationalHealthCollector: Collector = {
     }
 
     // Ping the endpoint
-    const result = await pingEndpoint(service.endpoint_url)
+    const result = await pingEndpoint(monitorUrl)
 
     // Store the health check
     const supabase = createServerClient()
@@ -98,7 +120,7 @@ export const operationalHealthCollector: Collector = {
         signal_name: 'operational',
         score: result.isUp ? 4.0 : 1.0,
         metadata: { first_check: true, is_up: result.isUp, latency_ms: result.latencyMs },
-        sources: [service.endpoint_url],
+        sources: [monitorUrl],
       }
     }
 
@@ -160,7 +182,7 @@ export const operationalHealthCollector: Collector = {
         behavioral_consistent: behavioralConsistency,
         unique_hashes: hashes.size,
       },
-      sources: [service.endpoint_url],
+      sources: [monitorUrl],
     }
   },
 }
