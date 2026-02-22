@@ -151,7 +151,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           <input
             ref={props.searchInputRef}
             type="text"
-            placeholder="Search services, models, agents..."
+            placeholder={props.totalCount ? `Search ${props.totalCount.toLocaleString()} services, models, agents...` : 'Search services, models, agents...'}
             value={props.searchQuery}
             onChange={e => props.onSearchChange(e.target.value)}
             className="border-none outline-none bg-transparent font-sans text-[0.82rem] text-fabric-800 w-full placeholder:text-fabric-400"
@@ -180,7 +180,6 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           options={CATEGORIES}
           value={props.activeCategory}
           onChange={props.onCategoryChange}
-          badge={props.filteredCount != null ? props.filteredCount.toLocaleString() : undefined}
         />
 
         {/* Sort dropdown */}
