@@ -31,6 +31,10 @@ export interface Service {
   tags?: string[]
   language?: string | null
   homepage_url?: string | null
+  docs_url?: string | null
+  x_url?: string | null
+  discord_url?: string | null
+  status_page_url?: string | null
 }
 
 const RAW = [

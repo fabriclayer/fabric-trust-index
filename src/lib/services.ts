@@ -59,6 +59,10 @@ function dbToService(db: any): Service {
     tags: db.tags?.length > 0 ? db.tags : undefined,
     language: db.language || undefined,
     homepage_url: db.homepage_url || undefined,
+    docs_url: db.docs_url || undefined,
+    x_url: db.x_url || undefined,
+    discord_url: db.discord_url || undefined,
+    status_page_url: db.status_page_url || undefined,
   }
 }
 
