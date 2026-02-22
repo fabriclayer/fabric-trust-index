@@ -199,8 +199,29 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   const modifiers: string[] = []
   const oldComposite = service.composite_score
 
+  // Override rules — critical findings force blocked regardless of composite
+  let status = getStatus(compositeScore)
+  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+
+  if (vulnResult?.result.metadata.has_critical_unpatched) {
+    status = 'blocked'
+    modifiers.push('critical_cve_override')
+  }
+
+  // Vulnerability score 0 means active malware or severe issues
+  if (vulnResult?.result.score === 0) {
+    status = 'blocked'
+    modifiers.push('vulnerability_zero_override')
+  }
+
+  // Any signal scoring exactly 0 forces caution at minimum
+  if (status === 'trusted' && signals.some(s => s === 0)) {
+    status = 'caution'
+    modifiers.push('zero_signal_override')
+  }
+
   updates.composite_score = compositeScore
-  updates.status = getStatus(compositeScore)
+  updates.status = status
   updates.active_modifiers = modifiers
 
   // Update service
