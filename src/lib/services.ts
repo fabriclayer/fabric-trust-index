@@ -73,7 +73,8 @@ export async function getAllSlugs(): Promise<string[]> {
 
 export async function getServices(): Promise<Service[]> {
   const supabase = createServerClient()
-  const all: typeof data = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const all: any[] = []
   let from = 0
   const PAGE = 1000
 
