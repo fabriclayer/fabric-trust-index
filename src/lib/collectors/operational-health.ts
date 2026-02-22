@@ -64,7 +64,7 @@ export const operationalHealthCollector: Collector = {
     if (!service.endpoint_url) {
       return {
         signal_name: 'operational',
-        score: 3.0,
+        score: 4.0,
         metadata: { reason: 'no_endpoint_configured' },
         sources: [],
       }
