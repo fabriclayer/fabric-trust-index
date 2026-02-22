@@ -3,6 +3,7 @@ import { discoverNpmPackages, type NpmCandidate } from './npm'
 import { discoverPyPIPackages, type PyPICandidate } from './pypi'
 import { discoverGitHubRepos, type GitHubCandidate } from './github'
 import { discoverHuggingFaceModels, getHFCategory, type HuggingFaceCandidate } from './huggingface'
+import { discoverOpenHubProjects, type OpenHubCandidate } from './openhub'
 
 // Category classification based on keywords/topics
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -138,10 +139,11 @@ export async function runDiscoveryPipeline(): Promise<{
   const existingSlugs = new Set(existing?.map(s => s.slug) ?? [])
 
   // Run discovery from all sources in parallel
-  const [npmCandidates, pypiCandidates, githubCandidates] = await Promise.all([
+  const [npmCandidates, pypiCandidates, githubCandidates, openhubCandidates] = await Promise.all([
     discoverNpmPackages(),
     discoverPyPIPackages(),
     discoverGitHubRepos(),
+    discoverOpenHubProjects(),
   ])
 
   let discovered = 0
@@ -211,6 +213,33 @@ export async function runDiscoveryPipeline(): Promise<{
       tags: repo.topics,
       language: repo.language ?? undefined,
       homepage_url: repo.homepage ?? undefined,
+    })
+    existingSlugs.add(slug)
+    added++
+  }
+
+  // Process OpenHub candidates
+  for (const project of openhubCandidates) {
+    discovered++
+    const slug = toSlug(project.name)
+    if (existingSlugs.has(slug)) { skipped++; continue }
+
+    const tags = [...project.tags]
+    if (project.license) tags.push(project.license)
+
+    await addDiscoveredService({
+      name: project.name,
+      slug,
+      publisher: project.urlName,
+      description: project.description,
+      category: classifyCategory(tags),
+      github_repo: project.githubRepo ?? undefined,
+      source: 'openhub',
+      capabilities: deriveCapabilities(tags),
+      pricing: { model: 'open-source' },
+      tags,
+      language: project.language ?? undefined,
+      homepage_url: project.homepageUrl ?? undefined,
     })
     existingSlugs.add(slug)
     added++
