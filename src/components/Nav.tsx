@@ -8,7 +8,6 @@ export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const links: { href: string; label: string; disabled?: boolean }[] = [
-    { href: 'https://fabriclayer.ai', label: 'Home' },
     { href: '#', label: 'API', disabled: true },
     { href: 'https://fabriclayer.ai/docs', label: 'Docs' },
     { href: 'https://fabriclayer.ai/blog', label: 'Blog' },
