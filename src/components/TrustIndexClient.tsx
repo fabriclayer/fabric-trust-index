@@ -133,6 +133,11 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
       />
 
       <div className="max-w-container mx-auto px-8 pt-5 pb-16 max-md:px-4">
+        <div className="font-mono text-[0.68rem] text-fabric-400 mb-3">
+          {filtered.length === services.length
+            ? `${services.length.toLocaleString()} services indexed`
+            : `${filtered.length.toLocaleString()} of ${services.length.toLocaleString()} services`}
+        </div>
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <svg className="mx-auto text-fabric-300 mb-4" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
