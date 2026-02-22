@@ -7,11 +7,11 @@ import FabricLogo from './FabricLogo'
 export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const links = [
-    { href: 'https://fabriclayer.dev', label: 'Home' },
-    { href: '#', label: 'API' },
-    { href: 'https://fabriclayer.dev/docs', label: 'Docs' },
-    { href: 'https://fabriclayer.dev/blog', label: 'Blog' },
+  const links: { href: string; label: string; disabled?: boolean }[] = [
+    { href: 'https://fabriclayer.ai', label: 'Home' },
+    { href: '#', label: 'API', disabled: true },
+    { href: 'https://fabriclayer.ai/docs', label: 'Docs' },
+    { href: 'https://fabriclayer.ai/blog', label: 'Blog' },
   ]
 
   return (
@@ -28,7 +28,14 @@ export default function Nav() {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-6">
-              {links.map(l => (
+              {links.map(l => l.disabled ? (
+                <span key={l.label} className="relative group font-mono text-[0.78rem] font-normal text-fabric-300 cursor-default select-none">
+                  {l.label}
+                  <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-1 bg-fabric-800 text-white text-[0.62rem] rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    Coming soon
+                  </span>
+                </span>
+              ) : (
                 <a key={l.href} href={l.href} className="font-mono text-[0.78rem] font-normal text-fabric-500 no-underline transition-colors hover:text-pink">
                   {l.label}
                 </a>
@@ -50,7 +57,11 @@ export default function Nav() {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="fixed top-14 right-0 z-[99] bg-white border border-fabric-200 rounded-bl-xl shadow-lg py-2 min-w-[180px] md:hidden">
-          {links.map(l => (
+          {links.map(l => l.disabled ? (
+            <span key={l.label} className="block font-mono text-[0.78rem] text-fabric-300 py-2 px-5 cursor-default">
+              {l.label} <span className="text-[0.62rem]">· coming soon</span>
+            </span>
+          ) : (
             <a key={l.href} href={l.href} className="block font-mono text-[0.78rem] text-fabric-600 no-underline py-2 px-5 transition-all hover:bg-fabric-50 hover:text-black">
               {l.label}
             </a>
