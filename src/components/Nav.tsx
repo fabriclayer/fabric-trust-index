@@ -22,9 +22,9 @@ export default function Nav() {
             <Link href="/" className="flex items-center gap-2.5 text-black no-underline">
               <FabricLogo className="h-[18px] w-auto" />
             </Link>
-            <span className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 pointer-events-none">
+            <Link href="/" className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 no-underline hover:text-pink transition-colors">
               trust index
-            </span>
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-6">
