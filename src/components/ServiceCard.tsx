@@ -42,7 +42,7 @@ export default function ServiceCard({ service }: { service: Service }) {
           {service.score.toFixed(2)}
         </span>
         <span className="font-mono text-[0.58rem] text-fabric-400 ml-auto whitespace-nowrap">
-          {service.updated} ago
+          {service.updated}
         </span>
       </div>
     </Link>
