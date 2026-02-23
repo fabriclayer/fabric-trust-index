@@ -304,16 +304,6 @@ export default function ProductPageClient({
                 <span className="font-mono text-[0.62rem] text-fabric-400">/ 5.00</span>
               </div>
               <ScoreStatus status={service.status} />
-              {typeof transparencyMeta?.license === 'string' && (
-                <span className={`font-mono text-[0.65rem] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center leading-none ${
-                  service.status === 'trusted' ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' :
-                  service.status === 'caution' ? 'bg-[rgba(247,147,30,0.1)] text-[#f7931e]' :
-                  service.status === 'blocked' ? 'bg-[rgba(208,58,61,0.1)] text-[#d03a3d]' :
-                  'bg-[rgba(160,160,156,0.1)] text-[#a0a09c]'
-                }`}>
-                  {transparencyMeta.license.toUpperCase()}
-                </span>
-              )}
             </div>
           </div>
 
@@ -397,6 +387,7 @@ export default function ProductPageClient({
             </div>
             <p className="text-[0.92rem] leading-relaxed text-fabric-700 max-w-[680px]">{service.description}</p>
 
+            {/* Licence */}
             {/* Capabilities */}
             {service.capabilities && service.capabilities.length > 0 && (
               <div className="mt-6 pt-5 border-t border-fabric-100">
