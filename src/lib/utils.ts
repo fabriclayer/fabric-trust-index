@@ -1,22 +1,12 @@
-// Trust score weights matching the prototype
-const WEIGHTS = [0.25, 0.20, 0.20, 0.15, 0.10, 0.10]
-
-export function computeScore(signals: number[]): number {
-  const weighted = signals.reduce((sum, s, i) => sum + s * WEIGHTS[i], 0)
-  return Math.round(weighted * 100) / 100
-}
-
-export function getStatus(score: number): 'trusted' | 'caution' | 'blocked' {
-  if (score >= 2.50) return 'trusted'
-  if (score >= 1.00) return 'caution'
-  return 'blocked'
-}
+// Re-export canonical scoring functions from thresholds
+export { computeComposite as computeScore, getStatus } from '@/lib/scoring/thresholds'
 
 export function getStatusColor(status: string): string {
   switch (status) {
     case 'trusted': return '#0dc956'
     case 'caution': return '#f7931e'
     case 'blocked': return '#d03a3d'
+    case 'pending': return '#a0a09c'
     default: return '#a0a09c'
   }
 }
@@ -51,6 +41,7 @@ export const CATEGORIES: Record<string, string> = {
   'embedding': 'Embeddings',
   'vision': 'Vision',
   'infra': 'Infra',
+  'framework': 'Frameworks',
 }
 
 // Tag class mapping
@@ -65,6 +56,7 @@ export const TAG_CLASSES: Record<string, string> = {
   'embedding': 'tag-embed',
   'vision': 'tag-vision',
   'infra': 'tag-infra',
+  'framework': 'tag-frame',
 }
 
 // Category colors for tag highlighting
@@ -79,14 +71,15 @@ export const TAG_COLORS: Record<string, { text: string; border: string; bg: stri
   'tag-infra': { text: '#d97706', border: '#d97706', bg: 'rgba(217,119,6,0.08)' },
   'tag-speech': { text: '#14b8a6', border: '#14b8a6', bg: 'rgba(20,184,166,0.08)' },
   'tag-vision': { text: '#e82d35', border: '#e82d35', bg: 'rgba(232,45,53,0.08)' },
+  'tag-frame': { text: '#7c3aed', border: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
 }
 
 // Signal labels for the product page
 export const SIGNAL_LABELS = [
   { name: 'Vulnerability & Safety', weight: '×0.25', detail: 'Zero known CVEs across full dependency tree. No malware signatures detected. Clean install scripts. No typosquatting indicators. All dependencies scanned recursively.' },
-  { name: 'Operational Health', weight: '×0.20', detail: 'Fabric Monitor active — 99.95% uptime over rolling 30d. Sub-200ms p50 latency. Consistent behavioral responses across identical checks. 15-minute ping cycle.' },
+  { name: 'Operational Health', weight: '×0.15', detail: 'Fabric Monitor active — 99.95% uptime over rolling 30d. Sub-200ms p50 latency. Consistent behavioral responses across identical checks. 15-minute ping cycle.' },
   { name: 'Maintenance Activity', weight: '×0.20', detail: 'Active commits within last 7 days. Regular release cadence. Median issue response under 24h. Healthy open/closed issue ratio. Consistent PR merge velocity.' },
   { name: 'Adoption', weight: '×0.15', detail: 'Top-tier download volume normalised against category peers. Strong growth velocity. High unique caller count. Logarithmic scale — raw numbers weighted against ecosystem averages.' },
-  { name: 'Transparency', weight: '×0.10', detail: 'Published model card and system card. SECURITY.md present. API documentation with input/output schemas. Research papers linked. Closed-weight model limits full source visibility.' },
+  { name: 'Transparency', weight: '×0.15', detail: 'Published model card and system card. SECURITY.md present. API documentation with input/output schemas. Research papers linked. Closed-weight model limits full source visibility.' },
   { name: 'Publisher Trust', weight: '×0.10', detail: 'Verified organisation account. Consistent identity across npm, PyPI, and GitHub. Multiple maintained packages. Clean track record with no prior security incidents. Domain-verified.' },
 ]

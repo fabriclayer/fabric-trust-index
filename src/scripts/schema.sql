@@ -47,7 +47,7 @@ CREATE TABLE services (
   signal_transparency FLOAT DEFAULT 3.0,
   signal_publisher_trust FLOAT DEFAULT 3.0,
   composite_score FLOAT DEFAULT 3.0,
-  status TEXT DEFAULT 'caution' CHECK (status IN ('trusted', 'caution', 'blocked')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('trusted', 'caution', 'blocked', 'pending')),
   transaction_count INT DEFAULT 0,
   last_activity_at TIMESTAMPTZ DEFAULT NOW(),
   active_modifiers TEXT[] DEFAULT '{}',

@@ -3,7 +3,7 @@ import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
 
 /**
- * Transparency Collector (weight: 0.10)
+ * Transparency Collector (weight: 0.15)
  *
  * Checklist-based evaluation:
  * 1. Public source code (public repo)
@@ -11,15 +11,18 @@ import { clampScore } from './types'
  * 3. Substantial README with examples
  * 4. SECURITY.md present
  * 5. Published schemas/API docs
- * 6. Model cards or system cards
+ * 6. Model cards or system cards (only for llm, image-generation, speech, vision)
  *
- * Each item = ~0.83 points (6 items = 5.0 max)
+ * For model-related categories: 6 items x 0.833 = 5.0 max
+ * For other categories: 5 items x 1.0 = 5.0 max (model card skipped)
  *
  * Data source: GitHub REST API
  */
 
 const GITHUB_API = 'https://api.github.com'
-const POINTS_PER_ITEM = 5.0 / 6
+
+// Categories where model card check applies
+const MODEL_CARD_CATEGORIES = new Set(['llm', 'image-generation', 'speech', 'vision'])
 
 function githubHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -77,6 +80,12 @@ export const transparencyCollector: Collector = {
     const repo = service.github_repo
     const sources = [`github:${repo}`]
     const checklist: Record<string, boolean> = {}
+
+    // Determine if model card check applies to this category
+    const includeModelCard = MODEL_CARD_CATEGORIES.has(service.category ?? '')
+    const totalItems = includeModelCard ? 6 : 5
+    const pointsPerItem = 5.0 / totalItems
+
     let score = 0
 
     // 1. Public source code
@@ -88,7 +97,7 @@ export const transparencyCollector: Collector = {
 
     if (repoData && !repoData.private) {
       checklist.public_source = true
-      score += POINTS_PER_ITEM
+      score += pointsPerItem
     } else {
       checklist.public_source = false
     }
@@ -97,7 +106,7 @@ export const transparencyCollector: Collector = {
     const licenseId = repoData?.license?.spdx_id?.toLowerCase()
     if (licenseId && OSI_LICENSES.has(licenseId)) {
       checklist.recognized_license = true
-      score += POINTS_PER_ITEM
+      score += pointsPerItem
     } else {
       checklist.recognized_license = false
     }
@@ -110,16 +119,15 @@ export const transparencyCollector: Collector = {
     } | null
 
     if (readme && readme.size && readme.size > 500) {
-      // Check if README has code blocks (indicators of examples)
       let hasExamples = false
       if (readme.content && readme.encoding === 'base64') {
         try {
           const decoded = Buffer.from(readme.content, 'base64').toString('utf-8')
-          hasExamples = decoded.includes('```') || decoded.includes('    ') // code blocks or indented code
+          hasExamples = decoded.includes('```') || decoded.includes('    ')
         } catch { /* ignore decode errors */ }
       }
       checklist.readme_with_examples = hasExamples || readme.size > 2000
-      if (checklist.readme_with_examples) score += POINTS_PER_ITEM
+      if (checklist.readme_with_examples) score += pointsPerItem
     } else {
       checklist.readme_with_examples = false
     }
@@ -127,28 +135,33 @@ export const transparencyCollector: Collector = {
     // 4. SECURITY.md present
     const hasSecurity = await githubExists(`/repos/${repo}/contents/SECURITY.md`)
     checklist.security_md = hasSecurity
-    if (hasSecurity) score += POINTS_PER_ITEM
+    if (hasSecurity) score += pointsPerItem
 
     // 5. Published schemas / API docs
     const hasOpenapi = await githubExists(`/repos/${repo}/contents/openapi.json`)
     const hasOpenApiYaml = !hasOpenapi && await githubExists(`/repos/${repo}/contents/openapi.yaml`)
     const hasDocs = !hasOpenapi && !hasOpenApiYaml && await githubExists(`/repos/${repo}/contents/docs`)
     checklist.api_docs = hasOpenapi || hasOpenApiYaml || hasDocs
-    if (checklist.api_docs) score += POINTS_PER_ITEM
+    if (checklist.api_docs) score += pointsPerItem
 
-    // 6. Model card or system card
-    const hasModelCard = await githubExists(`/repos/${repo}/contents/MODEL_CARD.md`)
-    const hasSystemCard = !hasModelCard && await githubExists(`/repos/${repo}/contents/SYSTEM_CARD.md`)
-    checklist.model_card = hasModelCard || hasSystemCard
-    if (checklist.model_card) score += POINTS_PER_ITEM
+    // 6. Model card or system card (only for model-related categories)
+    if (includeModelCard) {
+      const hasModelCard = await githubExists(`/repos/${repo}/contents/MODEL_CARD.md`)
+      const hasSystemCard = !hasModelCard && await githubExists(`/repos/${repo}/contents/SYSTEM_CARD.md`)
+      checklist.model_card = hasModelCard || hasSystemCard
+      if (checklist.model_card) score += pointsPerItem
+    } else {
+      checklist.model_card_skipped = true
+    }
 
     return {
       signal_name: 'transparency',
       score: clampScore(score),
       metadata: {
         checklist,
-        items_passed: Object.values(checklist).filter(Boolean).length,
-        items_total: 6,
+        items_passed: Object.values(checklist).filter(v => v === true).length,
+        items_total: totalItems,
+        model_card_applicable: includeModelCard,
         license: licenseId ?? null,
       },
       sources,

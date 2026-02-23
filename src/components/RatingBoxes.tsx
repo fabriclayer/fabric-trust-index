@@ -14,14 +14,15 @@ function RatingSvg({ sizePx }: { sizePx: number }) {
 
 interface RatingBoxesProps {
   score: number
-  status: 'trusted' | 'caution' | 'blocked'
+  status: 'trusted' | 'caution' | 'blocked' | 'pending'
   size?: 'sm' | 'lg'
 }
 
-const fillColorClass = {
+const fillColorClass: Record<string, string> = {
   trusted: '[&_path]:fill-[#0dc956]',
   caution: '[&_path]:fill-[#f7931e]',
   blocked: '[&_path]:fill-[#d03a3d]',
+  pending: '[&_path]:fill-[#a0a09c]',
 }
 
 export default function RatingBoxes({ score, status, size = 'sm' }: RatingBoxesProps) {

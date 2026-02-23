@@ -2,17 +2,15 @@ import type { DbService } from '@/lib/supabase/types'
 import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
 import { createServerClient } from '@/lib/supabase/server'
-import crypto from 'crypto'
 
 /**
- * Operational Health Collector (weight: 0.20)
+ * Operational Health Collector (weight: 0.15)
  *
  * Monitors active endpoints via HTTP health checks.
- * 99.9%+ uptime and sub-500ms p50 latency scores 5.0.
- * Behavioral inconsistency (different responses to identical inputs)
- * receives the heaviest penalty.
+ * Real endpoint_url monitoring can score up to 5.0.
+ * Registry-derived pings (npm/PyPI/GitHub) are capped at 3.5.
  *
- * Frequency: Every 15 minutes for high-traffic services
+ * Frequency: Every 15 minutes for services with endpoint_url
  */
 
 function headersForUrl(url: string): Record<string, string> {
@@ -28,7 +26,7 @@ async function pingEndpoint(url: string): Promise<{
   statusCode: number | null
   latencyMs: number
   isUp: boolean
-  bodyHash: string
+  isDegraded: boolean
   error: string | null
 }> {
   const start = Date.now()
@@ -43,15 +41,19 @@ async function pingEndpoint(url: string): Promise<{
     })
     clearTimeout(timeout)
 
-    const body = await res.text()
+    // Consume body to complete the response
+    await res.text()
     const latencyMs = Date.now() - start
-    const bodyHash = crypto.createHash('sha256').update(body.slice(0, 2048)).digest('hex').slice(0, 16)
+
+    // 200-399 = up, 400-499 = degraded, 500+ = down
+    const isUp = res.status >= 200 && res.status < 400
+    const isDegraded = res.status >= 400 && res.status < 500
 
     return {
       statusCode: res.status,
       latencyMs,
-      isUp: res.status >= 200 && res.status < 500,
-      bodyHash,
+      isUp: isUp || isDegraded, // reachable for uptime counting
+      isDegraded,
       error: null,
     }
   } catch (err) {
@@ -59,7 +61,7 @@ async function pingEndpoint(url: string): Promise<{
       statusCode: null,
       latencyMs: Date.now() - start,
       isUp: false,
-      bodyHash: '',
+      isDegraded: false,
       error: err instanceof Error ? err.message : 'Unknown error',
     }
   }
@@ -67,7 +69,6 @@ async function pingEndpoint(url: string): Promise<{
 
 /**
  * Derive a monitoring URL from the service's package registry.
- * Falls back to null if no registry info is available.
  */
 function deriveMonitorUrl(service: DbService): string | null {
   if (service.npm_package) return `https://registry.npmjs.org/${service.npm_package}`
@@ -80,19 +81,19 @@ export const operationalHealthCollector: Collector = {
   name: 'operational',
 
   async collect(service: DbService): Promise<CollectorResult> {
-    // Use explicit endpoint, or derive from package registry
+    const isRealEndpoint = !!service.endpoint_url
     const monitorUrl = service.endpoint_url || deriveMonitorUrl(service)
+    const sourceType: 'endpoint' | 'registry' = isRealEndpoint ? 'endpoint' : 'registry'
 
     if (!monitorUrl) {
       return {
         signal_name: 'operational',
         score: 4.0,
-        metadata: { reason: 'no_endpoint_configured' },
+        metadata: { reason: 'no_endpoint_configured', source_type: sourceType },
         sources: [],
       }
     }
 
-    // Ping the endpoint
     const result = await pingEndpoint(monitorUrl)
 
     // Store the health check
@@ -102,24 +103,25 @@ export const operationalHealthCollector: Collector = {
       status_code: result.statusCode,
       latency_ms: result.latencyMs,
       is_up: result.isUp,
-      behavioral_hash: result.bodyHash,
       error_message: result.error,
     })
 
-    // Fetch last 30 days of health checks for uptime calculation
+    // Fetch last 30 days of health checks
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600000).toISOString()
     const { data: checks } = await supabase
       .from('health_checks')
-      .select('is_up, latency_ms, behavioral_hash')
+      .select('is_up, latency_ms, status_code')
       .eq('service_id', service.id)
       .gte('checked_at', thirtyDaysAgo)
       .order('checked_at', { ascending: false })
 
     if (!checks || checks.length === 0) {
+      let firstScore = result.isUp ? 4.0 : 1.0
+      if (sourceType === 'registry') firstScore = Math.min(firstScore, 3.5)
       return {
         signal_name: 'operational',
-        score: result.isUp ? 4.0 : 1.0,
-        metadata: { first_check: true, is_up: result.isUp, latency_ms: result.latencyMs },
+        score: firstScore,
+        metadata: { first_check: true, is_up: result.isUp, latency_ms: result.latencyMs, source_type: sourceType },
         sources: [monitorUrl],
       }
     }
@@ -128,17 +130,16 @@ export const operationalHealthCollector: Collector = {
     const upCount = checks.filter(c => c.is_up).length
     const uptimePercent = (upCount / checks.length) * 100
 
-    // Calculate p50 latency
+    // Count degraded checks (4xx responses)
+    const degradedCount = checks.filter(c => c.status_code && c.status_code >= 400 && c.status_code < 500).length
+
+    // Calculate latency percentiles
     const latencies = checks
       .filter(c => c.latency_ms != null)
       .map(c => c.latency_ms!)
       .sort((a, b) => a - b)
     const p50 = latencies.length > 0 ? latencies[Math.floor(latencies.length * 0.5)] : 0
     const p99 = latencies.length > 0 ? latencies[Math.floor(latencies.length * 0.99)] : 0
-
-    // Check behavioral consistency (hash variance)
-    const hashes = new Set(checks.filter(c => c.behavioral_hash).map(c => c.behavioral_hash))
-    const behavioralConsistency = hashes.size <= 3 // Allow some variance for dynamic content
 
     // Score calculation
     let score = 5.0
@@ -155,9 +156,14 @@ export const operationalHealthCollector: Collector = {
       score -= excess * 0.2
     }
 
-    // Behavioral inconsistency penalty
-    if (!behavioralConsistency) {
-      score -= 0.5
+    // Degraded check penalty: -0.1 per 4xx check
+    if (degradedCount > 0) {
+      score -= degradedCount * 0.1
+    }
+
+    // Cap registry-derived pings at 3.5
+    if (sourceType === 'registry') {
+      score = Math.min(score, 3.5)
     }
 
     // Update service operational metrics
@@ -175,12 +181,12 @@ export const operationalHealthCollector: Collector = {
       signal_name: 'operational',
       score: clampScore(score),
       metadata: {
+        source_type: sourceType,
         uptime_percent: uptimePercent,
         p50_latency_ms: p50,
         p99_latency_ms: p99,
         total_checks: checks.length,
-        behavioral_consistent: behavioralConsistency,
-        unique_hashes: hashes.size,
+        degraded_checks: degradedCount,
       },
       sources: [monitorUrl],
     }

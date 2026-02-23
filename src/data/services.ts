@@ -9,7 +9,7 @@ export interface Service {
   description: string
   signals: number[]
   score: number
-  status: 'trusted' | 'caution' | 'blocked'
+  status: 'trusted' | 'caution' | 'blocked' | 'pending'
   icon: string
   updated: string
   domain?: string

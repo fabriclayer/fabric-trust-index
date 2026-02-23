@@ -8,16 +8,7 @@ import { adoptionCollector } from './adoption'
 import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
-
-const WEIGHTS = [0.25, 0.20, 0.20, 0.15, 0.10, 0.10]
-const SIGNAL_KEYS = [
-  'vulnerability',
-  'operational',
-  'maintenance',
-  'adoption',
-  'transparency',
-  'publisher_trust',
-] as const
+import { WEIGHTS, SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
 
 const COLLECTORS = [
   vulnerabilityCollector,
@@ -27,12 +18,6 @@ const COLLECTORS = [
   transparencyCollector,
   publisherTrustCollector,
 ]
-
-function getStatus(score: number): 'trusted' | 'caution' | 'blocked' {
-  if (score >= 2.50) return 'trusted'
-  if (score >= 1.00) return 'caution'
-  return 'blocked'
-}
 
 /**
  * Create an incident record for a service.
@@ -166,7 +151,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i]
-    const signalKey = SIGNAL_KEYS[i]
+    const signalKey = SIGNAL_ORDER[i]
 
     if (result.status === 'fulfilled') {
       const cr: CollectorResult = result.value
@@ -193,14 +178,20 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   }
 
   // Recompute composite score
-  const rawScore = signals.reduce((sum, s, i) => sum + s * WEIGHTS[i], 0)
-
-  const compositeScore = Math.round(rawScore * 100) / 100
+  const compositeScore = computeComposite(signals)
   const modifiers: string[] = []
   const oldComposite = service.composite_score
 
-  // Override rules — critical findings force blocked regardless of composite
+  // Override rules
   let status = getStatus(compositeScore)
+
+  // 1. Zero signal override — any signal at 0 prevents trusted status
+  if (status === 'trusted' && signals.some(s => s === 0)) {
+    status = 'caution'
+    modifiers.push('zero_signal_override')
+  }
+
+  // 2. Vulnerability overrides — critical findings force blocked
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
 
   if (vulnResult?.result.metadata.has_critical_unpatched) {
@@ -208,7 +199,6 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('critical_cve_override')
   }
 
-  // Vulnerability score 0 means active malware or severe issues
   if (vulnResult?.result.score === 0) {
     status = 'blocked'
     modifiers.push('vulnerability_zero_override')
@@ -229,7 +219,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     service_id: service.id,
     signal_name: 'composite',
     score: compositeScore,
-    metadata: { modifiers, raw_score: rawScore },
+    metadata: { modifiers },
   })
 
   // Detect and create incidents
@@ -249,20 +239,25 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
 /**
  * Run a specific set of collectors for a service.
+ * After updating individual signals, recomputes composite score,
+ * applies overrides, updates status, records history, and detects incidents.
  */
 export async function runCollectors(
   service: DbService,
   collectorNames: string[]
 ): Promise<void> {
   const supabase = createServerClient()
+  const collectorResults: Array<{ key: string; result: CollectorResult } | null> = []
+  const updatedKeys: string[] = []
 
   for (const name of collectorNames) {
     const collector = COLLECTORS.find(c => c.name === name)
     if (!collector) continue
 
+    const signalKey = SIGNAL_ORDER[COLLECTORS.indexOf(collector)]
+
     try {
       const result = await collector.collect(service)
-      const signalKey = SIGNAL_KEYS[COLLECTORS.indexOf(collector)]
 
       await supabase
         .from('services')
@@ -275,9 +270,75 @@ export async function runCollectors(
         score: result.score,
         metadata: result.metadata,
       })
+
+      collectorResults.push({ key: signalKey, result })
+      updatedKeys.push(signalKey)
     } catch (err) {
       console.error(`Collector ${name} failed for ${service.name}:`, err)
+      collectorResults.push(null)
     }
+  }
+
+  // Re-read the service row to get all 6 current signal values
+  const { data: freshService } = await supabase
+    .from('services')
+    .select('*')
+    .eq('id', service.id)
+    .single()
+
+  if (!freshService) return
+
+  // Build signals array from fresh DB values
+  const signals = SIGNAL_ORDER.map(
+    key => (freshService[`signal_${key}` as keyof typeof freshService] as number) ?? 0
+  )
+
+  // Recompute composite
+  const compositeScore = computeComposite(signals)
+  const oldComposite = service.composite_score
+  const modifiers: string[] = []
+
+  // Override rules
+  let status = getStatus(compositeScore)
+
+  // 1. Zero signal override
+  if (status === 'trusted' && signals.some(s => s === 0)) {
+    status = 'caution'
+    modifiers.push('zero_signal_override')
+  }
+
+  // 2. Vulnerability overrides
+  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+  if (vulnResult?.result.metadata.has_critical_unpatched) {
+    status = 'blocked'
+    modifiers.push('critical_cve_override')
+  }
+  if (vulnResult?.result.score === 0) {
+    status = 'blocked'
+    modifiers.push('vulnerability_zero_override')
+  }
+
+  // Update composite, status, and modifiers
+  await supabase
+    .from('services')
+    .update({
+      composite_score: compositeScore,
+      status,
+      active_modifiers: modifiers,
+    })
+    .eq('id', service.id)
+
+  // Record composite history
+  await supabase.from('signal_history').insert({
+    service_id: service.id,
+    signal_name: 'composite',
+    score: compositeScore,
+    metadata: { modifiers, partial_run: updatedKeys },
+  })
+
+  // Detect incidents if score changed significantly
+  if (Math.abs(compositeScore - oldComposite) >= 0.3) {
+    await detectIncidents(service, oldComposite, compositeScore, collectorResults)
   }
 }
 

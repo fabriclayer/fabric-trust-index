@@ -5,6 +5,8 @@
  * Returns candidate packages for trust scoring.
  */
 
+import { CI_BOT_NAMES } from './bot-filter'
+
 export interface NpmCandidate {
   name: string
   description: string
@@ -60,6 +62,39 @@ const SEARCH_QUERIES = [
   'keywords:vercel-ai',
 ]
 
+/**
+ * Resolve the true publisher for an npm package.
+ * Priority: scoped org > author.name > publisher.username
+ * Skips known CI bot names.
+ */
+function resolveNpmPublisher(pkg: any): string {
+  const candidates: string[] = []
+
+  // 1. If scoped package (@org/name), use the org
+  if (pkg.name?.startsWith('@')) {
+    const scope = pkg.name.split('/')[0].slice(1)
+    if (scope) candidates.push(scope)
+  }
+
+  // 2. Author name
+  if (pkg.author?.name) candidates.push(pkg.author.name)
+
+  // 3. Publisher username
+  if (pkg.publisher?.username) candidates.push(pkg.publisher.username)
+
+  // 4. First maintainer
+  if (pkg.maintainers?.[0]?.name) candidates.push(pkg.maintainers[0].name)
+
+  // Return first non-bot candidate
+  for (const name of candidates) {
+    if (!CI_BOT_NAMES.has(name.toLowerCase())) {
+      return name
+    }
+  }
+
+  return candidates[0] ?? 'unknown'
+}
+
 export async function searchNpm(query: string, limit = 50): Promise<NpmCandidate[]> {
   try {
     const res = await fetch(
@@ -68,14 +103,18 @@ export async function searchNpm(query: string, limit = 50): Promise<NpmCandidate
     if (!res.ok) return []
 
     const data = await res.json()
-    return (data.objects ?? []).map((obj: any) => ({
-      name: obj.package.name,
-      description: obj.package.description ?? '',
-      publisher: obj.package.publisher?.username ?? obj.package.author?.name ?? 'unknown',
-      version: obj.package.version,
-      keywords: obj.package.keywords ?? [],
-      date: obj.package.date,
-    }))
+    return (data.objects ?? []).map((obj: any) => {
+      const pkg = obj.package
+      const publisher = resolveNpmPublisher(pkg)
+      return {
+        name: pkg.name,
+        description: pkg.description ?? '',
+        publisher,
+        version: pkg.version,
+        keywords: pkg.keywords ?? [],
+        date: pkg.date,
+      }
+    })
   } catch {
     return []
   }

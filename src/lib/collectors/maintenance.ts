@@ -86,11 +86,6 @@ export const maintenanceCollector: Collector = {
 
     // 2. Recent commit frequency (90 days)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
-    const commits = await githubGet(`/repos/${repo}/commits?since=${ninetyDaysAgo}&per_page=1`) as unknown[]  | null
-
-    // GitHub returns paginated results; check if there are commits
-    // We just need to know approximate count, so check the Link header approach
-    // For simplicity, fetch up to 100 commits
     const commitList = await githubGet(`/repos/${repo}/commits?since=${ninetyDaysAgo}&per_page=100`) as unknown[] | null
     const commitCount = commitList?.length ?? 0
     metadata.commits_90d = commitCount
@@ -127,8 +122,7 @@ export const maintenanceCollector: Collector = {
       }
     }
 
-    // 4. Open/closed issue ratio
-    const openIssues = await githubGet(`/repos/${repo}/issues?state=open&per_page=1`) as unknown[] | null
+    // 4. Open issue count (from repo metadata, no extra API call)
     const openCount = repoData.open_issues_count ?? 0
     metadata.open_issues = openCount
 

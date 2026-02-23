@@ -15,10 +15,6 @@
     {
       "path": "/api/cron/discover",
       "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/discover?source=huggingface",
-      "schedule": "0 */6 * * *"
     }
   ]
 }

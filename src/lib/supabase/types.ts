@@ -120,7 +120,7 @@ export interface DbService {
 
   // Composite
   composite_score: number
-  status: 'trusted' | 'caution' | 'blocked'
+  status: 'trusted' | 'caution' | 'blocked' | 'pending'
 
   // Modifiers
   transaction_count: number

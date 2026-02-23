@@ -6,6 +6,8 @@
  * with known package names and classifiers.
  */
 
+import { CI_BOT_NAMES } from './bot-filter'
+
 export interface PyPICandidate {
   name: string
   description: string
@@ -101,10 +103,23 @@ export async function getPyPIPackageInfo(packageName: string): Promise<PyPICandi
     const data = await res.json()
     const info = data.info
 
+    // Resolve publisher, skipping known CI bots
+    const candidates = [info.author, info.maintainer].filter(Boolean)
+    let publisher = 'unknown'
+    for (const name of candidates) {
+      if (!CI_BOT_NAMES.has(name.toLowerCase())) {
+        publisher = name
+        break
+      }
+    }
+    if (publisher === 'unknown' && candidates.length > 0) {
+      publisher = candidates[0]
+    }
+
     return {
       name: info.name,
       description: info.summary ?? '',
-      publisher: info.author ?? info.maintainer ?? 'unknown',
+      publisher,
       version: info.version,
       keywords: info.keywords?.split(',').map((k: string) => k.trim()).filter(Boolean) ?? [],
       projectUrl: info.project_url ?? `https://pypi.org/project/${packageName}`,

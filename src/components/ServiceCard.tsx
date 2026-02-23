@@ -6,10 +6,11 @@ import RatingBoxes from './RatingBoxes'
 import CategoryTag from './CategoryTag'
 import ServiceLogo from './ServiceLogo'
 
-const scoreNumColor = {
+const scoreNumColor: Record<string, string> = {
   trusted: 'text-[#0dc956]',
   caution: 'text-[#f7931e]',
   blocked: 'text-[#d03a3d]',
+  pending: 'text-[#a0a09c]',
 }
 
 export default function ServiceCard({ service }: { service: Service }) {

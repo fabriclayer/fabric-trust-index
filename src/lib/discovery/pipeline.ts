@@ -8,23 +8,49 @@ import { discoverGitHubRepos, type GitHubCandidate } from './github'
 // import { discoverHuggingFaceModels, getHFCategory, type HuggingFaceCandidate } from './huggingface'
 
 // Category classification based on keywords/topics
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  'llm': ['llm', 'large-language-model', 'gpt', 'chatbot', 'chat', 'language-model'],
-  'agent': ['agent', 'multi-agent', 'autonomous', 'crewai', 'autogen', 'mcp'],
-  'embedding': ['embedding', 'embeddings', 'vector', 'semantic-search'],
-  'infra': ['inference', 'deployment', 'serverless', 'gpu', 'vector-database', 'database'],
-  'code': ['code-generation', 'copilot', 'code-assistant', 'ide'],
-  'image-generation': ['image-generation', 'text-to-image', 'diffusion', 'stable-diffusion'],
-  'speech': ['text-to-speech', 'speech-to-text', 'tts', 'stt', 'audio'],
-  'web-search': ['search', 'web-search', 'crawl', 'scrape'],
-  'vision': ['computer-vision', 'image-recognition', 'ocr', 'object-detection'],
-  'data-api': ['api', 'data', 'rest-api'],
+// Order matters: framework must come before llm to prevent over-matching
+const CATEGORY_KEYWORDS: [string, string[]][] = [
+  ['framework', ['framework', 'langchain', 'llamaindex', 'haystack', 'semantic-kernel', 'toolkit', 'orchestration']],
+  ['agent', ['agent', 'multi-agent', 'autonomous', 'crewai', 'autogen', 'mcp']],
+  ['llm', ['llm', 'large-language-model', 'gpt', 'chatbot', 'chat', 'language-model']],
+  ['embedding', ['embedding', 'embeddings', 'vector', 'semantic-search']],
+  ['code', ['code-generation', 'copilot', 'code-assistant', 'ide']],
+  ['image-generation', ['image-generation', 'text-to-image', 'diffusion', 'stable-diffusion']],
+  ['speech', ['text-to-speech', 'speech-to-text', 'tts', 'stt', 'audio']],
+  ['web-search', ['search', 'web-search', 'crawl', 'scrape']],
+  ['vision', ['computer-vision', 'image-recognition', 'ocr', 'object-detection']],
+  ['data-api', ['api', 'data', 'rest-api']],
+  ['infra', ['inference', 'deployment', 'serverless', 'gpu', 'vector-database', 'database']],
+]
+
+// Override list for known miscategorised packages
+const CATEGORY_OVERRIDES: Record<string, string> = {
+  'langchain': 'framework',
+  '@langchain/core': 'framework',
+  '@langchain/community': 'framework',
+  '@langchain/openai': 'framework',
+  '@langchain/anthropic': 'framework',
+  'langchain-core': 'framework',
+  'langchain-community': 'framework',
+  'langchain-openai': 'framework',
+  'langchain-anthropic': 'framework',
+  'llamaindex': 'framework',
+  'llama-index': 'framework',
+  'haystack-ai': 'framework',
+  'semantic-kernel': 'framework',
+  'crewai': 'agent',
+  'autogen': 'agent',
 }
 
-function classifyCategory(keywords: string[]): string {
+export function classifyCategory(keywords: string[], packageName?: string): string {
+  // Check override list first
+  if (packageName && CATEGORY_OVERRIDES[packageName]) {
+    return CATEGORY_OVERRIDES[packageName]
+  }
+
   const lower = keywords.map(k => k.toLowerCase())
 
-  for (const [category, categoryKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
+  for (const [category, categoryKeywords] of CATEGORY_KEYWORDS) {
     for (const kw of categoryKeywords) {
       if (lower.some(k => k.includes(kw))) {
         return category
@@ -50,6 +76,7 @@ const ICON_MAP: Record<string, string> = {
   'vision': '◉',
   'agent': '⚡',
   'infra': '△',
+  'framework': '⬡',
 }
 
 // Map known tags/pipeline_tags to human-readable capability strings
@@ -162,7 +189,7 @@ export async function runDiscoveryPipeline(): Promise<{
       slug,
       publisher: pkg.publisher,
       description: pkg.description,
-      category: classifyCategory(pkg.keywords),
+      category: classifyCategory(pkg.keywords, pkg.name),
       npm_package: pkg.name,
       source: 'npm',
       capabilities: deriveCapabilities(pkg.keywords),
@@ -184,7 +211,7 @@ export async function runDiscoveryPipeline(): Promise<{
       slug,
       publisher: pkg.publisher,
       description: pkg.description,
-      category: classifyCategory(pkg.keywords),
+      category: classifyCategory(pkg.keywords, pkg.name),
       pypi_package: pkg.name,
       source: 'pypi',
       capabilities: deriveCapabilities(pkg.keywords),
@@ -207,7 +234,7 @@ export async function runDiscoveryPipeline(): Promise<{
       slug,
       publisher: repo.owner,
       description: repo.description,
-      category: classifyCategory(repo.topics),
+      category: classifyCategory(repo.topics, repo.name),
       github_repo: repo.fullName,
       source: 'github',
       capabilities: deriveCapabilities(repo.topics),
@@ -330,9 +357,10 @@ async function addDiscoveredService(params: {
     tags: params.tags?.length ? params.tags : [],
     language: params.language ?? null,
     homepage_url: params.homepage_url ?? null,
-    // Signals default to 3.0 — collectors will update on next daily run
-    composite_score: 3.0,
-    status: 'caution',
+    // New services start as pending — collectors will score on next daily run
+    composite_score: 0,
+    status: 'pending',
+    active_modifiers: ['pending_evaluation'],
   })
 
   if (insertError) {

@@ -7,12 +7,15 @@ import { createServerClient } from '@/lib/supabase/server'
  * Publisher Trust Collector (weight: 0.10)
  *
  * Assesses account age, organizational membership, maintained package count,
- * identity consistency across registries, verified domain/email presence,
- * and security incident history.
+ * and identity consistency across registries.
  *
- * Data sources: GitHub API, npm registry, PyPI
- * Frequency: Weekly (this data changes slowly)
+ * Components: account_age (1.5), org_type (0.75), maintained_packages (0.75), identity (0.75)
+ * Max raw: 3.75, scaled to 0-5
+ *
+ * Data sources: GitHub API, npm registry
  */
+
+const MAX_RAW = 3.75
 
 const GITHUB_API = 'https://api.github.com'
 
@@ -72,7 +75,7 @@ export const publisherTrustCollector: Collector = {
       }
     }
 
-    // 1. Account age (via GitHub org/user) — up to 1.0
+    // 1. Account age (via GitHub org/user) — up to 1.5
     const ghOrg = publisher.github_org
     if (ghOrg) {
       const orgData = await githubGet(`/users/${ghOrg}`) as {
@@ -85,30 +88,32 @@ export const publisherTrustCollector: Collector = {
         const ageYears = (Date.now() - new Date(orgData.created_at).getTime()) / (365.25 * 86400000)
         metadata.account_age_years = Math.round(ageYears * 10) / 10
 
-        if (ageYears >= 2) score += 1.0
-        else if (ageYears >= 1) score += 0.7
+        if (ageYears >= 5) score += 1.5
+        else if (ageYears >= 2) score += 1.2
+        else if (ageYears >= 1) score += 0.8
         else score += 0.4
 
-        // 2. Org membership (is it an org vs personal account?) — up to 0.5
+        // 2. Organization type — up to 0.75
         if (orgData.type === 'Organization') {
-          score += 0.5
+          score += 0.75
           metadata.is_organization = true
         } else {
           metadata.is_organization = false
         }
 
-        // 3. Maintained package count — up to 0.5
+        // 3. Maintained package count — up to 0.75
         const repoCount = orgData.public_repos ?? 0
         metadata.public_repos = repoCount
-        if (repoCount > 20) score += 0.5
-        else if (repoCount > 5) score += 0.3
-        else if (repoCount > 0) score += 0.1
+        if (repoCount > 20) score += 0.75
+        else if (repoCount > 10) score += 0.5
+        else if (repoCount > 5) score += 0.35
+        else if (repoCount > 0) score += 0.15
 
         sources.push(`github:${ghOrg}`)
       }
     }
 
-    // 4. Identity consistency across registries — up to 0.5
+    // 4. Identity consistency across registries — up to 0.75
     let identityPoints = 0
     const identityChecks: string[] = []
 
@@ -123,46 +128,27 @@ export const publisherTrustCollector: Collector = {
         m.name.toLowerCase() === publisher.github_org!.toLowerCase() ||
         m.name.toLowerCase() === publisher.npm_org?.toLowerCase()
       )) {
-        identityPoints += 0.25
+        identityPoints += 0.375
         sources.push(`npm:${service.npm_package}`)
       }
     }
 
-    if (identityChecks.length >= 2) identityPoints += 0.25
-    score += Math.min(identityPoints, 0.5)
+    if (identityChecks.length >= 2) identityPoints += 0.375
+    score += Math.min(identityPoints, 0.75)
     metadata.identity_registries = identityChecks
     metadata.identity_score = identityPoints
-
-    // 5. Verified domain/email — up to 0.5
-    if (publisher.verified_domain) {
-      score += 0.3
-      metadata.verified_domain = true
-    }
-    if (publisher.verified_email) {
-      score += 0.2
-      metadata.verified_email = true
-    }
-
-    // 6. No security incidents — up to 0.5
-    if (publisher.security_incident_count === 0) {
-      score += 0.5
-      metadata.clean_record = true
-    } else {
-      metadata.clean_record = false
-      metadata.incident_count = publisher.security_incident_count
-    }
 
     // Update publisher identity_consistency_score
     await supabase
       .from('publishers')
       .update({
-        identity_consistency_score: Math.min(identityPoints / 0.5, 1) * 5,
+        identity_consistency_score: Math.min(identityPoints / 0.75, 1) * 5,
         maintained_package_count: metadata.public_repos as number ?? publisher.maintained_package_count,
       })
       .eq('id', publisher.id)
 
-    // Scale: raw score is 0-3.5, map to 0-5
-    const scaledScore = (score / 3.5) * 5
+    // Scale: raw score is 0-3.75, map to 0-5
+    const scaledScore = (score / MAX_RAW) * 5
 
     return {
       signal_name: 'publisher_trust',

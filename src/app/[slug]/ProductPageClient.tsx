@@ -59,10 +59,11 @@ interface ProductPageProps {
 
 // ---------- Constants ----------
 
-const scoreColor = {
+const scoreColor: Record<string, string> = {
   trusted: 'text-[#0dc956]',
   caution: 'text-[#f7931e]',
   blocked: 'text-[#d03a3d]',
+  pending: 'text-[#a0a09c]',
 }
 
 const HERO_TAGS: Record<string, string[]> = {
@@ -722,10 +723,10 @@ export default function ProductPageClient({
   `}<span className="text-blue-light">&quot;category&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;{service.category}&quot;</span>{`,
   `}<span className="text-blue-light">&quot;signals&quot;</span>{`: {
     `}<span className="text-blue-light">&quot;vulnerability_safety&quot;</span>{`:  { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[0].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.25</span>{` },
-    `}<span className="text-blue-light">&quot;operational_health&quot;</span>{`:    { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[1].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.20</span>{` },
+    `}<span className="text-blue-light">&quot;operational_health&quot;</span>{`:    { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[1].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
     `}<span className="text-blue-light">&quot;maintenance_activity&quot;</span>{`:  { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[2].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.20</span>{` },
     `}<span className="text-blue-light">&quot;adoption&quot;</span>{`:              { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[3].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
-    `}<span className="text-blue-light">&quot;transparency&quot;</span>{`:          { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[4].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.10</span>{` },
+    `}<span className="text-blue-light">&quot;transparency&quot;</span>{`:          { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[4].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
     `}<span className="text-blue-light">&quot;publisher_trust&quot;</span>{`:       { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[5].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.10</span>{` }
   },
   `}<span className="text-blue-light">&quot;modifiers&quot;</span>{`: [],

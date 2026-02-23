@@ -1,13 +1,15 @@
 import type { DbService } from '@/lib/supabase/types'
 import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
+import { createServerClient } from '@/lib/supabase/server'
 
 /**
  * Adoption Collector (weight: 0.15)
  *
- * Uses logarithmic scaling against category peers.
+ * Uses logarithmic scaling with category normalization.
  * Download velocity (growth trend) matters more than absolute count.
- * Normalized against category averages to prevent niche tool penalization.
+ * For categories with 10+ services, blends tier score (60%) with
+ * within-category percentile (40%) to prevent niche tool penalization.
  *
  * Data sources: npm registry API, PyPI stats API
  */
@@ -34,7 +36,6 @@ async function getNpmWeeklyDownloads(pkg: string): Promise<number | null> {
 
 async function getNpmPriorWeekDownloads(pkg: string): Promise<number | null> {
   try {
-    // Get downloads from 2 weeks ago to 1 week ago
     const end = new Date(Date.now() - 7 * 86400000)
     const start = new Date(Date.now() - 14 * 86400000)
     const startStr = start.toISOString().split('T')[0]
@@ -57,6 +58,18 @@ async function getPyPIWeeklyDownloads(pkg: string): Promise<number | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * Map a percentile rank to a score.
+ * top 10% = 5.0, top 25% = 4.0, top 50% = 3.0, bottom 25% = 2.0, bottom 10% = 1.0
+ */
+function percentileToScore(percentile: number): number {
+  if (percentile >= 90) return 5.0
+  if (percentile >= 75) return 4.0
+  if (percentile >= 50) return 3.0
+  if (percentile >= 25) return 2.0
+  return 1.0
 }
 
 export const adoptionCollector: Collector = {
@@ -103,42 +116,71 @@ export const adoptionCollector: Collector = {
       }
     }
 
-    // Logarithmic scoring based on weekly downloads
-    // Thresholds calibrated for AI/ML tool ecosystem:
-    //   10M+/week = 5.0 (top tier: react, lodash-level)
-    //   1M+/week  = 4.5
-    //   100K+     = 4.0
-    //   10K+      = 3.5
-    //   1K+       = 3.0
-    //   100+      = 2.0
-    //   <100      = 1.0
-    let score: number
-    if (weeklyDownloads >= 10_000_000) score = 5.0
-    else if (weeklyDownloads >= 1_000_000) score = 4.5
-    else if (weeklyDownloads >= 100_000) score = 4.0
-    else if (weeklyDownloads >= 10_000) score = 3.5
-    else if (weeklyDownloads >= 1_000) score = 3.0
-    else if (weeklyDownloads >= 100) score = 2.0
-    else score = 1.0
+    // Logarithmic tier scoring based on weekly downloads
+    let tierScore: number
+    if (weeklyDownloads >= 10_000_000) tierScore = 5.0
+    else if (weeklyDownloads >= 1_000_000) tierScore = 4.5
+    else if (weeklyDownloads >= 100_000) tierScore = 4.0
+    else if (weeklyDownloads >= 10_000) tierScore = 3.5
+    else if (weeklyDownloads >= 1_000) tierScore = 3.0
+    else if (weeklyDownloads >= 100) tierScore = 2.0
+    else tierScore = 1.0
 
-    // Velocity bonus/penalty: growth trend matters
+    // Velocity bonus/penalty
+    let velocityAdj = 0
     if (priorWeekDownloads > 0 && weeklyDownloads > 0) {
       const growthRate = (weeklyDownloads - priorWeekDownloads) / priorWeekDownloads
-      if (growthRate > 0.20) score += 0.5       // 20%+ growth
-      else if (growthRate > 0.05) score += 0.25 // 5%+ growth
-      else if (growthRate < -0.20) score -= 0.5  // 20%+ decline
-      else if (growthRate < -0.05) score -= 0.25 // 5%+ decline
+      if (growthRate > 0.20) velocityAdj = 0.5
+      else if (growthRate > 0.05) velocityAdj = 0.25
+      else if (growthRate < -0.20) velocityAdj = -0.5
+      else if (growthRate < -0.05) velocityAdj = -0.25
+    }
+
+    tierScore += velocityAdj
+
+    // Category normalization: blend tier score with within-category percentile
+    let finalScore = tierScore
+    let percentile: number | null = null
+    let categoryCount = 0
+
+    if (service.category) {
+      try {
+        const supabase = createServerClient()
+        const { data: peers } = await supabase
+          .from('services')
+          .select('signal_adoption')
+          .eq('category', service.category)
+          .not('signal_adoption', 'is', null)
+
+        if (peers && peers.length >= 10) {
+          categoryCount = peers.length
+          const peerScores = peers.map(p => p.signal_adoption as number).sort((a, b) => a - b)
+          // Calculate percentile rank of this service's tier score
+          const belowCount = peerScores.filter(s => s < tierScore).length
+          percentile = (belowCount / peerScores.length) * 100
+          const percentileScore = percentileToScore(percentile)
+
+          // Blend: 60% tier, 40% percentile
+          finalScore = (tierScore * 0.6) + (percentileScore * 0.4)
+        }
+      } catch (err) {
+        console.error(`Category normalization failed for ${service.name}:`, err)
+      }
     }
 
     return {
       signal_name: 'adoption',
-      score: clampScore(score),
+      score: clampScore(finalScore),
       metadata: {
         weekly_downloads: weeklyDownloads,
         prior_week_downloads: priorWeekDownloads,
         growth_rate: priorWeekDownloads > 0
           ? Math.round(((weeklyDownloads - priorWeekDownloads) / priorWeekDownloads) * 10000) / 100
           : null,
+        tier_score: tierScore,
+        velocity_adjustment: velocityAdj,
+        category_percentile: percentile,
+        category_peer_count: categoryCount,
       },
       sources,
     }
