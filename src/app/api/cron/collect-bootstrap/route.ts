@@ -22,15 +22,18 @@ export async function GET(request: NextRequest) {
   const batch = Math.min(parseInt(searchParams.get('batch') ?? '50', 10), 100)
   const offset = parseInt(searchParams.get('offset') ?? '0', 10)
   const skipSupplyChain = searchParams.get('skipSupplyChain') === '1'
+  const statusFilter = searchParams.get('status') // e.g. ?status=pending
 
   const supabase = createServerClient()
 
   // Fetch the batch of services
-  const { data: services, count } = await supabase
+  let query = supabase
     .from('services')
     .select('*', { count: 'exact' })
     .order('name', { ascending: true })
     .range(offset, offset + batch - 1)
+  if (statusFilter) query = query.eq('status', statusFilter)
+  const { data: services, count } = await query
 
   if (!services || services.length === 0) {
     return NextResponse.json({
