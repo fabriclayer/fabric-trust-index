@@ -17,6 +17,39 @@ interface SearchToolbarProps {
   filteredCount?: number
 }
 
+const CATEGORY_NOUNS: Record<string, string> = {
+  'all': 'services',
+  'image-generation': 'image gen services',
+  'llm': 'LLMs',
+  'web-search': 'search services',
+  'code': 'code services',
+  'speech': 'speech services',
+  'data-api': 'data APIs',
+  'agent': 'agents',
+  'embedding': 'embedding services',
+  'vision': 'vision services',
+  'infra': 'infra services',
+  'framework': 'frameworks',
+}
+
+function buildPlaceholder(count: number | undefined, category: string, statuses: Set<string>): string {
+  if (!count) return 'Search services, models, agents...'
+
+  const noun = CATEGORY_NOUNS[category] || 'services'
+  const allStatuses = statuses.size === 3 || statuses.size === 0
+  const singleStatus = statuses.size === 1 ? [...statuses][0] : null
+
+  const parts: string[] = [`Search ${count.toLocaleString()}`]
+
+  if (!allStatuses && singleStatus) {
+    parts.push(singleStatus)
+  }
+
+  parts.push(noun + '...')
+
+  return parts.join(' ')
+}
+
 const SORTS: Record<string, string> = {
   'score-desc': 'Highest trust',
   'score-asc': 'Lowest trust',
@@ -155,7 +188,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           <input
             ref={props.searchInputRef}
             type="text"
-            placeholder={props.totalCount ? `Search ${props.totalCount.toLocaleString()} services, models, agents...` : 'Search services, models, agents...'}
+            placeholder={buildPlaceholder(props.filteredCount, props.activeCategory, props.activeStatuses)}
             value={props.searchQuery}
             onChange={e => props.onSearchChange(e.target.value)}
             className="border-none outline-none bg-transparent font-sans text-[0.82rem] text-fabric-800 w-full placeholder:text-fabric-400"
