@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
     const adjustments: string[] = []
     const modifiers: string[] = []
 
-    // Rule 2: No-data pending — services with zero scoreable data
-    const hasNoData = !service.npm_package && !service.pypi_package && !service.github_repo
+    // Rule 2: No-data pending — services with zero scoreable data sources
+    const hasNoData = !service.npm_package && !service.pypi_package && !service.github_repo && !service.endpoint_url
     if (hasNoData) {
       pendingCount++
       await supabase
