@@ -8,22 +8,28 @@ export const maxDuration = 300
  * Recompute composite scores from existing signal values in the database.
  * Does NOT re-run collectors — just recalculates composite + status.
  *
- * Applies new defaults for signals that were stored as fallbacks:
- * - publisher_trust: 0.0 → 2.5 (when signal_history shows fallback reason)
- * - transparency: keeps existing value (already 2.0 for no_github_repo)
+ * Rules applied:
+ * 1. Staleness: if a signal is 0.0 but the data source exists (github_repo for
+ *    transparency/maintenance, publisher.github_org for publisher_trust), treat
+ *    as failed collection and substitute the fallback default.
+ * 2. No-data fallback: if a service has no data source for a signal, substitute
+ *    the fallback default (2.5 for publisher_trust, 2.0 for transparency, etc.).
+ * 3. Pending: services with no npm_package, no pypi_package, and no github_repo
+ *    are set to status='pending', composite_score=0.
+ * 4. Zero signal override only triggers for genuinely evaluated zeros.
  *
  * POST body: { ids?: string[] }  (omit ids to recompute all)
  */
 
-const FALLBACK_REASONS = new Set([
-  'no_github_repo',
-  'no_packages_to_scan',
-  'no_endpoint_configured',
-  'no_download_data',
-  'publisher_not_found',
-  'no_publisher_github',
-  'osv_api_unavailable',
-])
+/** Default fallback values for each signal when data is unavailable */
+const SIGNAL_DEFAULTS: Record<string, number> = {
+  vulnerability: 3.0,
+  operational: 4.0,
+  maintenance: 3.0,
+  adoption: 3.0,
+  transparency: 2.0,
+  publisher_trust: 2.5,
+}
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -47,6 +53,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No services found' }, { status: 404 })
   }
 
+  // Pre-fetch publisher github_org for all services in one batch
+  const publisherIds = [...new Set(services.map(s => s.publisher_id).filter(Boolean))]
+  const publisherOrgMap = new Map<string, string | null>()
+  if (publisherIds.length > 0) {
+    // Supabase .in() has a limit, batch if needed
+    for (let i = 0; i < publisherIds.length; i += 200) {
+      const batch = publisherIds.slice(i, i + 200)
+      const { data: pubs } = await supabase
+        .from('publishers')
+        .select('id, github_org')
+        .in('id', batch)
+      if (pubs) {
+        for (const p of pubs) {
+          publisherOrgMap.set(p.id, p.github_org)
+        }
+      }
+    }
+  }
+
   const results: Array<{
     name: string
     old_composite: number
@@ -63,72 +88,98 @@ export async function POST(request: NextRequest) {
     adjustments: string[]
   }> = []
 
+  let pendingCount = 0
+
   for (const service of services) {
     const adjustments: string[] = []
+    const modifiers: string[] = []
 
-    // Determine which signals are fallbacks using two strategies:
-    // 1. Check signal_history metadata for known fallback reasons
-    // 2. Check service data fields to infer missing data scenarios
-    const fallbackSignals = new Set<string>()
+    // Rule 2: No-data pending — services with zero scoreable data
+    const hasNoData = !service.npm_package && !service.pypi_package && !service.github_repo
+    if (hasNoData) {
+      pendingCount++
+      await supabase
+        .from('services')
+        .update({
+          composite_score: 0,
+          status: 'pending',
+          active_modifiers: ['pending_evaluation'],
+        })
+        .eq('id', service.id)
 
-    // Strategy 1: Check signal_history metadata
-    for (const signalName of SIGNAL_ORDER) {
-      const { data: history } = await supabase
-        .from('signal_history')
-        .select('metadata')
-        .eq('service_id', service.id)
-        .eq('signal_name', signalName)
-        .order('recorded_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      const reason = (history?.metadata as Record<string, unknown>)?.reason as string | undefined
-      if (reason && FALLBACK_REASONS.has(reason)) {
-        fallbackSignals.add(signalName)
-      }
-    }
-
-    // Strategy 2: Infer fallbacks from service data fields
-    // Publisher trust: if publisher has no github_org, the collector can't evaluate properly
-    if (!fallbackSignals.has('publisher_trust')) {
-      const { data: publisher } = await supabase
-        .from('publishers')
-        .select('github_org')
-        .eq('id', service.publisher_id)
-        .single()
-      if (!publisher || !publisher.github_org) {
-        fallbackSignals.add('publisher_trust')
-      }
-    }
-    // Transparency: if no github_repo, it's a fallback
-    if (!service.github_repo) {
-      fallbackSignals.add('transparency')
-    }
-    // Vulnerability: if no npm/pypi package, it's a fallback
-    if (!service.npm_package && !service.pypi_package) {
-      fallbackSignals.add('vulnerability')
-    }
-    // Adoption: if no npm/pypi package, it's a fallback
-    if (!service.npm_package && !service.pypi_package) {
-      fallbackSignals.add('adoption')
-    }
-    // Maintenance: if no github_repo, it's a fallback
-    if (!service.github_repo) {
-      fallbackSignals.add('maintenance')
+      results.push({
+        name: service.name,
+        old_composite: service.composite_score,
+        old_status: service.status,
+        composite_score: 0,
+        status: 'pending',
+        signal_vulnerability: service.signal_vulnerability ?? 0,
+        signal_operational: service.signal_operational ?? 0,
+        signal_maintenance: service.signal_maintenance ?? 0,
+        signal_adoption: service.signal_adoption ?? 0,
+        signal_transparency: service.signal_transparency ?? 0,
+        signal_publisher_trust: service.signal_publisher_trust ?? 0,
+        active_modifiers: ['pending_evaluation'],
+        adjustments: ['no_data→pending'],
+      })
+      continue
     }
 
-    // Build signal array, applying default adjustments for fallback zeros
+    const publisherGithubOrg = publisherOrgMap.get(service.publisher_id) ?? null
+
+    // Build signal array with staleness + fallback checks
     const signalUpdates: Record<string, number> = {}
     const signals: number[] = []
+    const fallbackSignals = new Set<string>()
 
     for (const key of SIGNAL_ORDER) {
       let value = (service[`signal_${key}` as keyof typeof service] as number) ?? 0
+      const fallbackDefault = SIGNAL_DEFAULTS[key] ?? 3.0
 
-      // Apply new defaults for fallback signals that stored inappropriately low values
-      if (key === 'publisher_trust' && value < 2.5 && fallbackSignals.has(key)) {
-        adjustments.push(`pub_trust: ${value}→2.5`)
-        value = 2.5
-        signalUpdates[`signal_${key}`] = value
+      // Determine if this signal is a fallback or stale
+      let isFallback = false
+
+      if (key === 'publisher_trust') {
+        // Fallback: no publisher github_org at all
+        if (!publisherGithubOrg) {
+          isFallback = true
+        }
+        // Stale: publisher HAS github_org but score is 0 (rate limit failure)
+        else if (value === 0) {
+          isFallback = true
+          modifiers.push('stale_publisher_trust')
+        }
+      } else if (key === 'transparency') {
+        // Fallback: no github_repo
+        if (!service.github_repo) {
+          isFallback = true
+        }
+        // Stale: HAS github_repo but score is 0 (rate limit failure)
+        else if (value === 0) {
+          isFallback = true
+          modifiers.push('stale_transparency')
+        }
+      } else if (key === 'maintenance') {
+        if (!service.github_repo) {
+          isFallback = true
+        }
+      } else if (key === 'vulnerability') {
+        if (!service.npm_package && !service.pypi_package) {
+          isFallback = true
+        }
+      } else if (key === 'adoption') {
+        if (!service.npm_package && !service.pypi_package) {
+          isFallback = true
+        }
+      }
+
+      if (isFallback) {
+        fallbackSignals.add(key)
+        if (value < fallbackDefault) {
+          adjustments.push(`${key}: ${value}→${fallbackDefault}`)
+          value = fallbackDefault
+          signalUpdates[`signal_${key}`] = value
+        }
       }
 
       signals.push(value)
@@ -136,10 +187,9 @@ export async function POST(request: NextRequest) {
 
     // Recompute composite
     const compositeScore = computeComposite(signals)
-    const modifiers: string[] = []
     let status = getStatus(compositeScore)
 
-    // Zero signal override — only for genuinely evaluated zeros (not fallbacks)
+    // Zero signal override — only for genuinely evaluated zeros (not fallbacks/stale)
     const genuineZeros: string[] = []
     for (let i = 0; i < SIGNAL_ORDER.length; i++) {
       if (signals[i] === 0 && !fallbackSignals.has(SIGNAL_ORDER[i])) {
@@ -190,6 +240,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     processed: results.length,
+    pending_count: pendingCount,
     results,
     timestamp: new Date().toISOString(),
   })
