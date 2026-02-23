@@ -8,8 +8,8 @@ import { createServerClient } from '@/lib/supabase/server'
  *
  * Uses logarithmic scaling with category normalization.
  * Download velocity (growth trend) matters more than absolute count.
- * For categories with 10+ services, blends tier score (60%) with
- * within-category percentile (40%) to prevent niche tool penalization.
+ * For categories with 10+ services, blends tier score (80%) with
+ * within-category percentile (20%) to prevent niche tool penalization.
  *
  * Data sources: npm registry API, PyPI stats API
  */
@@ -160,8 +160,8 @@ export const adoptionCollector: Collector = {
           percentile = (belowCount / peerScores.length) * 100
           const percentileScore = percentileToScore(percentile)
 
-          // Blend: 60% tier, 40% percentile
-          finalScore = (tierScore * 0.6) + (percentileScore * 0.4)
+          // Blend: 80% tier, 20% percentile
+          finalScore = (tierScore * 0.8) + (percentileScore * 0.2)
         }
       } catch (err) {
         console.error(`Category normalization failed for ${service.name}:`, err)

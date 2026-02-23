@@ -8,7 +8,7 @@ import { createServerClient } from '@/lib/supabase/server'
  *
  * Monitors active endpoints via HTTP health checks.
  * Real endpoint_url monitoring can score up to 5.0.
- * Registry-derived pings (npm/PyPI/GitHub) are capped at 3.5.
+ * Registry-derived pings (npm/PyPI/GitHub) are capped at 4.5.
  *
  * Frequency: Every 15 minutes for services with endpoint_url
  */
@@ -117,7 +117,7 @@ export const operationalHealthCollector: Collector = {
 
     if (!checks || checks.length === 0) {
       let firstScore = result.isUp ? 4.0 : 1.0
-      if (sourceType === 'registry') firstScore = Math.min(firstScore, 3.5)
+      if (sourceType === 'registry') firstScore = Math.min(firstScore, 4.5)
       return {
         signal_name: 'operational',
         score: firstScore,
@@ -161,9 +161,9 @@ export const operationalHealthCollector: Collector = {
       score -= degradedCount * 0.1
     }
 
-    // Cap registry-derived pings at 3.5
+    // Cap registry-derived pings at 4.5
     if (sourceType === 'registry') {
-      score = Math.min(score, 3.5)
+      score = Math.min(score, 4.5)
     }
 
     // Update service operational metrics
