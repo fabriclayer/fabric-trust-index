@@ -117,7 +117,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
       </button>
 
       {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 z-[80] bg-white border border-fabric-200 rounded-[10px] shadow-lg p-1.5 min-w-[180px]">
+        <div className="absolute top-[calc(100%+6px)] left-0 z-[80] bg-white border border-fabric-200 rounded-[10px] shadow-lg p-1.5">
           {STATUS_OPTIONS.map(s => {
             const active = activeStatuses.has(s.key)
             return (
@@ -129,7 +129,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
                 <span className="w-[5px] h-[5px] rounded-full flex-shrink-0" style={{ backgroundColor: s.dot }} />
                 {s.label}
                 {active && (
-                  <svg className="w-3 h-3 text-pink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3 h-3 ml-1 text-pink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
                 )}
