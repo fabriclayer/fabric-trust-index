@@ -94,9 +94,16 @@ export async function POST(request: NextRequest) {
     const adjustments: string[] = []
     const modifiers: string[] = []
 
-    // Rule 2: No-data pending — services with zero scoreable data sources
+    // Rule 2a: Preserve pending — services awaiting first collector run
+    const isPendingEvaluation = service.status === 'pending' &&
+      (service.active_modifiers ?? []).includes('pending_evaluation')
+    // Rule 2b: Never-evaluated — all 6 signals are 0 (collectors never ran)
+    const allSignalsZero = SIGNAL_ORDER.every(
+      key => ((service[`signal_${key}` as keyof typeof service] as number) ?? 0) === 0
+    )
+    // Rule 2c: No-data pending — services with zero scoreable data sources
     const hasNoData = !service.npm_package && !service.pypi_package && !service.github_repo && !service.endpoint_url
-    if (hasNoData) {
+    if (hasNoData || isPendingEvaluation || allSignalsZero) {
       pendingCount++
       await supabase
         .from('services')
