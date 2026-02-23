@@ -209,11 +209,16 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Update existing publisher with org info / website if missing
+      // Update existing publisher with org info if missing — never overwrite website_url
+      const { data: existingPub } = await supabase
+        .from('publishers')
+        .select('github_org, npm_org, website_url')
+        .eq('id', pubId)
+        .single()
       const updates: Record<string, string> = {}
-      if (githubOrg) updates.github_org = githubOrg
-      if (npmOrg) updates.npm_org = npmOrg
-      if (websiteUrl) updates.website_url = websiteUrl
+      if (githubOrg && !existingPub?.github_org) updates.github_org = githubOrg
+      if (npmOrg && !existingPub?.npm_org) updates.npm_org = npmOrg
+      if (websiteUrl && !existingPub?.website_url) updates.website_url = websiteUrl
       if (Object.keys(updates).length > 0) {
         await supabase.from('publishers').update(updates).eq('id', pubId)
       }
