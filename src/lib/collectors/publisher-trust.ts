@@ -69,7 +69,7 @@ export const publisherTrustCollector: Collector = {
     if (!publisher) {
       return {
         signal_name: 'publisher_trust',
-        score: 1.0,
+        score: 2.5,
         metadata: { reason: 'publisher_not_found' },
         sources: [],
       }
@@ -77,6 +77,14 @@ export const publisherTrustCollector: Collector = {
 
     // 1. Account age (via GitHub org/user) — up to 1.5
     const ghOrg = publisher.github_org
+    if (!ghOrg) {
+      return {
+        signal_name: 'publisher_trust',
+        score: 2.5,
+        metadata: { reason: 'no_publisher_github' },
+        sources: [],
+      }
+    }
     if (ghOrg) {
       const orgData = await githubGet(`/users/${ghOrg}`) as {
         created_at?: string

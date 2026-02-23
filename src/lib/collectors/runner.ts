@@ -10,6 +10,26 @@ import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
 import { WEIGHTS, SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
 
+/** Metadata reasons that indicate a fallback/default score (no real data evaluated) */
+const FALLBACK_REASONS = new Set([
+  'no_github_repo',
+  'no_packages_to_scan',
+  'no_endpoint_configured',
+  'no_download_data',
+  'publisher_not_found',
+  'no_publisher_github',
+  'osv_api_unavailable',
+])
+
+/** Check if a collector result represents a genuine zero (not a default/fallback) */
+function isGenuineZero(cr: { key: string; result: CollectorResult } | null): boolean {
+  if (!cr) return false
+  if (cr.result.score !== 0) return false
+  const reason = cr.result.metadata?.reason as string | undefined
+  if (reason && FALLBACK_REASONS.has(reason)) return false
+  return true
+}
+
 const COLLECTORS = [
   vulnerabilityCollector,
   operationalHealthCollector,
@@ -185,8 +205,9 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   // Override rules
   let status = getStatus(compositeScore)
 
-  // 1. Zero signal override — any signal at 0 prevents trusted status
-  if (status === 'trusted' && signals.some(s => s === 0)) {
+  // 1. Zero signal override — only triggers for genuinely evaluated zeros, not defaults
+  const hasGenuineZero = collectorResults.some(cr => isGenuineZero(cr))
+  if (status === 'trusted' && hasGenuineZero) {
     status = 'caution'
     modifiers.push('zero_signal_override')
   }
@@ -199,7 +220,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('critical_cve_override')
   }
 
-  if (vulnResult?.result.score === 0) {
+  if (isGenuineZero(vulnResult ?? null)) {
     status = 'blocked'
     modifiers.push('vulnerability_zero_override')
   }
@@ -301,8 +322,9 @@ export async function runCollectors(
   // Override rules
   let status = getStatus(compositeScore)
 
-  // 1. Zero signal override
-  if (status === 'trusted' && signals.some(s => s === 0)) {
+  // 1. Zero signal override — only for genuinely evaluated zeros
+  const hasGenuineZeroPartial = collectorResults.some(cr => isGenuineZero(cr))
+  if (status === 'trusted' && hasGenuineZeroPartial) {
     status = 'caution'
     modifiers.push('zero_signal_override')
   }
@@ -313,7 +335,7 @@ export async function runCollectors(
     status = 'blocked'
     modifiers.push('critical_cve_override')
   }
-  if (vulnResult?.result.score === 0) {
+  if (isGenuineZero(vulnResult ?? null)) {
     status = 'blocked'
     modifiers.push('vulnerability_zero_override')
   }
