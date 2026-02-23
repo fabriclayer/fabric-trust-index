@@ -37,8 +37,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await request.json()
-  const ids: string[] | undefined = body.ids
+  let ids: string[] | undefined
+  try {
+    const body = await request.json()
+    ids = body.ids
+  } catch {
+    // No body sent — recompute all
+  }
 
   const supabase = createServerClient()
 
