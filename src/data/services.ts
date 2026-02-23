@@ -11,6 +11,7 @@ export interface Service {
   raw_composite_score?: number | null
   status: 'trusted' | 'caution' | 'blocked' | 'pending'
   icon: string
+  logo_url?: string | null
   updated: string
   domain?: string
   // Operational metrics (from health checks)

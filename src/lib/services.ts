@@ -44,6 +44,7 @@ function dbToService(db: any): Service {
     raw_composite_score: db.raw_composite_score ?? null,
     status: db.status,
     icon: db.icon,
+    logo_url: db.logo_url || (db.icon?.startsWith('http') ? db.icon : undefined),
     updated: formatUpdatedAt(db.updated_at),
     domain: extractDomain(db.publisher?.website_url),
     uptime_30d: db.uptime_30d || undefined,

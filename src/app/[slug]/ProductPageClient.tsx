@@ -241,7 +241,7 @@ export default function ProductPageClient({
         <div className="bg-white border border-fabric-200 rounded-2xl p-6 max-md:p-5 mb-5">
           <div className="flex items-start justify-between gap-6 max-md:flex-col max-md:gap-4">
             <div className="flex items-start gap-5 flex-1 min-w-0 flex-wrap">
-              <ServiceLogo domain={service.domain} githubRepo={service.github_repo} name={service.name} size={56} className="rounded-[14px] max-md:!w-11 max-md:!h-11 max-md:!rounded-[11px]" />
+              <ServiceLogo logoUrl={service.logo_url} domain={service.domain} githubRepo={service.github_repo} name={service.name} size={56} className="rounded-[14px] max-md:!w-11 max-md:!h-11 max-md:!rounded-[11px]" />
               <div className="flex-1 min-w-0">
                 <h1 className="text-3xl font-bold tracking-tight leading-tight max-md:text-xl">{service.name}</h1>
                 <div className="font-mono text-[0.78rem] text-fabric-500 mt-0.5">
