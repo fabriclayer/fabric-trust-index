@@ -95,9 +95,9 @@ export async function getServices(): Promise<Service[]> {
     from += PAGE
   }
 
-  // Hide services with no real data sources (all collectors return defaults)
+  // Hide pending services and those with no real data sources
   return all
-    .filter(db => db.npm_package || db.github_repo || db.endpoint_url || db.pypi_package)
+    .filter(db => db.status !== 'pending' && (db.npm_package || db.github_repo || db.endpoint_url || db.pypi_package))
     .map(dbToService)
 }
 
