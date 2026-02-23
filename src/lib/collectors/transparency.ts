@@ -1,6 +1,7 @@
 import type { DbService } from '@/lib/supabase/types'
 import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
+import { githubGet, githubExists } from './github'
 
 /**
  * Transparency Collector (weight: 0.15)
@@ -19,43 +20,8 @@ import { clampScore } from './types'
  * Data source: GitHub REST API
  */
 
-const GITHUB_API = 'https://api.github.com'
-
 // Categories where model card check applies
 const MODEL_CARD_CATEGORIES = new Set(['llm', 'image-generation', 'speech', 'vision'])
-
-function githubHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'FabricTrustIndex/1.0',
-  }
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
-  }
-  return headers
-}
-
-async function githubGet(path: string): Promise<unknown | null> {
-  try {
-    const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders() })
-    if (!res.ok) return null
-    return res.json()
-  } catch {
-    return null
-  }
-}
-
-async function githubExists(path: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${GITHUB_API}${path}`, {
-      method: 'HEAD',
-      headers: githubHeaders(),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
 
 // Common OSI-approved license identifiers
 const OSI_LICENSES = new Set([

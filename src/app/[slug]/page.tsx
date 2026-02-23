@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation'
-import { SERVICES, getServiceBySlug as getStaticServiceBySlug } from '@/data/services'
 import type { Metadata } from 'next'
 import ProductPageClient from './ProductPageClient'
 
@@ -13,23 +12,11 @@ export async function generateStaticParams() {
 }
 
 async function loadService(slug: string) {
-  // Use Supabase if configured, fall back to static data
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const { getServiceBySlug } = await import('@/lib/services')
-      const service = await getServiceBySlug(slug)
-      if (service) return service
-    } catch (err) {
-      console.error('Failed to load from Supabase:', err)
-    }
-  }
-  return getStaticServiceBySlug(slug) ?? null
+  const { getServiceBySlug } = await import('@/lib/services')
+  return await getServiceBySlug(slug)
 }
 
 async function loadDetailData(slug: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null
-  }
 
   try {
     const {

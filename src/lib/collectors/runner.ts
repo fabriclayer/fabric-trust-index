@@ -8,7 +8,7 @@ import { adoptionCollector } from './adoption'
 import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
-import { WEIGHTS, SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
+import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
 
 /** Metadata reasons that indicate a fallback/default score (no real data evaluated) */
 const FALLBACK_REASONS = new Set([
@@ -19,6 +19,7 @@ const FALLBACK_REASONS = new Set([
   'publisher_not_found',
   'no_publisher_github',
   'osv_api_unavailable',
+  'repo_not_accessible',
 ])
 
 /** Check if a collector result represents a genuine zero (not a default/fallback) */
@@ -43,7 +44,6 @@ const COLLECTORS = [
  * Create an incident record for a service.
  */
 async function createIncident(
-  serviceId: string,
   incident: Omit<DbIncident, 'id' | 'created_at' | 'resolved_at'>
 ): Promise<void> {
   const supabase = createServerClient()
@@ -78,7 +78,7 @@ async function detectIncidents(
   const isFirstRun = (count ?? 0) <= 1
 
   if (isFirstRun) {
-    await createIncident(service.id, {
+    await createIncident({
       service_id: service.id,
       type: 'initial_index',
       severity: 'info',
@@ -94,7 +94,7 @@ async function detectIncidents(
   if (Math.abs(scoreDelta) >= 0.5) {
     const direction = scoreDelta > 0 ? 'increased' : 'decreased'
     const severity = scoreDelta < -0.5 ? 'warning' : 'info'
-    await createIncident(service.id, {
+    await createIncident({
       service_id: service.id,
       type: 'score_change',
       severity,
@@ -107,7 +107,7 @@ async function detectIncidents(
   // Critical unpatched CVE detected
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
   if (vulnResult?.result.metadata.has_critical_unpatched) {
-    await createIncident(service.id, {
+    await createIncident({
       service_id: service.id,
       type: 'cve_found',
       severity: 'critical',
@@ -125,7 +125,7 @@ async function detectIncidents(
     const uptimeDelta = newUptime - oldUptime
 
     if (oldUptime > 0 && uptimeDelta <= -5) {
-      await createIncident(service.id, {
+      await createIncident({
         service_id: service.id,
         type: 'uptime_drop',
         severity: 'warning',
@@ -134,7 +134,7 @@ async function detectIncidents(
         score_at_time: newComposite,
       })
     } else if (oldUptime > 0 && uptimeDelta >= 5) {
-      await createIncident(service.id, {
+      await createIncident({
         service_id: service.id,
         type: 'uptime_restored',
         severity: 'info',
@@ -325,28 +325,48 @@ export async function runCollectors(
 
   // Recompute composite
   const compositeScore = computeComposite(signals)
-  const oldComposite = service.composite_score
+  const oldComposite = freshService.composite_score // M3: use fresh DB value
+  const existingModifiers: string[] = freshService.active_modifiers ?? []
   const modifiers: string[] = []
+  const ranVulnerability = updatedKeys.includes('vulnerability')
+  const ranAll = updatedKeys.length === SIGNAL_ORDER.length
+
+  // Carry forward modifiers for signals NOT re-run in this partial run
+  if (!ranVulnerability) {
+    if (existingModifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
+    if (existingModifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
+  }
+  if (!ranAll && existingModifiers.includes('zero_signal_override')) {
+    modifiers.push('zero_signal_override')
+  }
 
   // Override rules
   let status = getStatus(compositeScore)
 
-  // 1. Zero signal override — only for genuinely evaluated zeros
-  const hasGenuineZeroPartial = collectorResults.some(cr => isGenuineZero(cr))
-  if (status === 'trusted' && hasGenuineZeroPartial) {
-    status = 'caution'
-    modifiers.push('zero_signal_override')
+  // 1. Zero signal override — only re-evaluate if all 6 collectors ran
+  if (ranAll) {
+    const hasGenuineZeroPartial = collectorResults.some(cr => isGenuineZero(cr))
+    if (status === 'trusted' && hasGenuineZeroPartial && !modifiers.includes('zero_signal_override')) {
+      modifiers.push('zero_signal_override')
+    }
   }
 
-  // 2. Vulnerability overrides
-  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
-  if (vulnResult?.result.metadata.has_critical_unpatched) {
-    status = 'blocked'
-    modifiers.push('critical_cve_override')
+  // 2. Vulnerability overrides — only re-evaluate if vulnerability was re-run
+  if (ranVulnerability) {
+    const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+    if (vulnResult?.result.metadata.has_critical_unpatched && !modifiers.includes('critical_cve_override')) {
+      modifiers.push('critical_cve_override')
+    }
+    if (isGenuineZero(vulnResult ?? null) && !modifiers.includes('vulnerability_zero_override')) {
+      modifiers.push('vulnerability_zero_override')
+    }
   }
-  if (isGenuineZero(vulnResult ?? null)) {
+
+  // Apply carried-forward + fresh overrides to status
+  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
     status = 'blocked'
-    modifiers.push('vulnerability_zero_override')
+  } else if (modifiers.includes('zero_signal_override') && status === 'trusted') {
+    status = 'caution'
   }
 
   // Cap composite_score to match forced status range
@@ -376,10 +396,8 @@ export async function runCollectors(
     metadata: { modifiers, partial_run: updatedKeys },
   })
 
-  // Detect incidents if score changed significantly
-  if (Math.abs(finalScore - oldComposite) >= 0.3) {
-    await detectIncidents(service, oldComposite, finalScore, collectorResults)
-  }
+  // Detect incidents (M1: always call, internal thresholds handle filtering)
+  await detectIncidents(service, oldComposite, finalScore, collectorResults)
 }
 
 /**

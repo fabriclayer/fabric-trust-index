@@ -30,6 +30,13 @@ export interface OsvVulnerability {
   }>
 }
 
+/** Check if an OSV vulnerability has a fix available */
+export function hasFixAvailable(vuln: OsvVulnerability): boolean {
+  return vuln.affected?.some(a =>
+    a.ranges?.some(r => r.events.some(e => e.fixed))
+  ) ?? false
+}
+
 /** Classify an OSV vulnerability into a severity tier based on CVSS or database metadata */
 export function classifySeverity(vuln: OsvVulnerability): 'critical' | 'high' | 'medium' | 'low' {
   if (vuln.severity?.length) {

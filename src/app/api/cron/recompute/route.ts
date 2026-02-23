@@ -72,6 +72,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Pre-fetch critical CVE status from latest vulnerability signal_history
+  // Only check services with low vulnerability scores (optimization)
+  const criticalCveSet = new Set<string>()
+  const lowVulnServices = services.filter(s => (s.signal_vulnerability ?? 0) <= 1.0)
+  for (let i = 0; i < lowVulnServices.length; i += 50) {
+    const batch = lowVulnServices.slice(i, i + 50)
+    for (const svc of batch) {
+      const { data: latest } = await supabase
+        .from('signal_history')
+        .select('metadata')
+        .eq('service_id', svc.id)
+        .eq('signal_name', 'vulnerability')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .single()
+      if (latest?.metadata?.has_critical_unpatched) {
+        criticalCveSet.add(svc.id)
+      }
+    }
+  }
+
   const results: Array<{
     name: string
     old_composite: number
@@ -214,6 +235,14 @@ export async function POST(request: NextRequest) {
     if (signals[vulnIdx] === 0 && !fallbackSignals.has('vulnerability')) {
       status = 'blocked'
       modifiers.push('vulnerability_zero_override')
+    }
+
+    // Critical CVE override — from signal_history metadata or preserved from DB
+    const hasCriticalCve = criticalCveSet.has(service.id) ||
+      (service.active_modifiers ?? []).includes('critical_cve_override')
+    if (hasCriticalCve && !fallbackSignals.has('vulnerability')) {
+      status = 'blocked'
+      if (!modifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
     }
 
     // Cap composite_score to match forced status range

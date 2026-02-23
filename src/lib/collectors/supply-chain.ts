@@ -1,6 +1,6 @@
 import type { DbService } from '@/lib/supabase/types'
 import type { OsvVulnerability } from './types'
-import { classifySeverity } from './types'
+import { classifySeverity, hasFixAvailable } from './types'
 import { createServerClient } from '@/lib/supabase/server'
 
 /**
@@ -83,7 +83,13 @@ async function getOsvCveSeverities(
     const counts: Record<string, number> = {}
     for (const vuln of vulns) {
       const sev = classifySeverity(vuln)
-      counts[sev] = (counts[sev] ?? 0) + 1
+      if (sev === 'low') {
+        counts['low'] = (counts['low'] ?? 0) + 1
+      } else {
+        const patched = hasFixAvailable(vuln)
+        const key = `${sev}_${patched ? 'patched' : 'unpatched'}`
+        counts[key] = (counts[key] ?? 0) + 1
+      }
     }
     return { total: vulns.length, counts }
   } catch {

@@ -1,5 +1,5 @@
 // Re-export canonical scoring functions from thresholds
-export { computeComposite as computeScore, getStatus } from '@/lib/scoring/thresholds'
+export { computeComposite as computeScore, getStatus, getScoreColor } from '@/lib/scoring/thresholds'
 
 export function getStatusColor(status: string): string {
   switch (status) {

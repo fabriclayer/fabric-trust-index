@@ -142,6 +142,8 @@ export interface DbService {
   status_page_url: string | null
   capabilities: string[]
   pricing: Record<string, unknown> | null
+  request_schema: string | null
+  response_schema: string | null
   tags: string[]
   language: string | null
 

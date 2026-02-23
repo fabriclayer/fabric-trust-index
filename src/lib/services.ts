@@ -40,6 +40,7 @@ function dbToService(db: any): Service {
       db.signal_publisher_trust,
     ],
     score: db.composite_score,
+    raw_composite_score: db.raw_composite_score ?? null,
     status: db.status,
     icon: db.icon,
     updated: formatUpdatedAt(db.updated_at),

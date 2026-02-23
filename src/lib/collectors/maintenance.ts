@@ -2,6 +2,7 @@ import type { DbService } from '@/lib/supabase/types'
 import type { Collector, CollectorResult } from './types'
 import { clampScore } from './types'
 import { createServerClient } from '@/lib/supabase/server'
+import { githubGet } from './github'
 
 /**
  * Maintenance Activity Collector (weight: 0.20)
@@ -13,29 +14,6 @@ import { createServerClient } from '@/lib/supabase/server'
  *
  * Data source: GitHub REST API
  */
-
-const GITHUB_API = 'https://api.github.com'
-
-function githubHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'FabricTrustIndex/1.0',
-  }
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
-  }
-  return headers
-}
-
-async function githubGet(path: string): Promise<unknown | null> {
-  try {
-    const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders() })
-    if (!res.ok) return null
-    return res.json()
-  } catch {
-    return null
-  }
-}
 
 export const maintenanceCollector: Collector = {
   name: 'maintenance',
