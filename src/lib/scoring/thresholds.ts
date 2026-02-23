@@ -4,7 +4,7 @@
  */
 
 export const THRESHOLDS = {
-  trusted: 2.50,
+  trusted: 3.25,
   caution: 1.00,
 } as const
 
