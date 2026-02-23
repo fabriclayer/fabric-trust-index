@@ -264,11 +264,6 @@ export default function ProductPageClient({
                     {t}
                   </Link>
                 ))}
-                {typeof transparencyMeta?.license === 'string' && (
-                  <span className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-[rgba(13,201,86,0.3)] text-[#0dc956] bg-[rgba(13,201,86,0.06)]">
-                    {transparencyMeta.license.toUpperCase()}
-                  </span>
-                )}
               </div>
 
               {/* Hero links */}
@@ -309,6 +304,16 @@ export default function ProductPageClient({
                 <span className="font-mono text-[0.62rem] text-fabric-400">/ 5.00</span>
               </div>
               <ScoreStatus status={service.status} />
+              {typeof transparencyMeta?.license === 'string' && (
+                <span className={`font-mono text-[0.65rem] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center leading-none ${
+                  service.status === 'trusted' ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' :
+                  service.status === 'caution' ? 'bg-[rgba(247,147,30,0.1)] text-[#f7931e]' :
+                  service.status === 'blocked' ? 'bg-[rgba(208,58,61,0.1)] text-[#d03a3d]' :
+                  'bg-[rgba(160,160,156,0.1)] text-[#a0a09c]'
+                }`}>
+                  {transparencyMeta.license.toUpperCase()}
+                </span>
+              )}
             </div>
           </div>
 
