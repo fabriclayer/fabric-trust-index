@@ -124,7 +124,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
               <div
                 key={s.key}
                 onClick={() => onToggleStatus(s.key)}
-                className={`font-mono text-[0.72rem] py-2 px-2.5 rounded-md cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap hover:bg-fabric-50 hover:text-fabric-800 ${active ? 'text-pink bg-[rgba(254,131,224,0.06)]' : 'text-fabric-600'}`}
+                className={`font-mono text-[0.72rem] text-fabric-600 py-2 px-2.5 rounded-md cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap hover:bg-fabric-50 hover:text-fabric-800 ${active ? 'text-fabric-800 bg-[rgba(0,0,0,0.02)]' : 'opacity-50'}`}
               >
                 <span className="w-[5px] h-[5px] rounded-full flex-shrink-0" style={{ backgroundColor: s.dot }} />
                 {s.label}
