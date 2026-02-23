@@ -225,7 +225,15 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_zero_override')
   }
 
-  updates.composite_score = compositeScore
+  // Cap composite_score to match forced status range
+  let finalScore = compositeScore
+  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+    finalScore = Math.min(finalScore, 0.99)
+  } else if (modifiers.includes('zero_signal_override')) {
+    finalScore = Math.min(finalScore, 3.24)
+  }
+
+  updates.composite_score = finalScore
   updates.status = status
   updates.active_modifiers = modifiers
 
@@ -239,12 +247,12 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   await supabase.from('signal_history').insert({
     service_id: service.id,
     signal_name: 'composite',
-    score: compositeScore,
+    score: finalScore,
     metadata: { modifiers },
   })
 
   // Detect and create incidents
-  await detectIncidents(service, oldComposite, compositeScore, collectorResults)
+  await detectIncidents(service, oldComposite, finalScore, collectorResults)
 
   // Run supply-chain collector (informational, non-scoring)
   if (!options?.skipSupplyChain) {
@@ -340,11 +348,19 @@ export async function runCollectors(
     modifiers.push('vulnerability_zero_override')
   }
 
+  // Cap composite_score to match forced status range
+  let finalScore = compositeScore
+  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+    finalScore = Math.min(finalScore, 0.99)
+  } else if (modifiers.includes('zero_signal_override')) {
+    finalScore = Math.min(finalScore, 3.24)
+  }
+
   // Update composite, status, and modifiers
   await supabase
     .from('services')
     .update({
-      composite_score: compositeScore,
+      composite_score: finalScore,
       status,
       active_modifiers: modifiers,
     })
@@ -354,13 +370,13 @@ export async function runCollectors(
   await supabase.from('signal_history').insert({
     service_id: service.id,
     signal_name: 'composite',
-    score: compositeScore,
+    score: finalScore,
     metadata: { modifiers, partial_run: updatedKeys },
   })
 
   // Detect incidents if score changed significantly
-  if (Math.abs(compositeScore - oldComposite) >= 0.3) {
-    await detectIncidents(service, oldComposite, compositeScore, collectorResults)
+  if (Math.abs(finalScore - oldComposite) >= 0.3) {
+    await detectIncidents(service, oldComposite, finalScore, collectorResults)
   }
 }
 

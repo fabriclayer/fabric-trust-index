@@ -209,12 +209,20 @@ export async function POST(request: NextRequest) {
       modifiers.push('vulnerability_zero_override')
     }
 
+    // Cap composite_score to match forced status range
+    let finalScore = compositeScore
+    if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+      finalScore = Math.min(finalScore, 0.99)
+    } else if (modifiers.includes('zero_signal_override')) {
+      finalScore = Math.min(finalScore, 3.24)
+    }
+
     // Update the service
     await supabase
       .from('services')
       .update({
         ...signalUpdates,
-        composite_score: compositeScore,
+        composite_score: finalScore,
         status,
         active_modifiers: modifiers,
       })
@@ -224,7 +232,7 @@ export async function POST(request: NextRequest) {
       name: service.name,
       old_composite: service.composite_score,
       old_status: service.status,
-      composite_score: compositeScore,
+      composite_score: finalScore,
       status,
       signal_vulnerability: signals[0],
       signal_operational: signals[1],
