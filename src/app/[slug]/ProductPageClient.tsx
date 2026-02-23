@@ -44,6 +44,7 @@ interface SupplyChainEntry {
   dependency_version?: string
   cve_count: number
   trust_score?: number
+  cve_severity_counts?: Record<string, number> | null
 }
 
 interface ProductPageProps {
@@ -80,23 +81,24 @@ const HERO_TAGS: Record<string, string[]> = {
 }
 
 const DATA_SOURCES = [
-  { icon: '△', label: 'CVE Database', meta: 'Hourly sync · full dependency tree scan' },
-  { icon: '◈', label: 'GitHub', meta: 'Commits, issues, PRs' },
-  { icon: '◎', label: 'Fabric Monitor', meta: '15-min pings · uptime, latency, behavioral' },
-  { icon: '⬡', label: 'npm / PyPI Registry', meta: 'Downloads, versions, dependency scan' },
-  { icon: '◎', label: 'Advisory Databases', meta: 'NVD, GitHub Advisories, OSV' },
-  { icon: '◎', label: 'Publisher Identity', meta: 'Cross-registry verification · domain linked' },
-  { icon: '◇', label: 'Docker Hub', meta: 'Image pulls, tags, vulnerability scan' },
-  { icon: '△', label: 'StackOverflow', meta: 'Community questions, sentiment analysis' },
-  { icon: '◈', label: 'HuggingFace', meta: 'Model downloads, likes, community activity' },
-  { icon: '⬡', label: 'Status Pages', meta: 'Public status page monitoring' },
-  { icon: '◎', label: 'DNS & SSL', meta: 'Certificate chain, DNSSEC, domain age' },
-  { icon: '◇', label: 'WHOIS Registry', meta: 'Domain ownership, registrar history' },
+  { icon: '◎', label: 'OSV.dev', meta: 'CVE database · vulnerability scanning for npm & PyPI packages' },
+  { icon: '◈', label: 'GitHub API', meta: 'Commits, issues, releases, repo metadata, transparency checks' },
+  { icon: '⬡', label: 'npm Registry', meta: 'Package metadata, weekly downloads, maintainers, dependencies' },
+  { icon: '⬡', label: 'PyPI', meta: 'Package metadata, weekly downloads, dependency tree' },
+  { icon: '△', label: 'HTTP Health Checks', meta: '15-min pings · uptime, latency, status monitoring' },
+  { icon: '◎', label: 'PyPI Stats', meta: 'Download statistics and trends' },
 ]
-
-const DATA_SOURCES_INITIAL = 6
 const ITEMS_INITIAL = 6
 const LOAD_MORE_BATCH = 10
+
+const MODIFIER_LABELS: Record<string, string> = {
+  critical_cve_override: 'Critical CVE — score capped',
+  vulnerability_zero_override: 'Vulnerability failure — score capped',
+  zero_signal_override: 'Missing signal — held at caution',
+  pending_evaluation: 'Awaiting first evaluation',
+  stale_publisher_trust: 'Publisher data stale',
+  stale_transparency: 'Transparency data stale',
+}
 
 // ---------- Helper components ----------
 
@@ -160,9 +162,9 @@ function incidentDotColor(type: string, severity: string): string {
 }
 
 function incidentScoreColor(score: number | undefined): string {
-  if (score === undefined) return 'text-fabric-400'
-  if (score >= 3.5) return 'text-[#0dc956]'
-  if (score >= 2.5) return 'text-[#f7931e]'
+  if (score === undefined || score === null) return 'text-fabric-400'
+  if (score >= 3.25) return 'text-[#0dc956]'
+  if (score >= 1.00) return 'text-[#f7931e]'
   return 'text-[#d03a3d]'
 }
 
@@ -200,7 +202,6 @@ export default function ProductPageClient({
   const [incidentsCount, setIncidentsCount] = useState(ITEMS_INITIAL)
   const [depsCount, setDepsCount] = useState(ITEMS_INITIAL)
   const [versionsCount, setVersionsCount] = useState(ITEMS_INITIAL)
-  const [sourcesCount, setSourcesCount] = useState(DATA_SOURCES_INITIAL)
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
 
@@ -263,6 +264,11 @@ export default function ProductPageClient({
                     {t}
                   </Link>
                 ))}
+                {typeof transparencyMeta?.license === 'string' && (
+                  <span className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-[rgba(13,201,86,0.3)] text-[#0dc956] bg-[rgba(13,201,86,0.06)]">
+                    {transparencyMeta.license.toUpperCase()}
+                  </span>
+                )}
               </div>
 
               {/* Hero links */}
@@ -316,9 +322,21 @@ export default function ProductPageClient({
               </svg>
               <span className="font-mono text-[0.72rem] text-fabric-700 leading-relaxed">
                 {service.active_modifiers.includes('critical_cve_override') || service.active_modifiers.includes('vulnerability_zero_override')
-                  ? `Score capped to ${service.score.toFixed(2)} due to critical vulnerability findings. Individual signal scores may be higher but the composite is overridden until vulnerabilities are resolved.`
-                  : `Score capped to ${service.score.toFixed(2)} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
+                  ? `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''} due to critical vulnerability findings. Individual signal scores may be higher but the composite is overridden until vulnerabilities are resolved.`
+                  : `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
                 }
+              </span>
+            </div>
+          )}
+
+          {/* Pending status banner */}
+          {service.status === 'pending' && (
+            <div className="flex items-start gap-2.5 mt-4 p-3 bg-[rgba(160,160,156,0.06)] border border-[rgba(160,160,156,0.15)] rounded-lg">
+              <svg className="w-4 h-4 text-fabric-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span className="font-mono text-[0.72rem] text-fabric-500 leading-relaxed">
+                This service is awaiting its first evaluation. Scores will appear once collectors have run.
               </span>
             </div>
           )}
@@ -331,8 +349,14 @@ export default function ProductPageClient({
             </span>
             <span className="flex items-center gap-1">
               <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-              {activeSourceCount > 0 ? `${activeSourceCount} active source${activeSourceCount > 1 ? 's' : ''}` : '12 data sources'}
+              {activeSourceCount > 0 ? `${activeSourceCount} active source${activeSourceCount > 1 ? 's' : ''}` : 'No active sources'}
             </span>
+            {maintenanceMeta?.commits_90d !== undefined && (
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4" /><line x1="1.05" y1="12" x2="7" y2="12" /><line x1="17.01" y1="12" x2="22.96" y2="12" /></svg>
+                {maintenanceMeta.commits_90d as number} commits (90d)
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
               No manual reviews · fully automated
@@ -444,7 +468,7 @@ export default function ProductPageClient({
           <div className="grid grid-cols-3 max-md:grid-cols-1 bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
             {service.uptime_30d && service.uptime_30d > 0 ? (
               <div className="p-6">
-                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
+                <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">{service.endpoint_url ? 'Service Health' : 'Package Availability'} (30d)</div>
                 <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
                   {service.uptime_30d.toFixed(2)}<span className="text-base text-fabric-500 font-normal ml-0.5">%</span>
                 </div>
@@ -689,12 +713,21 @@ export default function ProductPageClient({
                     <div className="font-mono text-[0.6rem] text-fabric-400">
                       {dep.dependency_type}{dep.dependency_version ? ` · ${dep.dependency_version}` : ''}
                       {dep.cve_count > 0 ? ` · ${dep.cve_count} CVE${dep.cve_count > 1 ? 's' : ''}` : ''}
+                      {dep.cve_severity_counts && Object.keys(dep.cve_severity_counts).length > 0 && (
+                        <span className="ml-1">
+                          {Object.entries(dep.cve_severity_counts).map(([sev, count]) => (
+                            <span key={sev} className={`mr-1 ${sev.includes('critical') ? 'text-[#d03a3d]' : sev.includes('high') ? 'text-[#f7931e]' : 'text-fabric-400'}`}>
+                              {count as number}{sev.charAt(0).toUpperCase()}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {dep.trust_score !== undefined && dep.trust_score !== null && (
                     <>
                       <span className="text-fabric-300 text-[0.72rem]">→</span>
-                      <div className={`font-mono text-[0.72rem] font-medium ${dep.trust_score >= 3.5 ? 'text-[#0dc956]' : dep.trust_score >= 2.5 ? 'text-[#f7931e]' : 'text-[#d03a3d]'}`}>
+                      <div className={`font-mono text-[0.72rem] font-medium ${dep.trust_score >= 3.25 ? 'text-[#0dc956]' : dep.trust_score >= 1.00 ? 'text-[#f7931e]' : 'text-[#d03a3d]'}`}>
                         {dep.trust_score.toFixed(1)}
                       </div>
                     </>
@@ -722,41 +755,6 @@ export default function ProductPageClient({
           </div>
         )}
 
-        {/* ═══ API QUICK ACCESS ═══ */}
-        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
-          <div className="flex items-center justify-between mb-5">
-            <span className="text-[1.05rem] font-semibold text-black tracking-tight">API Quick Access</span>
-            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">v1 · REST</span>
-          </div>
-          <div className="bg-fabric-800 rounded-lg p-5 overflow-x-auto">
-            <pre className="font-mono text-[0.72rem] text-fabric-300 leading-relaxed whitespace-pre">{``}<span className="text-fabric-500">// Evaluate trust before routing</span>{`
-`}<span className="text-[#f7931e]">POST</span>{` `}<span className="text-white">https://api.fabriclayer.dev/v1/evaluate</span>{`
-
-{
-  `}<span className="text-blue-light">&quot;agentId&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;{service.name}&quot;</span>{`
-}
-
-`}<span className="text-fabric-500">// Response</span>{`
-{
-  `}<span className="text-blue-light">&quot;provider&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;{service.name}&quot;</span>{`,
-  `}<span className="text-blue-light">&quot;trust_score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.score.toFixed(2)}</span>{`,
-  `}<span className="text-blue-light">&quot;status&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;{service.status}&quot;</span>{`,
-  `}<span className="text-blue-light">&quot;category&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;{service.category}&quot;</span>{`,
-  `}<span className="text-blue-light">&quot;signals&quot;</span>{`: {
-    `}<span className="text-blue-light">&quot;vulnerability_safety&quot;</span>{`:  { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[0].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.25</span>{` },
-    `}<span className="text-blue-light">&quot;operational_health&quot;</span>{`:    { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[1].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
-    `}<span className="text-blue-light">&quot;maintenance_activity&quot;</span>{`:  { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[2].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.20</span>{` },
-    `}<span className="text-blue-light">&quot;adoption&quot;</span>{`:              { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[3].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
-    `}<span className="text-blue-light">&quot;transparency&quot;</span>{`:          { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[4].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.15</span>{` },
-    `}<span className="text-blue-light">&quot;publisher_trust&quot;</span>{`:       { `}<span className="text-blue-light">&quot;score&quot;</span>{`: `}<span className="text-[#f7931e]">{service.signals[5].toFixed(1)}</span>{`, `}<span className="text-blue-light">&quot;weight&quot;</span>{`: `}<span className="text-[#f7931e]">0.10</span>{` }
-  },
-  `}<span className="text-blue-light">&quot;modifiers&quot;</span>{`: [],
-  `}<span className="text-blue-light">&quot;sources&quot;</span>{`: `}<span className="text-[#f7931e]">{activeSourceCount || 12}</span>{`,
-  `}<span className="text-blue-light">&quot;updated&quot;</span>{`: `}<span className="text-[#0dc956]">&quot;2026-02-20T06:41:00Z&quot;</span>{`
-}`}</pre>
-          </div>
-        </div>
-
         {/* ═══ DATA SOURCES + SCORE THRESHOLDS (2-col) ═══ */}
         <div className="grid grid-cols-2 gap-5 mb-5 max-md:grid-cols-1">
           <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
@@ -764,8 +762,8 @@ export default function ProductPageClient({
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{DATA_SOURCES.length} indexed</span>
             </div>
-            <div className="flex flex-col gap-2.5 max-h-[400px] overflow-y-auto no-scrollbar">
-              {DATA_SOURCES.slice(0, sourcesCount).map(src => (
+            <div className="flex flex-col gap-2.5">
+              {DATA_SOURCES.map(src => (
                 <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                   <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
                   <div className="flex flex-col gap-px">
@@ -774,23 +772,6 @@ export default function ProductPageClient({
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="pt-3 border-t border-fabric-100 mt-1 flex items-center justify-between">
-              <span className="font-mono text-[0.65rem] text-fabric-400">
-                Showing {Math.min(sourcesCount, DATA_SOURCES.length)} of {DATA_SOURCES.length} sources
-              </span>
-              <div className="flex gap-3">
-                {sourcesCount > DATA_SOURCES_INITIAL && (
-                  <button onClick={() => setSourcesCount(DATA_SOURCES_INITIAL)} className="font-mono text-[0.68rem] text-fabric-400 cursor-pointer hover:text-fabric-600 transition-opacity bg-transparent border-none p-0">
-                    ← Show less
-                  </button>
-                )}
-                {sourcesCount < DATA_SOURCES.length && (
-                  <button onClick={() => setSourcesCount(c => Math.min(c + LOAD_MORE_BATCH, DATA_SOURCES.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
-                    Show more →
-                  </button>
-                )}
-              </div>
             </div>
           </div>
 
@@ -815,7 +796,7 @@ export default function ProductPageClient({
                   <span className="font-mono text-[0.72rem] text-fabric-600">Active modifiers</span>
                   {service.active_modifiers && service.active_modifiers.length > 0 ? (
                     <span className="font-mono text-[0.72rem] font-medium text-[#f7931e]">
-                      {service.active_modifiers.map(m => m.replace(/_/g, ' ')).join(', ')}
+                      {service.active_modifiers.map(m => MODIFIER_LABELS[m] || m.replace(/_/g, ' ')).join(', ')}
                     </span>
                   ) : (
                     <span className="font-mono text-[0.72rem] font-medium text-[#0dc956]">None</span>
@@ -851,9 +832,9 @@ export default function ProductPageClient({
                 const scoreStr = v.score_at_release !== undefined && v.score_at_release !== null
                   ? v.score_at_release.toFixed(2)
                   : '—'
-                const scoreClass = v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 3.5
+                const scoreClass = v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 3.25
                   ? 'text-[#0dc956]'
-                  : v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 2.5
+                  : v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 1.00
                     ? 'text-[#f7931e]'
                     : 'text-fabric-400'
                 return (
