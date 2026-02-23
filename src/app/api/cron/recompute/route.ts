@@ -66,9 +66,12 @@ export async function POST(request: NextRequest) {
   for (const service of services) {
     const adjustments: string[] = []
 
-    // Read latest signal_history for each signal to check for fallback reasons
+    // Determine which signals are fallbacks using two strategies:
+    // 1. Check signal_history metadata for known fallback reasons
+    // 2. Check service data fields to infer missing data scenarios
     const fallbackSignals = new Set<string>()
 
+    // Strategy 1: Check signal_history metadata
     for (const signalName of SIGNAL_ORDER) {
       const { data: history } = await supabase
         .from('signal_history')
@@ -85,6 +88,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Strategy 2: Infer fallbacks from service data fields
+    // Publisher trust: if publisher has no github_org, the collector can't evaluate properly
+    if (!fallbackSignals.has('publisher_trust')) {
+      const { data: publisher } = await supabase
+        .from('publishers')
+        .select('github_org')
+        .eq('id', service.publisher_id)
+        .single()
+      if (!publisher || !publisher.github_org) {
+        fallbackSignals.add('publisher_trust')
+      }
+    }
+    // Transparency: if no github_repo, it's a fallback
+    if (!service.github_repo) {
+      fallbackSignals.add('transparency')
+    }
+    // Vulnerability: if no npm/pypi package, it's a fallback
+    if (!service.npm_package && !service.pypi_package) {
+      fallbackSignals.add('vulnerability')
+    }
+    // Adoption: if no npm/pypi package, it's a fallback
+    if (!service.npm_package && !service.pypi_package) {
+      fallbackSignals.add('adoption')
+    }
+    // Maintenance: if no github_repo, it's a fallback
+    if (!service.github_repo) {
+      fallbackSignals.add('maintenance')
+    }
+
     // Build signal array, applying default adjustments for fallback zeros
     const signalUpdates: Record<string, number> = {}
     const signals: number[] = []
@@ -94,7 +126,7 @@ export async function POST(request: NextRequest) {
 
       // Apply new defaults for fallback signals that stored inappropriately low values
       if (key === 'publisher_trust' && value < 2.5 && fallbackSignals.has(key)) {
-        adjustments.push(`publisher_trust: ${value}→2.5 (fallback)`)
+        adjustments.push(`pub_trust: ${value}→2.5`)
         value = 2.5
         signalUpdates[`signal_${key}`] = value
       }
