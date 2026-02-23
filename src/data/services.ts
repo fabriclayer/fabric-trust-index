@@ -2,6 +2,7 @@ export interface Service {
   name: string
   slug: string
   publisher: string
+  publisher_url?: string
   category: string
   tag: string
   description: string

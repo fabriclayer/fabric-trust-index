@@ -26,7 +26,19 @@ export default function ServiceCard({ service }: { service: Service }) {
             {service.name}
           </div>
           <div className="font-mono text-[0.62rem] text-fabric-400 whitespace-nowrap overflow-hidden text-ellipsis">
-            {service.publisher}
+            {service.publisher_url ? (
+              <a
+                href={service.publisher_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-fabric-600 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {service.publisher}
+              </a>
+            ) : (
+              service.publisher
+            )}
           </div>
         </div>
       </div>

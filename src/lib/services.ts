@@ -28,6 +28,7 @@ function dbToService(db: any): Service {
     name: db.name,
     slug: db.slug,
     publisher: db.publisher?.name ?? 'Unknown',
+    publisher_url: db.publisher?.website_url || undefined,
     category: db.category,
     tag: TAG_CLASSES[db.category] || '',
     description: db.description ?? '',
