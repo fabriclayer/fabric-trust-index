@@ -120,6 +120,7 @@ export interface DbService {
 
   // Composite
   composite_score: number
+  raw_composite_score: number | null
   status: 'trusted' | 'caution' | 'blocked' | 'pending'
 
   // Modifiers
@@ -207,6 +208,7 @@ export interface DbSupplyChain {
   dependency_version: string | null
   has_known_cves: boolean
   cve_count: number
+  cve_severity_counts: Record<string, number> | null
   trust_score: number | null
   created_at: string
   updated_at: string

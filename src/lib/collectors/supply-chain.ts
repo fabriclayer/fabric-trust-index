@@ -1,4 +1,6 @@
 import type { DbService } from '@/lib/supabase/types'
+import type { OsvVulnerability } from './types'
+import { classifySeverity } from './types'
 import { createServerClient } from '@/lib/supabase/server'
 
 /**
@@ -7,6 +9,7 @@ import { createServerClient } from '@/lib/supabase/server'
  * Fetches direct dependencies from npm/PyPI registries,
  * queries OSV.dev for known CVEs per dependency,
  * and upserts results into the supply_chain table.
+ * Writes cve_severity_counts JSONB for per-severity transitive deductions.
  */
 
 interface NpmPackageData {
@@ -20,7 +23,7 @@ interface PyPIPackageData {
 }
 
 interface OsvQueryResponse {
-  vulns?: Array<{ id: string }>
+  vulns?: OsvVulnerability[]
 }
 
 async function getNpmDependencies(
@@ -62,10 +65,10 @@ async function getPyPIDependencies(
   }
 }
 
-async function getOsvCveCount(
+async function getOsvCveSeverities(
   packageName: string,
   ecosystem: 'npm' | 'PyPI'
-): Promise<number> {
+): Promise<{ total: number; counts: Record<string, number> }> {
   try {
     const res = await fetch('https://api.osv.dev/v1/query', {
       method: 'POST',
@@ -74,11 +77,17 @@ async function getOsvCveCount(
         package: { name: packageName, ecosystem },
       }),
     })
-    if (!res.ok) return 0
+    if (!res.ok) return { total: 0, counts: {} }
     const data: OsvQueryResponse = await res.json()
-    return data.vulns?.length ?? 0
+    const vulns = data.vulns ?? []
+    const counts: Record<string, number> = {}
+    for (const vuln of vulns) {
+      const sev = classifySeverity(vuln)
+      counts[sev] = (counts[sev] ?? 0) + 1
+    }
+    return { total: vulns.length, counts }
   } catch {
-    return 0
+    return { total: 0, counts: {} }
   }
 }
 
@@ -94,8 +103,8 @@ export async function collectSupplyChain(service: DbService): Promise<{
   if (service.npm_package) {
     const deps = await getNpmDependencies(service.npm_package)
     for (const dep of deps) {
-      const cveCount = await getOsvCveCount(dep.name, 'npm')
-      const hasCves = cveCount > 0
+      const result = await getOsvCveSeverities(dep.name, 'npm')
+      const hasCves = result.total > 0
       if (hasCves) withCves++
       total++
 
@@ -108,7 +117,8 @@ export async function collectSupplyChain(service: DbService): Promise<{
             dependency_type: 'npm',
             dependency_version: dep.version,
             has_known_cves: hasCves,
-            cve_count: cveCount,
+            cve_count: result.total,
+            cve_severity_counts: hasCves ? result.counts : null,
           },
           { onConflict: 'service_id,dependency_name' }
         )
@@ -119,8 +129,8 @@ export async function collectSupplyChain(service: DbService): Promise<{
   if (service.pypi_package) {
     const deps = await getPyPIDependencies(service.pypi_package)
     for (const dep of deps) {
-      const cveCount = await getOsvCveCount(dep.name, 'PyPI')
-      const hasCves = cveCount > 0
+      const result = await getOsvCveSeverities(dep.name, 'PyPI')
+      const hasCves = result.total > 0
       if (hasCves) withCves++
       total++
 
@@ -133,7 +143,8 @@ export async function collectSupplyChain(service: DbService): Promise<{
             dependency_type: 'pypi',
             dependency_version: dep.version,
             has_known_cves: hasCves,
-            cve_count: cveCount,
+            cve_count: result.total,
+            cve_severity_counts: hasCves ? result.counts : null,
           },
           { onConflict: 'service_id,dependency_name' }
         )

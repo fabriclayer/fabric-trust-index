@@ -88,7 +88,7 @@ export const operationalHealthCollector: Collector = {
     if (!monitorUrl) {
       return {
         signal_name: 'operational',
-        score: 4.0,
+        score: 2.5,
         metadata: { reason: 'no_endpoint_configured', source_type: sourceType },
         sources: [],
       }

@@ -85,40 +85,38 @@ export const publisherTrustCollector: Collector = {
         sources: [],
       }
     }
-    if (ghOrg) {
-      const orgData = await githubGet(`/users/${ghOrg}`) as {
-        created_at?: string
-        type?: string
-        public_repos?: number
-      } | null
+    const orgData = await githubGet(`/users/${ghOrg}`) as {
+      created_at?: string
+      type?: string
+      public_repos?: number
+    } | null
 
-      if (orgData?.created_at) {
-        const ageYears = (Date.now() - new Date(orgData.created_at).getTime()) / (365.25 * 86400000)
-        metadata.account_age_years = Math.round(ageYears * 10) / 10
+    if (orgData?.created_at) {
+      const ageYears = (Date.now() - new Date(orgData.created_at).getTime()) / (365.25 * 86400000)
+      metadata.account_age_years = Math.round(ageYears * 10) / 10
 
-        if (ageYears >= 5) score += 1.5
-        else if (ageYears >= 2) score += 1.2
-        else if (ageYears >= 1) score += 0.8
-        else score += 0.4
+      if (ageYears >= 5) score += 1.5
+      else if (ageYears >= 2) score += 1.2
+      else if (ageYears >= 1) score += 0.8
+      else score += 0.4
 
-        // 2. Organization type — up to 0.75
-        if (orgData.type === 'Organization') {
-          score += 0.75
-          metadata.is_organization = true
-        } else {
-          metadata.is_organization = false
-        }
-
-        // 3. Maintained package count — up to 0.75
-        const repoCount = orgData.public_repos ?? 0
-        metadata.public_repos = repoCount
-        if (repoCount > 20) score += 0.75
-        else if (repoCount > 10) score += 0.5
-        else if (repoCount > 5) score += 0.35
-        else if (repoCount > 0) score += 0.15
-
-        sources.push(`github:${ghOrg}`)
+      // 2. Organization type — up to 0.75
+      if (orgData.type === 'Organization') {
+        score += 0.75
+        metadata.is_organization = true
+      } else {
+        metadata.is_organization = false
       }
+
+      // 3. Maintained package count — up to 0.75
+      const repoCount = orgData.public_repos ?? 0
+      metadata.public_repos = repoCount
+      if (repoCount > 20) score += 0.75
+      else if (repoCount > 10) score += 0.5
+      else if (repoCount > 5) score += 0.35
+      else if (repoCount > 0) score += 0.15
+
+      sources.push(`github:${ghOrg}`)
     }
 
     // 4. Identity consistency across registries — up to 0.75

@@ -32,3 +32,9 @@ export function computeComposite(signals: number[]): number {
   const raw = signals.reduce((sum, s, i) => sum + s * WEIGHTS[i], 0)
   return Math.round(raw * 100) / 100
 }
+
+export function getScoreColor(score: number): 'green' | 'orange' | 'red' {
+  if (score >= THRESHOLDS.trusted) return 'green'
+  if (score >= THRESHOLDS.caution) return 'orange'
+  return 'red'
+}

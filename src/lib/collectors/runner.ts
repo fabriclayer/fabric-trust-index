@@ -233,6 +233,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     finalScore = Math.min(finalScore, 3.24)
   }
 
+  updates.raw_composite_score = compositeScore
   updates.composite_score = finalScore
   updates.status = status
   updates.active_modifiers = modifiers
@@ -360,6 +361,7 @@ export async function runCollectors(
   await supabase
     .from('services')
     .update({
+      raw_composite_score: compositeScore,
       composite_score: finalScore,
       status,
       active_modifiers: modifiers,

@@ -24,7 +24,7 @@ export const maxDuration = 300
 /** Default fallback values for each signal when data is unavailable */
 const SIGNAL_DEFAULTS: Record<string, number> = {
   vulnerability: 3.0,
-  operational: 4.0,
+  operational: 2.5,
   maintenance: 3.0,
   adoption: 3.0,
   transparency: 2.0,
@@ -222,6 +222,7 @@ export async function POST(request: NextRequest) {
       .from('services')
       .update({
         ...signalUpdates,
+        raw_composite_score: compositeScore,
         composite_score: finalScore,
         status,
         active_modifiers: modifiers,
