@@ -545,7 +545,11 @@ export default function ProductPageClient({
                 { key: 'security_md', label: 'SECURITY.md', metaTrue: 'Security policy published', metaFalse: 'No security policy found' },
                 { key: 'api_docs', label: 'API Documentation', metaTrue: 'OpenAPI spec or docs directory found', metaFalse: 'No API documentation detected' },
                 { key: 'model_card', label: 'Model / System Card', metaTrue: 'Model card or system card published', metaFalse: 'No model card found' },
-              ].map(item => {
+              ].filter(item => {
+                if (item.key === 'model_card' && transparencyMeta?.model_card_applicable === false) return false
+                if (item.key === 'model_card' && checklist?.['model_card_skipped']) return false
+                return true
+              }).map(item => {
                 const passed = checklist?.[item.key] ?? false
                 return (
                   <div key={item.key} className="flex items-start gap-2.5 p-3 bg-fabric-50 border border-fabric-100 rounded-lg">
