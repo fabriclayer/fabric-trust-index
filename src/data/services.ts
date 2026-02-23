@@ -35,6 +35,7 @@ export interface Service {
   x_url?: string | null
   discord_url?: string | null
   status_page_url?: string | null
+  active_modifiers?: string[]
 }
 
 const RAW = [

@@ -302,6 +302,23 @@ export default function ProductPageClient({
             </div>
           </div>
 
+          {/* Override explanation */}
+          {service.active_modifiers && service.active_modifiers.some(m => m === 'critical_cve_override' || m === 'vulnerability_zero_override' || m === 'zero_signal_override') && (
+            <div className="flex items-start gap-2.5 mt-4 p-3 bg-[rgba(208,58,61,0.06)] border border-[rgba(208,58,61,0.15)] rounded-lg">
+              <svg className="w-4 h-4 text-[#d03a3d] flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span className="font-mono text-[0.72rem] text-fabric-700 leading-relaxed">
+                {service.active_modifiers.includes('critical_cve_override') || service.active_modifiers.includes('vulnerability_zero_override')
+                  ? `Score capped to ${service.score.toFixed(2)} due to critical vulnerability findings. Individual signal scores may be higher but the composite is overridden until vulnerabilities are resolved.`
+                  : `Score capped to ${service.score.toFixed(2)} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
+                }
+              </span>
+            </div>
+          )}
+
           {/* Hero meta */}
           <div className="flex gap-6 flex-wrap font-mono text-[0.68rem] text-fabric-400 mt-4 pt-4 border-t border-fabric-100">
             <span className="flex items-center gap-1">
@@ -780,8 +797,8 @@ export default function ProductPageClient({
             </div>
             <div className="flex flex-col gap-2">
               {[
-                { range: '2.50 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
-                { range: '1.00 – 2.49', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
+                { range: '3.25 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
+                { range: '1.00 – 3.24', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
                 { range: '0.00 – 0.99', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
               ].map(t => (
                 <div key={t.range} className="flex justify-between items-center py-1.5 border-b border-fabric-100">
@@ -790,16 +807,16 @@ export default function ProductPageClient({
                 </div>
               ))}
               <div className="mt-2 flex flex-col gap-2">
-                {[
-                  { label: '<10 transactions', value: '0.8× new provider penalty' },
-                  { label: 'Inactive 7+ days', value: '0.7× inactive multiplier' },
-                  { label: 'Active modifiers', value: 'None', color: 'text-[#0dc956]' },
-                ].map(m => (
-                  <div key={m.label} className="flex justify-between items-center py-1.5 border-b border-fabric-100 last:border-b-0">
-                    <span className="font-mono text-[0.72rem] text-fabric-600">{m.label}</span>
-                    <span className={`font-mono text-[0.72rem] font-medium ${m.color || 'text-black'}`}>{m.value}</span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center py-1.5 border-b border-fabric-100 last:border-b-0">
+                  <span className="font-mono text-[0.72rem] text-fabric-600">Active modifiers</span>
+                  {service.active_modifiers && service.active_modifiers.length > 0 ? (
+                    <span className="font-mono text-[0.72rem] font-medium text-[#f7931e]">
+                      {service.active_modifiers.map(m => m.replace(/_/g, ' ')).join(', ')}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[0.72rem] font-medium text-[#0dc956]">None</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
