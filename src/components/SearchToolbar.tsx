@@ -149,7 +149,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
 
 export default function SearchToolbar(props: SearchToolbarProps) {
   return (
-    <div className="sticky top-14 z-[90] bg-fabric-50/[0.92] backdrop-blur-2xl border-b border-fabric-200 py-2.5 px-8 max-md:px-4">
+    <div className={`sticky top-14 z-[90] bg-fabric-50/[0.92] backdrop-blur-2xl border-b border-fabric-200 py-2.5 px-8 max-md:px-4 transition-[margin] duration-200 ${props.alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
       <div className="max-w-container mx-auto flex items-center gap-3 flex-wrap">
         {/* Search */}
         <div className="flex items-center gap-2 py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] min-w-[200px] flex-1 transition-all focus-within:border-pink focus-within:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]">

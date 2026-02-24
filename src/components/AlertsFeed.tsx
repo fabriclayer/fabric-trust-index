@@ -200,8 +200,8 @@ export default function AlertsFeed({
         aria-label="Trust Alerts"
         className={`fixed top-14 right-0 bottom-0 w-[360px] max-w-[90vw] bg-white border-l border-fabric-200 z-[100] transform transition-transform duration-200 ease-out ${open ? 'translate-x-0' : 'translate-x-full'} overflow-hidden flex flex-col`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-fabric-200">
+        {/* Header — height matches toolbar so bottom borders align */}
+        <div className="flex items-center justify-between px-4 border-b border-fabric-200 min-h-[58.5px]">
           <div className="flex items-center gap-2">
             <h2 className="font-sans text-[0.88rem] font-semibold text-fabric-800">Trust Alerts</h2>
             {criticalCount > 0 && (

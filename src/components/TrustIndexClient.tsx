@@ -143,7 +143,8 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
 
       <AlertsFeed incidents={incidents} open={alertsOpen} onClose={() => setAlertsOpen(false)} />
 
-      <div className={`max-w-container mx-auto px-8 pt-5 pb-16 max-md:px-4 transition-[margin] duration-200 ${alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
+      <div className={`px-8 pt-5 pb-16 max-md:px-4 transition-[margin] duration-200 ${alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
+       <div className="max-w-container mx-auto">
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <svg className="mx-auto text-fabric-300 mb-4" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -189,6 +190,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
             <div ref={sentinelRef} className="h-px" />
           </>
         )}
+       </div>
       </div>
 
       <Footer />
