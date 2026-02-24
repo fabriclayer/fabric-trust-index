@@ -91,8 +91,8 @@ function getBadge(type: string, description: string | null): { label: string; co
 
 // Left border classes per severity
 const SEVERITY_BORDER: Record<string, string> = {
-  critical: 'border-l-2 border-l-[#fecaca]',
-  warning: 'border-l-2 border-l-[#fde68a]',
+  critical: '',
+  warning: '',
   info: '',
 }
 
@@ -144,20 +144,28 @@ export default function AlertsFeed({
 
   const PAGE_SIZE = 20
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
+  const [severityFilter, setSeverityFilter] = useState<string | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Reset display count when sidebar opens
+  // Reset display count and filter when sidebar opens
   useEffect(() => {
-    if (open) setDisplayCount(PAGE_SIZE)
+    if (open) {
+      setDisplayCount(PAGE_SIZE)
+      setSeverityFilter(null)
+    }
   }, [open])
+
+  const filtered = severityFilter
+    ? incidents.filter(i => i.severity === severityFilter)
+    : incidents
 
   // Infinite scroll observer
   const handleObserver = useCallback((entries: IntersectionObserverEntry[]) => {
-    if (entries[0].isIntersecting && displayCount < incidents.length) {
-      setDisplayCount(prev => Math.min(prev + PAGE_SIZE, incidents.length))
+    if (entries[0].isIntersecting && displayCount < filtered.length) {
+      setDisplayCount(prev => Math.min(prev + PAGE_SIZE, filtered.length))
     }
-  }, [displayCount, incidents.length])
+  }, [displayCount, filtered.length])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -170,11 +178,16 @@ export default function AlertsFeed({
     return () => observer.disconnect()
   }, [handleObserver])
 
-  const displayed = incidents.slice(0, displayCount)
-  const hasMore = displayCount < incidents.length
+  const displayed = filtered.slice(0, displayCount)
+  const hasMore = displayCount < filtered.length
 
   const criticalCount = incidents.filter(i => i.severity === 'critical').length
   const warningCount = incidents.filter(i => i.severity === 'warning').length
+
+  const toggleFilter = (severity: string) => {
+    setSeverityFilter(prev => prev === severity ? null : severity)
+    setDisplayCount(PAGE_SIZE)
+  }
 
   return (
     <>
@@ -197,22 +210,28 @@ export default function AlertsFeed({
       {/* Sidebar panel */}
       <div
         ref={panelRef}
-        aria-label="Trust Alerts"
+        aria-label="Fabric Alerts"
         className={`fixed top-14 right-0 bottom-0 w-[360px] max-w-[90vw] bg-white border-l border-fabric-200 z-[100] transform transition-transform duration-200 ease-out ${open ? 'translate-x-0' : 'translate-x-full'} overflow-hidden flex flex-col`}
       >
         {/* Header — height matches toolbar so bottom borders align */}
         <div className="flex items-center justify-between px-4 border-b border-fabric-200 min-h-[58.5px]">
           <div className="flex items-center gap-2">
-            <h2 className="font-sans text-[0.88rem] font-semibold text-fabric-800">Trust Alerts</h2>
+            <h2 className="font-sans text-[0.92rem] font-semibold text-black tracking-tight">Fabric Alerts</h2>
             {criticalCount > 0 && (
-              <span className="font-mono text-[0.6rem] bg-red/10 text-red px-1.5 py-0.5 rounded-full">
+              <button
+                onClick={() => toggleFilter('critical')}
+                className={`font-mono text-[0.6rem] bg-red/10 text-red px-1.5 py-0.5 rounded-full cursor-pointer transition-opacity ${severityFilter && severityFilter !== 'critical' ? 'opacity-40' : ''} ${severityFilter === 'critical' ? 'ring-1 ring-red/30' : ''}`}
+              >
                 {criticalCount} critical
-              </span>
+              </button>
             )}
             {warningCount > 0 && (
-              <span className="font-mono text-[0.6rem] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
+              <button
+                onClick={() => toggleFilter('warning')}
+                className={`font-mono text-[0.6rem] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full cursor-pointer transition-opacity ${severityFilter && severityFilter !== 'warning' ? 'opacity-40' : ''} ${severityFilter === 'warning' ? 'ring-1 ring-orange/30' : ''}`}
+              >
                 {warningCount} warning
-              </span>
+              </button>
             )}
           </div>
           <button
@@ -327,7 +346,7 @@ export function AlertsBellButton({
     <button
       onClick={onClick}
       className={`relative p-2 rounded-lg border transition-all cursor-pointer ${active ? 'border-pink bg-white shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200 bg-white hover:border-fabric-300'}`}
-      title="Trust Alerts"
+      title="Fabric Alerts"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fabric-600">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
