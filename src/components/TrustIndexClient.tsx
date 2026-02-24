@@ -57,8 +57,18 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
-  const [alertsSeen, setAlertsSeen] = useState(false)
-  const criticalCount = useMemo(() => alertsSeen ? 0 : incidents.filter(i => i.severity === 'critical').length, [incidents, alertsSeen])
+  const [alertsSeenAt, setAlertsSeenAt] = useState<string | null>(null)
+
+  // Restore last-seen timestamp from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('fabric-alerts-seen-at')
+    if (stored) setAlertsSeenAt(stored)
+  }, [])
+
+  const criticalCount = useMemo(() => {
+    if (!alertsSeenAt) return incidents.filter(i => i.severity === 'critical').length
+    return incidents.filter(i => i.severity === 'critical' && i.created_at > alertsSeenAt).length
+  }, [incidents, alertsSeenAt])
 
   const toggleStatus = useCallback((s: string) => {
     setActiveStatuses(prev => {
@@ -137,7 +147,12 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
         totalCount={services.length}
         filteredCount={filtered.length}
         alertsOpen={alertsOpen}
-        onToggleAlerts={() => { setAlertsOpen(o => !o); setAlertsSeen(true) }}
+        onToggleAlerts={() => {
+          setAlertsOpen(o => !o)
+          const now = new Date().toISOString()
+          setAlertsSeenAt(now)
+          localStorage.setItem('fabric-alerts-seen-at', now)
+        }}
         criticalCount={criticalCount}
       />
 
