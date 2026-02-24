@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { discoverSmitheryServers } from '@/lib/discovery/smithery'
+import { discoverSmitheryServers, type SmitheryDebug } from '@/lib/discovery/smithery'
 import { discoverMcpSoServers } from '@/lib/discovery/mcpso'
 import {
   addDiscoveredService,
@@ -141,10 +141,12 @@ export async function GET(request: NextRequest) {
 
     const seenGithubRepos = new Set<string>()
     const results: SourceResult[] = []
+    let smitheryDebug: SmitheryDebug | undefined
 
     // --- Smithery ---
     if (!source || source === 'smithery') {
-      const candidates = await discoverSmitheryServers()
+      const { candidates, debug } = await discoverSmitheryServers()
+      smitheryDebug = debug
       const result = await processSource(
         'smithery', candidates, existingSlugs, existingGithubRepos, seenGithubRepos, offset, limit,
       )
@@ -167,6 +169,7 @@ export async function GET(request: NextRequest) {
         ok: true,
         ...r,
         errors: r.errors.length > 0 ? r.errors : undefined,
+        debug: smitheryDebug && r.source === 'smithery' ? smitheryDebug : undefined,
         timestamp: new Date().toISOString(),
       })
     }
@@ -177,6 +180,7 @@ export async function GET(request: NextRequest) {
         ...r,
         errors: r.errors.length > 0 ? r.errors : undefined,
       })),
+      debug: smitheryDebug ? { smithery: smitheryDebug } : undefined,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {

@@ -8,6 +8,15 @@ export interface SmitheryCandidate {
   createdAt: string
 }
 
+export interface SmitheryDebug {
+  apiKeySet: boolean
+  apiKeyPrefix: string | null
+  headersSent: string[]
+  page1Pagination: { totalCount: number; totalPages: number; pageSize: number } | null
+  pagesProcessed: number
+  error: string | null
+}
+
 interface SmitheryServer {
   qualifiedName: string
   displayName: string
@@ -33,17 +42,32 @@ interface SmitheryResponse {
 const PAGE_SIZE = 100
 const DELAY_MS = 200
 
-export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
+export async function discoverSmitheryServers(): Promise<{
+  candidates: SmitheryCandidate[]
+  debug: SmitheryDebug
+}> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'User-Agent': 'FabricTrustIndex/1.0',
   }
 
-  if (process.env.SMITHERY_API_KEY) {
-    headers.Authorization = `Bearer ${process.env.SMITHERY_API_KEY}`
+  const apiKey = process.env.SMITHERY_API_KEY
+  const debug: SmitheryDebug = {
+    apiKeySet: !!apiKey,
+    apiKeyPrefix: apiKey ? apiKey.slice(0, 8) + '...' : null,
+    headersSent: [],
+    page1Pagination: null,
+    pagesProcessed: 0,
+    error: null,
+  }
+
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
   } else {
     console.warn('SMITHERY_API_KEY not set — proceeding without auth')
   }
+
+  debug.headersSent = Object.keys(headers)
 
   const candidates: SmitheryCandidate[] = []
   const seen = new Set<string>()
@@ -52,17 +76,26 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
 
   while (page <= totalPages) {
     try {
-      const res = await fetch(
-        `https://registry.smithery.ai/servers?pageSize=${PAGE_SIZE}&page=${page}`,
-        { headers },
-      )
+      const url = `https://registry.smithery.ai/servers?pageSize=${PAGE_SIZE}&page=${page}&q=`
+      const res = await fetch(url, { headers })
       if (!res.ok) {
+        debug.error = `HTTP ${res.status} on page ${page}`
         console.error(`Smithery API error on page ${page}: ${res.status}`)
         break
       }
 
       const data: SmitheryResponse = await res.json()
       totalPages = data.pagination.totalPages
+      debug.pagesProcessed = page
+
+      if (page === 1) {
+        debug.page1Pagination = {
+          totalCount: data.pagination.totalCount,
+          totalPages: data.pagination.totalPages,
+          pageSize: data.pagination.pageSize,
+        }
+      }
+
       console.log(`Smithery page ${page}/${totalPages}: ${data.servers.length} servers`)
 
       if (data.servers.length === 0) break
@@ -76,7 +109,7 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
         if (parts.length < 2) continue
 
         const publisher = parts[0]
-        const githubRepo = qn // already owner/repo format
+        const githubRepo = qn
 
         candidates.push({
           name: server.displayName || parts[parts.length - 1],
@@ -89,6 +122,7 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
         })
       }
     } catch (err) {
+      debug.error = err instanceof Error ? err.message : 'unknown fetch error'
       console.error(`Smithery fetch failed on page ${page}:`, err)
       break
     }
@@ -100,5 +134,5 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
   }
 
   console.log(`Smithery discovery complete: ${candidates.length} total candidates`)
-  return candidates
+  return { candidates, debug }
 }
