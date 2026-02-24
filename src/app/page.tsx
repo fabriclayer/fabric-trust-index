@@ -6,13 +6,18 @@ async function loadServices() {
   return await getServices()
 }
 
+async function loadIncidents() {
+  const { getRecentIncidents } = await import('@/lib/services')
+  return await getRecentIncidents(50)
+}
+
 export const revalidate = 300 // ISR: revalidate every 5 minutes
 
 export default async function TrustIndexPage() {
-  const services = await loadServices()
+  const [services, incidents] = await Promise.all([loadServices(), loadIncidents()])
   return (
     <Suspense>
-      <TrustIndexClient services={services} />
+      <TrustIndexClient services={services} incidents={incidents} />
     </Suspense>
   )
 }

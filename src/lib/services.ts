@@ -195,6 +195,17 @@ export async function getSignalHistory(serviceId: string, signalName?: string) {
   return data ?? []
 }
 
+export async function getRecentIncidents(limit = 200) {
+  const supabase = createServerClient()
+  const { data } = await supabase
+    .from('incidents')
+    .select('*, service:services(name, slug, status)')
+    .neq('type', 'initial_index')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return data ?? []
+}
+
 export async function getLatestSignalMeta(serviceId: string, signalName: string): Promise<Record<string, any> | null> {
   const supabase = createServerClient()
   const { data } = await supabase

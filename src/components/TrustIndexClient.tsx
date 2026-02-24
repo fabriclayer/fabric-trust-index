@@ -8,11 +8,12 @@ import SearchToolbar from '@/components/SearchToolbar'
 import ServiceCard from '@/components/ServiceCard'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import SubmitServiceModal from '@/components/SubmitServiceModal'
+import AlertsFeed, { type Incident } from '@/components/AlertsFeed'
 import type { Service } from '@/data/services'
 
 const PAGE_SIZE = 24
 
-export default function TrustIndexClient({ services }: { services: Service[] }) {
+export default function TrustIndexClient({ services, incidents = [] }: { services: Service[]; incidents?: Incident[] }) {
   // Disclaimer
   const [accepted, setAccepted] = useState(false)
   useEffect(() => {
@@ -55,6 +56,9 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [alertsOpen, setAlertsOpen] = useState(false)
+  const [alertsSeen, setAlertsSeen] = useState(false)
+  const criticalCount = useMemo(() => alertsSeen ? 0 : incidents.filter(i => i.severity === 'critical').length, [incidents, alertsSeen])
 
   const toggleStatus = useCallback((s: string) => {
     setActiveStatuses(prev => {
@@ -132,9 +136,14 @@ export default function TrustIndexClient({ services }: { services: Service[] }) 
         searchInputRef={searchInputRef}
         totalCount={services.length}
         filteredCount={filtered.length}
+        alertsOpen={alertsOpen}
+        onToggleAlerts={() => { setAlertsOpen(o => !o); setAlertsSeen(true) }}
+        criticalCount={criticalCount}
       />
 
-      <div className="max-w-container mx-auto px-8 pt-5 pb-16 max-md:px-4">
+      <AlertsFeed incidents={incidents} open={alertsOpen} onClose={() => setAlertsOpen(false)} />
+
+      <div className={`max-w-container mx-auto px-8 pt-5 pb-16 max-md:px-4 transition-[margin] duration-200 ${alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <svg className="mx-auto text-fabric-300 mb-4" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

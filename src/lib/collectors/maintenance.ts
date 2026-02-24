@@ -35,6 +35,8 @@ export const maintenanceCollector: Collector = {
     const repoData = await githubGet(`/repos/${repo}`) as {
       pushed_at?: string
       open_issues_count?: number
+      archived?: boolean
+      full_name?: string
     } | null
 
     if (!repoData) {
@@ -48,6 +50,18 @@ export const maintenanceCollector: Collector = {
 
     let score = 3.0 // Start at midpoint, adjust up/down
     const metadata: Record<string, unknown> = {}
+
+    // Detect repo_archived
+    if (repoData.archived) {
+      metadata.repo_archived = true
+      score = 0.5
+    }
+
+    // Detect repo_transferred (full_name no longer matches expected owner/repo)
+    if (repoData.full_name && repoData.full_name.toLowerCase() !== repo.toLowerCase()) {
+      metadata.repo_transferred = true
+      metadata.new_repo_name = repoData.full_name
+    }
 
     // 1. Last commit recency
     const lastPush = repoData.pushed_at ? new Date(repoData.pushed_at) : null
@@ -153,6 +167,45 @@ export const maintenanceCollector: Collector = {
             },
             { onConflict: 'service_id,tag' }
           )
+      }
+    }
+
+    // Check for PyPI yanked releases
+    if (service.pypi_package) {
+      try {
+        const pypiRes = await fetch(`https://pypi.org/pypi/${service.pypi_package}/json`)
+        if (pypiRes.ok) {
+          const pypiData = await pypiRes.json() as { info?: { yanked?: boolean; yanked_reason?: string } }
+          if (pypiData.info?.yanked) {
+            metadata.pypi_yanked = true
+            metadata.pypi_yanked_reason = pypiData.info.yanked_reason || 'unknown'
+            score = Math.min(score, 1.0)
+          }
+          sources.push(`pypi:${service.pypi_package}`)
+        }
+      } catch {
+        // PyPI check is best-effort
+      }
+    }
+
+    // Check Smithery security scan for MCP servers
+    if (service.discovered_from === 'smithery' && service.github_repo) {
+      try {
+        const smitheryRes = await fetch(
+          `https://registry.smithery.ai/servers/${service.github_repo}`,
+          { headers: { Accept: 'application/json', 'User-Agent': 'FabricTrustIndex/1.0' } }
+        )
+        if (smitheryRes.ok) {
+          const smitheryData = await smitheryRes.json() as { security?: { scanPassed?: boolean; issues?: string[] } }
+          if (smitheryData.security && smitheryData.security.scanPassed === false) {
+            metadata.smithery_scan_failed = true
+            metadata.smithery_scan_issues = smitheryData.security.issues ?? []
+            score = Math.min(score, 1.5)
+          }
+          sources.push(`smithery:${service.github_repo}`)
+        }
+      } catch {
+        // Smithery check is best-effort
       }
     }
 

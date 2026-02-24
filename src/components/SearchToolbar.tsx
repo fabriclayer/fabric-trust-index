@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { CATEGORIES } from '@/lib/utils'
 
+import { AlertsBellButton } from '@/components/AlertsFeed'
+
 interface SearchToolbarProps {
   searchQuery: string
   onSearchChange: (q: string) => void
@@ -15,6 +17,9 @@ interface SearchToolbarProps {
   searchInputRef?: React.RefObject<HTMLInputElement | null>
   totalCount?: number
   filteredCount?: number
+  alertsOpen?: boolean
+  onToggleAlerts?: () => void
+  criticalCount?: number
 }
 
 const SORTS: Record<string, string> = {
@@ -194,6 +199,15 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           onChange={props.onSortChange}
           defaultValue="score-desc"
         />
+
+        {/* Alerts bell */}
+        {props.onToggleAlerts && (
+          <AlertsBellButton
+            criticalCount={props.criticalCount ?? 0}
+            onClick={props.onToggleAlerts}
+            active={props.alertsOpen ?? false}
+          />
+        )}
       </div>
     </div>
   )

@@ -19,11 +19,18 @@ const MAX_RAW = 3.75
 
 import { githubGet } from './github'
 
-async function getNpmPackageInfo(pkg: string): Promise<{ maintainers?: Array<{ name: string }> } | null> {
+interface NpmPackageInfo {
+  maintainers?: Array<{ name: string }>
+  deprecated?: string
+  'dist-tags'?: Record<string, string>
+  versions?: Record<string, { deprecated?: string }>
+}
+
+async function getNpmPackageInfo(pkg: string): Promise<NpmPackageInfo | null> {
   try {
     const res = await fetch(`https://registry.npmjs.org/${pkg}`)
     if (!res.ok) return null
-    return res.json() as Promise<{ maintainers?: Array<{ name: string }> }>
+    return res.json() as Promise<NpmPackageInfo>
   } catch {
     return null
   }
@@ -107,14 +114,33 @@ export const publisherTrustCollector: Collector = {
     if (publisher.pypi_org) identityChecks.push('pypi')
 
     // Cross-check npm maintainer matches GitHub org
+    let npmInfo: NpmPackageInfo | null = null
     if (service.npm_package && publisher.github_org) {
-      const npmInfo = await getNpmPackageInfo(service.npm_package)
+      npmInfo = await getNpmPackageInfo(service.npm_package)
       if (npmInfo?.maintainers?.some(m =>
         m.name.toLowerCase() === publisher.github_org!.toLowerCase() ||
         m.name.toLowerCase() === publisher.npm_org?.toLowerCase()
       )) {
         identityPoints += 0.375
         sources.push(`npm:${service.npm_package}`)
+      }
+
+      // Store npm maintainers list for owner change detection
+      if (npmInfo?.maintainers) {
+        metadata.npm_maintainers = npmInfo.maintainers.map(m => m.name)
+      }
+
+      // Detect npm deprecated
+      if (npmInfo?.deprecated) {
+        metadata.npm_deprecated = true
+        metadata.npm_deprecated_reason = npmInfo.deprecated
+      } else if (npmInfo?.['dist-tags']?.latest && npmInfo.versions) {
+        const latestVersion = npmInfo['dist-tags'].latest
+        const latestData = npmInfo.versions[latestVersion]
+        if (latestData?.deprecated) {
+          metadata.npm_deprecated = true
+          metadata.npm_deprecated_reason = latestData.deprecated
+        }
       }
     }
 

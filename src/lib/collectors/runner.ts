@@ -144,6 +144,104 @@ async function detectIncidents(
       })
     }
   }
+
+  // --- Tier 1 External Source Alerts ---
+
+  const maintResult = collectorResults.find(r => r?.key === 'maintenance')
+  const pubResult = collectorResults.find(r => r?.key === 'publisher_trust')
+
+  // npm_deprecated
+  if (pubResult?.result.metadata.npm_deprecated) {
+    await createIncident({
+      service_id: service.id,
+      type: 'npm_deprecated',
+      severity: 'critical',
+      title: 'npm package marked as deprecated',
+      description: pubResult.result.metadata.npm_deprecated_reason as string || 'Package deprecated by maintainer',
+      score_at_time: newComposite,
+    })
+  }
+
+  // npm_owner_changed — compare current maintainers with previous
+  if (pubResult?.result.metadata.npm_maintainers) {
+    const currentMaintainers = pubResult.result.metadata.npm_maintainers as string[]
+    // Look up previous maintainers from last signal history
+    const { data: prevHistory } = await supabase
+      .from('signal_history')
+      .select('metadata')
+      .eq('service_id', service.id)
+      .eq('signal_name', 'publisher_trust')
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const prevMaintainers = (prevHistory?.metadata?.npm_maintainers ?? []) as string[]
+    if (prevMaintainers.length > 0 && currentMaintainers.length > 0) {
+      const prevSet = new Set(prevMaintainers.map((m: string) => m.toLowerCase()))
+      const currSet = new Set(currentMaintainers.map((m: string) => m.toLowerCase()))
+      const removed = prevMaintainers.filter((m: string) => !currSet.has(m.toLowerCase()))
+      const added = currentMaintainers.filter((m: string) => !prevSet.has(m.toLowerCase()))
+      if (removed.length > 0 || added.length > 0) {
+        await createIncident({
+          service_id: service.id,
+          type: 'npm_owner_changed',
+          severity: 'warning',
+          title: 'npm package maintainers changed',
+          description: `Removed: ${removed.join(', ') || 'none'} | Added: ${added.join(', ') || 'none'}`,
+          score_at_time: newComposite,
+        })
+      }
+    }
+  }
+
+  // pypi_yanked
+  if (maintResult?.result.metadata.pypi_yanked) {
+    await createIncident({
+      service_id: service.id,
+      type: 'pypi_yanked',
+      severity: 'critical',
+      title: 'PyPI release yanked',
+      description: maintResult.result.metadata.pypi_yanked_reason as string || 'Latest release was yanked',
+      score_at_time: newComposite,
+    })
+  }
+
+  // repo_archived
+  if (maintResult?.result.metadata.repo_archived) {
+    await createIncident({
+      service_id: service.id,
+      type: 'repo_archived',
+      severity: 'warning',
+      title: 'GitHub repository archived',
+      description: `The repository ${service.github_repo} has been archived by its owner`,
+      score_at_time: newComposite,
+    })
+  }
+
+  // repo_transferred
+  if (maintResult?.result.metadata.repo_transferred) {
+    await createIncident({
+      service_id: service.id,
+      type: 'repo_transferred',
+      severity: 'warning',
+      title: 'GitHub repository transferred',
+      description: `Repository transferred from ${service.github_repo} to ${maintResult.result.metadata.new_repo_name}`,
+      score_at_time: newComposite,
+    })
+  }
+
+  // smithery_scan_failed
+  if (maintResult?.result.metadata.smithery_scan_failed) {
+    const issues = maintResult.result.metadata.smithery_scan_issues as string[]
+    await createIncident({
+      service_id: service.id,
+      type: 'smithery_scan_failed',
+      severity: 'critical',
+      title: 'Smithery security scan failed',
+      description: issues?.length > 0 ? `Issues: ${issues.join(', ')}` : 'Security scan did not pass',
+      score_at_time: newComposite,
+    })
+  }
 }
 
 /**
