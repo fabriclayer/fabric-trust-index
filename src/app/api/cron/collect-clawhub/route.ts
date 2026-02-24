@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
       .from('services')
       .select('*')
       .eq('discovered_from', 'clawhub')
-      .order('composite_score', { ascending: true })
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
       .range(offset, offset + limit - 1)
 
     if (error) throw error
@@ -52,11 +53,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Check if more services exist
+    // Check if more pending services exist
     const { count } = await supabase
       .from('services')
       .select('id', { count: 'exact', head: true })
       .eq('discovered_from', 'clawhub')
+      .eq('status', 'pending')
 
     const total = count ?? 0
     const hasMore = offset + limit < total
