@@ -32,20 +32,64 @@ const CREDENTIAL_LEAK_PATTERNS = [
   /echo\s+\$[A-Z_]*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i,
   /console\.log\(.*(?:apiKey|token|secret|password)/i,
   /print\(.*(?:api_key|token|secret|password)/i,
+  /curl\s+[^\n]*\$[A-Z_]*(?:KEY|TOKEN|SECRET|API)/i, // curl with env var secrets in URL
 ]
 
 // Sensitive file system paths
 const SENSITIVE_PATHS = [
-  /~\/\.ssh\//,
-  /~\/\.aws\//,
-  /~\/\.gnupg\//,
-  /\/etc\/shadow/,
-  /\/etc\/passwd/,
-  /~\/\.env/,
+  { pattern: /~\/\.ssh\//, name: '~/.ssh/' },
+  { pattern: /~\/\.aws\//, name: '~/.aws/' },
+  { pattern: /~\/\.gnupg\//, name: '~/.gnupg/' },
+  { pattern: /\/etc\/shadow/, name: '/etc/shadow' },
+  { pattern: /\/etc\/passwd/, name: '/etc/passwd' },
+  { pattern: /~\/\.env/, name: '~/.env' },
+  { pattern: /~\/\.codex\//, name: '~/.codex/' },
+  { pattern: /~\/\.openclaw/, name: '~/.openclaw' },
+]
+
+// Agent config tampering — real attack vector
+const CONFIG_TAMPER_PATTERNS = [
+  /SOUL\.md/,
+  /MEMORY\.md/,
+  /AGENTS\.md/,
 ]
 
 // Base64 encoded payloads (unusually long)
 const BASE64_PAYLOAD = /[A-Za-z0-9+/]{100,}={0,2}/
+
+/**
+ * Extract self-disclosure sections from SKILL.md content.
+ * Many legitimate skills honestly disclose sensitive operations in their
+ * frontmatter description, ⚠️ warning blocks, or requires metadata.
+ * These disclosures should NOT be penalized — only undisclosed access is a red flag.
+ */
+function extractDisclosedPaths(content: string): Set<string> {
+  const disclosed = new Set<string>()
+  const lines = content.split('\n')
+
+  for (const line of lines) {
+    // Check frontmatter description, warning blocks, requires sections
+    const isDisclosure =
+      /^description:/i.test(line) ||
+      /^summary:/i.test(line) ||
+      line.startsWith('⚠️') ||
+      line.startsWith('> ⚠️') ||
+      /^\*\*Warning\*\*/i.test(line) ||
+      /^requires/i.test(line) ||
+      /^>\s*\*\*Warning/i.test(line)
+
+    if (isDisclosure) {
+      // Extract any path-like strings from the disclosure line
+      for (const sp of SENSITIVE_PATHS) {
+        if (sp.pattern.test(line)) {
+          disclosed.add(sp.name)
+        }
+      }
+    }
+  }
+
+  return disclosed
+}
 
 export async function collectContentSafety(
   skillSlug: string,
@@ -96,11 +140,26 @@ export async function collectContentSafety(
     }
   }
 
-  // Check for sensitive file paths
-  for (const pattern of SENSITIVE_PATHS) {
+  // Check for agent config tampering (SOUL.md, MEMORY.md, AGENTS.md)
+  for (const pattern of CONFIG_TAMPER_PATTERNS) {
     if (pattern.test(content)) {
-      score -= 1.0
-      findings.push(`sensitive_path: ${pattern.source.slice(0, 30)}`)
+      score -= 2.0
+      findings.push(`config_tamper: ${pattern.source}`)
+      break
+    }
+  }
+
+  // Check for sensitive file paths — with self-disclosure handling
+  const disclosedPaths = extractDisclosedPaths(content)
+  for (const sp of SENSITIVE_PATHS) {
+    if (sp.pattern.test(content)) {
+      if (disclosedPaths.has(sp.name)) {
+        // Self-disclosed — skip penalty, note it
+        findings.push(`sensitive_path_disclosed: ${sp.name}`)
+      } else {
+        score -= 1.0
+        findings.push(`sensitive_path_undisclosed: ${sp.name}`)
+      }
       break
     }
   }
@@ -124,7 +183,8 @@ export async function collectContentSafety(
     metadata: {
       findings,
       contentLength: content.length,
-      findingsCount: findings.length,
+      findingsCount: findings.filter(f => !f.includes('_disclosed')).length,
+      hasDisclosures: disclosedPaths.size > 0,
     },
     sources: [`github:openclaw/skills/${ownerHandle}/${skillSlug}`],
   }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { Service } from '@/data/services'
-import { SIGNAL_LABELS, TAG_CLASSES, TAG_COLORS } from '@/lib/utils'
+import { SIGNAL_LABELS, SKILL_SIGNAL_LABELS, SKILL_DATA_SOURCES, TAG_CLASSES, TAG_COLORS } from '@/lib/utils'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import RatingBoxes from '@/components/RatingBoxes'
@@ -78,6 +78,7 @@ const HERO_TAGS: Record<string, string[]> = {
   embedding: ['embedding', 'semantic-search', 'clustering'],
   vision: ['vision', 'image-understanding', 'OCR'],
   infra: ['infra', 'serverless', 'GPU'],
+  skill: ['skill', 'openclaw', 'agent-skill'],
 }
 
 const DATA_SOURCES = [
@@ -366,7 +367,7 @@ export default function ProductPageClient({
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">6 signals · weighted composite</span>
           </div>
           <div className="flex flex-col gap-3.5">
-            {SIGNAL_LABELS.map((signal, i) => (
+            {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => (
               <SignalRow
                 key={signal.name}
                 name={signal.name}
@@ -760,10 +761,10 @@ export default function ProductPageClient({
           <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{DATA_SOURCES.length} indexed</span>
+              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{(service.category === 'skill' ? SKILL_DATA_SOURCES : DATA_SOURCES).length} indexed</span>
             </div>
             <div className="flex flex-col gap-2.5">
-              {DATA_SOURCES.map(src => (
+              {(service.category === 'skill' ? SKILL_DATA_SOURCES : DATA_SOURCES).map(src => (
                 <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
                   <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
                   <div className="flex flex-col gap-px">

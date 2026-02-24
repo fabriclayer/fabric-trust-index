@@ -2,39 +2,39 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { DbService } from '@/lib/supabase/types'
 import { getStatus } from '@/lib/scoring/thresholds'
 import { getClawHubSkill, fetchSkillMd } from './api'
+import { collectVirusTotalScan } from './virustotal'
 import { collectContentSafety } from './content-safety'
 import { collectPublisherReputation } from './publisher'
 import { collectAdoption } from './adoption'
 import { collectFreshness } from './freshness'
 import { collectTransparency } from './transparency'
-import { collectSecurityScan } from './security-scan'
 
 const CLAWHUB_WEIGHTS = {
-  content_safety: 0.30,
+  virustotal_scan: 0.30,
+  content_safety: 0.25,
   publisher_reputation: 0.15,
-  adoption: 0.15,
-  freshness: 0.15,
-  transparency: 0.15,
-  security_scan: 0.10,
+  adoption: 0.10,
+  freshness: 0.10,
+  transparency: 0.10,
 } as const
 
 const CLAWHUB_SIGNAL_ORDER = [
+  'virustotal_scan',
   'content_safety',
   'publisher_reputation',
   'adoption',
   'freshness',
   'transparency',
-  'security_scan',
 ] as const
 
-// Map ClawHub signals to the 6 DB columns (vulnerability, operational, maintenance, adoption, transparency, publisher_trust)
+// Map ClawHub signals to the 6 DB columns
 const SIGNAL_TO_COLUMN: Record<string, string> = {
-  content_safety: 'signal_vulnerability',
+  virustotal_scan: 'signal_vulnerability',
+  content_safety: 'signal_operational',
   publisher_reputation: 'signal_publisher_trust',
   adoption: 'signal_adoption',
   freshness: 'signal_maintenance',
   transparency: 'signal_transparency',
-  security_scan: 'signal_operational',
 }
 
 function computeClawHubComposite(signals: Record<string, number>): number {
@@ -67,7 +67,26 @@ export async function runClawHubScoring(service: DbService): Promise<{
   const signals: Record<string, number> = {}
   const updates: Record<string, unknown> = {}
 
-  // Content Safety (async - fetches SKILL.md if not already fetched)
+  // VirusTotal Scan (PRIMARY — weight 0.30)
+  try {
+    const result = await collectVirusTotalScan(apiData)
+    signals.virustotal_scan = result.score
+    updates[SIGNAL_TO_COLUMN.virustotal_scan] = result.score
+    success.push('virustotal_scan')
+
+    await supabase.from('signal_history').insert({
+      service_id: service.id,
+      signal_name: 'virustotal_scan',
+      score: result.score,
+      metadata: result.metadata,
+    })
+  } catch (err) {
+    failed.push('virustotal_scan')
+    signals.virustotal_scan = 2.5
+    console.error(`virustotal_scan failed for ${service.name}:`, err)
+  }
+
+  // Content Safety (weight 0.25)
   try {
     const result = await collectContentSafety(service.slug, ownerHandle)
     signals.content_safety = result.score
@@ -86,7 +105,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
     console.error(`content_safety failed for ${service.name}:`, err)
   }
 
-  // Publisher Reputation (async - GitHub API)
+  // Publisher Reputation (weight 0.15)
   try {
     const result = await collectPublisherReputation(ownerHandle)
     signals.publisher_reputation = result.score
@@ -105,7 +124,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
     console.error(`publisher_reputation failed for ${service.name}:`, err)
   }
 
-  // Adoption (sync - uses API data)
+  // Adoption (weight 0.10)
   try {
     const result = collectAdoption(apiData)
     signals.adoption = result.score
@@ -124,7 +143,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
     console.error(`adoption failed for ${service.name}:`, err)
   }
 
-  // Freshness (sync - uses API data)
+  // Freshness (weight 0.10)
   try {
     const result = collectFreshness(apiData)
     signals.freshness = result.score
@@ -143,7 +162,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
     console.error(`freshness failed for ${service.name}:`, err)
   }
 
-  // Transparency (sync - uses API data + SKILL.md)
+  // Transparency (weight 0.10)
   try {
     const result = collectTransparency(apiData, skillContent)
     signals.transparency = result.score
@@ -162,31 +181,18 @@ export async function runClawHubScoring(service: DbService): Promise<{
     console.error(`transparency failed for ${service.name}:`, err)
   }
 
-  // Security Scan (sync - uses API data + content-safety score)
-  try {
-    const result = collectSecurityScan(apiData, signals.content_safety)
-    signals.security_scan = result.score
-    updates[SIGNAL_TO_COLUMN.security_scan] = result.score
-    success.push('security_scan')
-
-    await supabase.from('signal_history').insert({
-      service_id: service.id,
-      signal_name: 'security_scan',
-      score: result.score,
-      metadata: result.metadata,
-    })
-  } catch (err) {
-    failed.push('security_scan')
-    signals.security_scan = 2.5
-    console.error(`security_scan failed for ${service.name}:`, err)
-  }
-
   // 4. Compute composite
   const compositeScore = computeClawHubComposite(signals)
   const oldComposite = service.composite_score
   const modifiers: string[] = []
 
   let status = getStatus(compositeScore)
+
+  // Hard override: virustotal_scan ≤ 1.0 → blocked
+  if (signals.virustotal_scan <= 1.0) {
+    status = 'blocked'
+    modifiers.push('vt_scan_override')
+  }
 
   // Hard override: content_safety ≤ 1.0 → blocked
   if (signals.content_safety <= 1.0) {
@@ -195,8 +201,13 @@ export async function runClawHubScoring(service: DbService): Promise<{
   }
 
   let finalScore = compositeScore
-  if (modifiers.includes('content_safety_override')) {
+  if (modifiers.includes('vt_scan_override') || modifiers.includes('content_safety_override')) {
     finalScore = Math.min(finalScore, 0.99)
+  }
+
+  // Store owner handle for publisher link on product page
+  if (ownerHandle) {
+    updates.publisher_id = await ensureClawHubPublisher(ownerHandle, apiData?.owner?.displayName ?? ownerHandle)
   }
 
   updates.raw_composite_score = compositeScore
@@ -219,6 +230,35 @@ export async function runClawHubScoring(service: DbService): Promise<{
   await detectClawHubIncidents(service, oldComposite, finalScore, signals)
 
   return { success, failed }
+}
+
+/** Ensure a ClawHub publisher record exists, return publisher_id */
+async function ensureClawHubPublisher(handle: string, displayName: string): Promise<string> {
+  const supabase = createServerClient()
+  const slug = handle.toLowerCase()
+
+  // Try to find existing publisher
+  const { data: existing } = await supabase
+    .from('publishers')
+    .select('id')
+    .eq('slug', slug)
+    .single()
+
+  if (existing) return existing.id
+
+  // Create new publisher
+  const { data: created } = await supabase
+    .from('publishers')
+    .insert({
+      name: displayName,
+      slug,
+      website_url: `https://clawhub.ai/${handle}`,
+      github_org: handle,
+    })
+    .select('id')
+    .single()
+
+  return created?.id ?? ''
 }
 
 async function detectClawHubIncidents(
@@ -264,14 +304,26 @@ async function detectClawHubIncidents(
     })
   }
 
-  // Content safety issues detected
+  // VT malware detection
+  if (signals.virustotal_scan <= 1.0) {
+    await supabase.from('incidents').insert({
+      service_id: service.id,
+      type: 'cve_found',
+      severity: 'critical',
+      title: 'VirusTotal malware detection',
+      description: 'Skill flagged by VirusTotal or ClawHub moderation — malware blocked or multiple malicious detections',
+      score_at_time: newComposite,
+    })
+  }
+
+  // Content safety issues
   if (signals.content_safety <= 1.0) {
     await supabase.from('incidents').insert({
       service_id: service.id,
-      type: 'cve_found', // reuse existing type for security issues
+      type: 'cve_found',
       severity: 'critical',
       title: 'Content safety issues detected',
-      description: 'SKILL.md contains suspicious patterns (potential secrets, dangerous commands, or credential leaks)',
+      description: 'SKILL.md contains suspicious patterns (potential secrets, dangerous commands, credential leaks, or config tampering)',
       score_at_time: newComposite,
     })
   }

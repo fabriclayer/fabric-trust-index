@@ -21,6 +21,7 @@ export async function collectPublisherReputation(
     type: string
     bio: string | null
     blog: string | null
+    followers: number
   } | null = null
 
   try {
@@ -74,8 +75,14 @@ export async function collectPublisherReputation(
     details.hasProfile = true
   }
 
-  // Scale raw (max ~3.75) to 0-5
-  const scaled = (rawScore / 3.75) * 5
+  // Followers
+  if (ghUser.followers > 50) {
+    rawScore += 0.5
+    details.highFollowers = true
+  }
+
+  // Scale raw (max ~4.25) to 0-5
+  const scaled = (rawScore / 4.25) * 5
 
   return {
     signal_name: 'publisher_reputation',

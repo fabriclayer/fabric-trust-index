@@ -77,7 +77,7 @@ export const TAG_COLORS: Record<string, { text: string; border: string; bg: stri
   'tag-skill': { text: '#059669', border: '#059669', bg: 'rgba(5,150,105,0.08)' },
 }
 
-// Signal labels for the product page
+// Signal labels for the product page (packages: npm, PyPI, HTTP endpoints)
 export const SIGNAL_LABELS = [
   { name: 'Vulnerability & Safety', weight: '×0.25', detail: 'Zero known CVEs across full dependency tree. No malware signatures detected. Clean install scripts. No typosquatting indicators. All dependencies scanned recursively.' },
   { name: 'Operational Health', weight: '×0.15', detail: 'Fabric Monitor active — 99.95% uptime over rolling 30d. Sub-200ms p50 latency. Consistent behavioral responses across identical checks. 15-minute ping cycle.' },
@@ -85,4 +85,22 @@ export const SIGNAL_LABELS = [
   { name: 'Adoption', weight: '×0.15', detail: 'Top-tier download volume normalised against category peers. Strong growth velocity. High unique caller count. Logarithmic scale — raw numbers weighted against ecosystem averages.' },
   { name: 'Transparency', weight: '×0.15', detail: 'Published model card and system card. SECURITY.md present. API documentation with input/output schemas. Research papers linked. Closed-weight model limits full source visibility.' },
   { name: 'Publisher Trust', weight: '×0.10', detail: 'Verified organisation account. Consistent identity across npm, PyPI, and GitHub. Multiple maintained packages. Clean track record with no prior security incidents. Domain-verified.' },
+]
+
+// Signal labels for skill category (ClawHub/OpenClaw skills)
+export const SKILL_SIGNAL_LABELS = [
+  { name: 'VirusTotal Scan', weight: '×0.30', detail: 'ClawHub submits every skill to VirusTotal on publish. Scanned by 70+ security vendors for malware, trojans, and suspicious patterns. Clean scan with zero detections scores highest.' },
+  { name: 'Content Safety', weight: '×0.25', detail: 'Static analysis of SKILL.md for hardcoded secrets, suspicious shell commands, credential exfiltration, agent config tampering (SOUL.md/MEMORY.md), and sensitive path access. Self-disclosed operations are not penalized.' },
+  { name: 'Publisher Reputation', weight: '×0.15', detail: 'GitHub account age, public repositories, organisation status, profile completeness, and follower count. Newer accounts with minimal history score lower.' },
+  { name: 'Adoption', weight: '×0.10', detail: 'ClawHub install count and star ratings. Logarithmic scale — widely used skills with community endorsement score higher.' },
+  { name: 'Freshness', weight: '×0.10', detail: 'Last update recency, version count, and changelog presence. Actively maintained skills with regular updates score higher.' },
+  { name: 'Transparency', weight: '×0.10', detail: 'Metadata completeness — description quality, tag declarations, usage instructions, environment variable disclosure, dependency declarations, and version iteration.' },
+]
+
+// Data sources for skill category (displayed on product page)
+export const SKILL_DATA_SOURCES = [
+  { icon: '◎', label: 'VirusTotal', meta: 'Malware scanning by 70+ security vendors' },
+  { icon: '◈', label: 'ClawHub Registry', meta: 'Install counts, stars, version history, moderation status' },
+  { icon: '◈', label: 'GitHub API', meta: 'Publisher account age, activity, reputation' },
+  { icon: '△', label: 'SKILL.md Analysis', meta: 'Static content analysis for credential leaks, malicious patterns' },
 ]
