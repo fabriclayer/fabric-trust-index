@@ -39,9 +39,14 @@ async function processSource(
   const totalCandidates = candidates.length
 
   // Dedup against existing DB + already-seen in this run
-  const toAdd: typeof candidates = []
+  // Use github_repo (owner/repo) for slug to avoid collisions (many repos named "mcp")
+  const toAdd: Array<typeof candidates[number] & { slug: string }> = []
   for (const c of candidates) {
-    const slug = toSlug(c.name)
+    // Try short slug first (repo name), fall back to owner-repo if collision
+    let slug = toSlug(c.name)
+    if (existingSlugs.has(slug) || toAdd.some(a => a.slug === slug)) {
+      slug = toSlug(c.githubRepo) // e.g. "owner-repo-name"
+    }
     if (
       existingSlugs.has(slug) ||
       existingGithubRepos.has(c.githubRepo) ||
@@ -49,7 +54,7 @@ async function processSource(
     ) {
       continue
     }
-    toAdd.push(c)
+    toAdd.push({ ...c, slug })
   }
 
   const totalAfterDedup = toAdd.length
@@ -65,7 +70,7 @@ async function processSource(
   const errors: string[] = []
 
   for (const c of batch) {
-    const slug = toSlug(c.name)
+    const slug = c.slug
     const keywords = ['mcp', 'mcp-server', 'model-context-protocol']
 
     let classifyWords = keywords

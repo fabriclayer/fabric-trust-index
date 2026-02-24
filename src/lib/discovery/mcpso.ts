@@ -9,9 +9,9 @@ export interface McpSoCandidate {
 const README_URL =
   'https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md'
 
-// Match: - [Name](https://github.com/owner/repo) ...optional icons/text... - Description
+// Match: - [Name](https://github.com/owner/repo...) ...optional icons/text... - Description
 const ENTRY_RE =
-  /^\s*-\s*\[([^\]]+)\]\((https:\/\/github\.com\/([^/]+)\/([^/)]+))\)\s*(.*)$/
+  /^\s*-\s*\[([^\]]+)\]\((https:\/\/github\.com\/([^/]+)\/([^/?#)]+)[^)]*)\)\s*(.*)$/
 
 // Strip common emoji icons used in the list
 const ICON_RE = /[📇🐍🏎️🦀#️⃣☕☁️🏠📟🍎🪟🐧🎖️]/gu
