@@ -11,7 +11,7 @@ import { discoverGitHubRepos, type GitHubCandidate } from './github'
 // Order matters: framework must come before llm to prevent over-matching
 const CATEGORY_KEYWORDS: [string, string[]][] = [
   ['framework', ['framework', 'langchain', 'llamaindex', 'haystack', 'semantic-kernel', 'toolkit', 'orchestration']],
-  ['agent', ['agent', 'multi-agent', 'autonomous', 'crewai', 'autogen', 'mcp']],
+  ['agent', ['agent', 'multi-agent', 'autonomous', 'crewai', 'autogen', 'mcp', 'mcp-server', 'mcp-tool']],
   ['llm', ['llm', 'large-language-model', 'gpt', 'chatbot', 'chat', 'language-model']],
   ['embedding', ['embedding', 'embeddings', 'vector', 'semantic-search']],
   ['code', ['code-generation', 'copilot', 'code-assistant', 'ide']],
@@ -61,7 +61,7 @@ export function classifyCategory(keywords: string[], packageName?: string): stri
   return 'infra' // default fallback
 }
 
-function toSlug(name: string): string {
+export function toSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
@@ -301,7 +301,7 @@ export async function runBatchDiscovery(
   return { discovered, added, skipped, failed, offset, errors, existingSlugsCount, sampleSkipped }
 }
 
-async function addDiscoveredService(params: {
+export async function addDiscoveredService(params: {
   name: string
   slug: string
   publisher: string
