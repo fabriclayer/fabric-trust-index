@@ -11,10 +11,9 @@ export interface SmitheryCandidate {
 export interface SmitheryDebug {
   apiKeySet: boolean
   apiKeyPrefix: string | null
-  headersSent: string[]
-  page1Pagination: { totalCount: number; totalPages: number; pageSize: number } | null
-  pagesProcessed: number
-  error: string | null
+  queriesRun: number
+  totalApiCalls: number
+  candidatesFound: number
 }
 
 interface SmitheryServer {
@@ -42,6 +41,69 @@ interface SmitheryResponse {
 const PAGE_SIZE = 100
 const DELAY_MS = 200
 
+// Smithery API caps results per search query at ~100-200.
+// Use many queries to cover the full catalog, dedup by qualifiedName.
+const SEARCH_QUERIES = [
+  // Single letters
+  ...'abcdefghijklmnopqrstuvwxyz'.split(''),
+  // Digits
+  ...'0123456789'.split(''),
+  // Common keywords for broader coverage
+  'mcp', 'server', 'api', 'tool', 'database', 'file', 'search',
+  'agent', 'ai', 'cloud', 'docker', 'git', 'slack', 'google',
+  'aws', 'azure', 'notion', 'postgres', 'redis', 'mongo',
+  'browser', 'web', 'http', 'email', 'auth', 'code',
+]
+
+async function fetchAllPages(
+  query: string,
+  headers: Record<string, string>,
+  seen: Set<string>,
+): Promise<SmitheryCandidate[]> {
+  const candidates: SmitheryCandidate[] = []
+  let page = 1
+  let totalPages = 1
+
+  while (page <= totalPages) {
+    const res = await fetch(
+      `https://registry.smithery.ai/servers?pageSize=${PAGE_SIZE}&page=${page}&q=${encodeURIComponent(query)}`,
+      { headers },
+    )
+    if (!res.ok) break
+
+    const data: SmitheryResponse = await res.json()
+    totalPages = data.pagination.totalPages
+
+    if (data.servers.length === 0) break
+
+    for (const server of data.servers) {
+      const qn = server.qualifiedName
+      if (!qn || seen.has(qn)) continue
+      seen.add(qn)
+
+      const parts = qn.split('/')
+      if (parts.length < 2) continue
+
+      candidates.push({
+        name: server.displayName || parts[parts.length - 1],
+        description: server.description || '',
+        publisher: parts[0],
+        githubRepo: qn,
+        useCount: server.useCount ?? 0,
+        homepage: server.homepage || `https://smithery.ai/server/${qn}`,
+        createdAt: server.createdAt,
+      })
+    }
+
+    page++
+    if (page <= totalPages) {
+      await new Promise(r => setTimeout(r, DELAY_MS))
+    }
+  }
+
+  return candidates
+}
+
 export async function discoverSmitheryServers(): Promise<{
   candidates: SmitheryCandidate[]
   debug: SmitheryDebug
@@ -52,87 +114,37 @@ export async function discoverSmitheryServers(): Promise<{
   }
 
   const apiKey = process.env.SMITHERY_API_KEY
-  const debug: SmitheryDebug = {
-    apiKeySet: !!apiKey,
-    apiKeyPrefix: apiKey ? apiKey.slice(0, 8) + '...' : null,
-    headersSent: [],
-    page1Pagination: null,
-    pagesProcessed: 0,
-    error: null,
-  }
-
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`
   } else {
     console.warn('SMITHERY_API_KEY not set — proceeding without auth')
   }
 
-  debug.headersSent = Object.keys(headers)
-
-  const candidates: SmitheryCandidate[] = []
   const seen = new Set<string>()
-  let page = 1
-  let totalPages = 1
+  const allCandidates: SmitheryCandidate[] = []
+  let totalApiCalls = 0
 
-  while (page <= totalPages) {
+  for (const query of SEARCH_QUERIES) {
     try {
-      const url = `https://registry.smithery.ai/servers?pageSize=${PAGE_SIZE}&page=${page}&q=`
-      const res = await fetch(url, { headers })
-      if (!res.ok) {
-        debug.error = `HTTP ${res.status} on page ${page}`
-        console.error(`Smithery API error on page ${page}: ${res.status}`)
-        break
-      }
-
-      const data: SmitheryResponse = await res.json()
-      totalPages = data.pagination.totalPages
-      debug.pagesProcessed = page
-
-      if (page === 1) {
-        debug.page1Pagination = {
-          totalCount: data.pagination.totalCount,
-          totalPages: data.pagination.totalPages,
-          pageSize: data.pagination.pageSize,
-        }
-      }
-
-      console.log(`Smithery page ${page}/${totalPages}: ${data.servers.length} servers`)
-
-      if (data.servers.length === 0) break
-
-      for (const server of data.servers) {
-        const qn = server.qualifiedName
-        if (!qn || seen.has(qn)) continue
-        seen.add(qn)
-
-        const parts = qn.split('/')
-        if (parts.length < 2) continue
-
-        const publisher = parts[0]
-        const githubRepo = qn
-
-        candidates.push({
-          name: server.displayName || parts[parts.length - 1],
-          description: server.description || '',
-          publisher,
-          githubRepo,
-          useCount: server.useCount ?? 0,
-          homepage: server.homepage || `https://smithery.ai/server/${qn}`,
-          createdAt: server.createdAt,
-        })
-      }
+      const batch = await fetchAllPages(query, headers, seen)
+      allCandidates.push(...batch)
+      totalApiCalls++
     } catch (err) {
-      debug.error = err instanceof Error ? err.message : 'unknown fetch error'
-      console.error(`Smithery fetch failed on page ${page}:`, err)
-      break
+      console.error(`Smithery query "${query}" failed:`, err)
     }
-
-    page++
-    if (page <= totalPages) {
-      await new Promise(r => setTimeout(r, DELAY_MS))
-    }
+    await new Promise(r => setTimeout(r, DELAY_MS))
   }
 
-  console.log(`Smithery discovery complete: ${candidates.length} total candidates`)
-  return { candidates, debug }
+  console.log(`Smithery discovery complete: ${allCandidates.length} unique candidates from ${SEARCH_QUERIES.length} queries`)
+
+  return {
+    candidates: allCandidates,
+    debug: {
+      apiKeySet: !!apiKey,
+      apiKeyPrefix: apiKey ? apiKey.slice(0, 8) + '...' : null,
+      queriesRun: SEARCH_QUERIES.length,
+      totalApiCalls,
+      candidatesFound: allCandidates.length,
+    },
+  }
 }
