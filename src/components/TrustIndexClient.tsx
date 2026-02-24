@@ -57,15 +57,16 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
-  const [alertsSeenAt, setAlertsSeenAt] = useState<string | null>(null)
+  // undefined = not yet loaded from localStorage, null = no stored value, string = timestamp
+  const [alertsSeenAt, setAlertsSeenAt] = useState<string | null | undefined>(undefined)
 
   // Restore last-seen timestamp from localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('fabric-alerts-seen-at')
-    if (stored) setAlertsSeenAt(stored)
+    setAlertsSeenAt(localStorage.getItem('fabric-alerts-seen-at'))
   }, [])
 
   const criticalCount = useMemo(() => {
+    if (alertsSeenAt === undefined) return 0 // suppress badge until localStorage checked
     if (!alertsSeenAt) return incidents.filter(i => i.severity === 'critical').length
     return incidents.filter(i => i.severity === 'critical' && i.created_at > alertsSeenAt).length
   }, [incidents, alertsSeenAt])
