@@ -52,4 +52,4 @@ Push to GitHub and connect to Vercel. Set the custom domain to `trust.fabriclaye
 
 ## License
 
-MIT — Fabric Layer Technologies LTD.
+AGPL-3.0 — Fabric Layer Technologies LTD.
