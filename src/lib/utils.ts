@@ -42,6 +42,7 @@ export const CATEGORIES: Record<string, string> = {
   'vision': 'Vision',
   'infra': 'Infra',
   'framework': 'Frameworks',
+  'skill': 'Skills',
 }
 
 // Tag class mapping
@@ -57,6 +58,7 @@ export const TAG_CLASSES: Record<string, string> = {
   'vision': 'tag-vision',
   'infra': 'tag-infra',
   'framework': 'tag-frame',
+  'skill': 'tag-skill',
 }
 
 // Category colors for tag highlighting
@@ -72,6 +74,7 @@ export const TAG_COLORS: Record<string, { text: string; border: string; bg: stri
   'tag-speech': { text: '#14b8a6', border: '#14b8a6', bg: 'rgba(20,184,166,0.08)' },
   'tag-vision': { text: '#e82d35', border: '#e82d35', bg: 'rgba(232,45,53,0.08)' },
   'tag-frame': { text: '#7c3aed', border: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
+  'tag-skill': { text: '#059669', border: '#059669', bg: 'rgba(5,150,105,0.08)' },
 }
 
 // Signal labels for the product page

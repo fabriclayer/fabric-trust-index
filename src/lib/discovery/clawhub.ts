@@ -8,26 +8,9 @@ export interface ClawHubCandidate {
 const README_URL =
   'https://raw.githubusercontent.com/VoltAgent/awesome-openclaw-skills/main/README.md'
 
-// Map ClawHub section headers to Trust Index categories
-function mapClawHubCategory(section: string): string {
-  const mapping: [string, string[]][] = [
-    ['agent', ['developer', 'dev tools', 'automation', 'workflow', 'general', 'utilities', 'productivity']],
-    ['code', ['coding', 'code', 'git', 'github', 'ide', 'programming']],
-    ['data-api', ['data', 'database', 'api', 'analytics', 'research', 'finance', 'cloud']],
-    ['speech', ['audio', 'music', 'voice', 'speech', 'sound']],
-    ['image-generation', ['image', 'design', 'media', 'creative', 'art', 'video']],
-    ['web-search', ['browser', 'web', 'search', 'scraping']],
-    ['infra', ['infrastructure', 'system', 'server', 'docker', 'deployment', 'networking', 'security', 'sysadmin', 'devops', 'smart home', 'iot']],
-    ['llm', ['ai', 'model', 'llm', 'machine learning', 'ml']],
-  ]
-
-  const lower = section.toLowerCase()
-  for (const [category, keywords] of mapping) {
-    if (keywords.some(kw => lower.includes(kw))) {
-      return category
-    }
-  }
-  return 'agent' // default — most ClawHub skills are agent tools
+// All ClawHub skills use the 'skill' category
+function mapClawHubCategory(_section: string): string {
+  return 'skill'
 }
 
 export async function discoverClawHubSkills(): Promise<ClawHubCandidate[]> {
