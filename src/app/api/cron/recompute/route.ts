@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServerClient()
 
-  // Fetch services
-  let query = supabase.from('services').select('*')
+  // Fetch services (exclude ClawHub skills — scored by separate pipeline)
+  let query = supabase.from('services').select('*').neq('discovered_from', 'clawhub')
   if (ids && ids.length > 0) {
     query = query.in('id', ids)
   }

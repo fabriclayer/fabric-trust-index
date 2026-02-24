@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const { data: services } = await supabase
       .from('services')
       .select('*')
+      .neq('discovered_from', 'clawhub')
       .order('composite_score', { ascending: false })
 
     if (!services) {

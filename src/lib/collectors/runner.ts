@@ -510,6 +510,7 @@ export async function runAllCollectorsForAllServices(): Promise<{
   const { data: services } = await supabase
     .from('services')
     .select('*')
+    .neq('discovered_from', 'clawhub')
     .order('composite_score', { ascending: false })
 
   if (!services) return { total: 0, succeeded: 0, failed: 0 }

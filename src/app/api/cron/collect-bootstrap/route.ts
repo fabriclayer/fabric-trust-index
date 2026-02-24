@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('services')
     .select('*', { count: 'exact' })
+    .neq('discovered_from', 'clawhub')
     .order('name', { ascending: true })
     .range(offset, offset + batch - 1)
   if (statusFilter) query = query.eq('status', statusFilter)
