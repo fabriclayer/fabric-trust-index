@@ -63,6 +63,9 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
 
       const data: SmitheryResponse = await res.json()
       totalPages = data.pagination.totalPages
+      console.log(`Smithery page ${page}/${totalPages}: ${data.servers.length} servers`)
+
+      if (data.servers.length === 0) break
 
       for (const server of data.servers) {
         const qn = server.qualifiedName
@@ -96,5 +99,6 @@ export async function discoverSmitheryServers(): Promise<SmitheryCandidate[]> {
     }
   }
 
+  console.log(`Smithery discovery complete: ${candidates.length} total candidates`)
   return candidates
 }

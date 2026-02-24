@@ -11,18 +11,123 @@ import {
 
 export const maxDuration = 300
 
+const DEFAULT_LIMIT = 200
+
+interface SourceResult {
+  source: string
+  totalCandidates: number
+  totalAfterDedup: number
+  offset: number
+  limit: number
+  processed: number
+  added: number
+  skipped: number
+  hasMore: boolean
+  nextOffset: number | null
+  errors: string[]
+}
+
+async function processSource(
+  sourceName: string,
+  candidates: Array<{ name: string; description: string; publisher: string; githubRepo: string; homepage: string }>,
+  existingSlugs: Set<string>,
+  existingGithubRepos: Set<string>,
+  seenGithubRepos: Set<string>,
+  offset: number,
+  limit: number,
+): Promise<SourceResult> {
+  const totalCandidates = candidates.length
+
+  // Dedup against existing DB + already-seen in this run
+  const toAdd: typeof candidates = []
+  for (const c of candidates) {
+    const slug = toSlug(c.name)
+    if (
+      existingSlugs.has(slug) ||
+      existingGithubRepos.has(c.githubRepo) ||
+      seenGithubRepos.has(c.githubRepo)
+    ) {
+      continue
+    }
+    toAdd.push(c)
+  }
+
+  const totalAfterDedup = toAdd.length
+  const batch = toAdd.slice(offset, offset + limit)
+  const hasMore = offset + limit < totalAfterDedup
+
+  console.log(
+    `Processing ${sourceName} batch: offset=${offset}, limit=${limit}, candidates=${totalAfterDedup}, batch=${batch.length}`,
+  )
+
+  let added = 0
+  let skipped = 0
+  const errors: string[] = []
+
+  for (const c of batch) {
+    const slug = toSlug(c.name)
+    const keywords = ['mcp', 'mcp-server', 'model-context-protocol']
+
+    let classifyWords = keywords
+    if (sourceName === 'mcpso' && c.description) {
+      const descWords = c.description.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+      classifyWords = [...keywords, ...descWords]
+    }
+
+    const category = classifyCategory(classifyWords, slug)
+
+    const result = await addDiscoveredService({
+      name: c.name,
+      slug,
+      publisher: c.publisher,
+      description: c.description,
+      category: category === 'infra' ? 'agent' : category,
+      github_repo: c.githubRepo,
+      source: sourceName,
+      capabilities: deriveCapabilities(keywords),
+      tags: keywords,
+      homepage_url: c.homepage,
+    })
+
+    if (result === true) {
+      added++
+      existingSlugs.add(slug)
+      seenGithubRepos.add(c.githubRepo)
+    } else {
+      skipped++
+      if (errors.length < 10) errors.push(`${sourceName}/${c.githubRepo}: ${result}`)
+    }
+  }
+
+  return {
+    source: sourceName,
+    totalCandidates,
+    totalAfterDedup,
+    offset,
+    limit,
+    processed: batch.length,
+    added,
+    skipped,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+    errors,
+  }
+}
+
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const source = request.nextUrl.searchParams.get('source') // 'smithery' | 'mcpso' | null (both)
+  const source = request.nextUrl.searchParams.get('source')
+  const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10)
+  const limit = parseInt(request.nextUrl.searchParams.get('limit') ?? String(DEFAULT_LIMIT), 10)
 
   try {
     const supabase = createServerClient()
 
-    // Fetch existing slugs for dedup
+    // Fetch existing slugs + github_repos for dedup
     const { data: existingServices } = await supabase
       .from('services')
       .select('slug, github_repo')
@@ -34,125 +139,44 @@ export async function GET(request: NextRequest) {
         .filter((r): r is string => !!r) ?? [],
     )
 
-    // Track github repos seen in this run for cross-source dedup
     const seenGithubRepos = new Set<string>()
-
-    let totalDiscovered = 0
-    let totalAdded = 0
-    let totalSkipped = 0
-    let totalFailed = 0
-    const errors: string[] = []
-    const sourcesRun: string[] = []
+    const results: SourceResult[] = []
 
     // --- Smithery ---
     if (!source || source === 'smithery') {
-      sourcesRun.push('smithery')
       const candidates = await discoverSmitheryServers()
-
-      for (const c of candidates) {
-        totalDiscovered++
-        const slug = toSlug(c.name)
-
-        if (
-          existingSlugs.has(slug) ||
-          existingGithubRepos.has(c.githubRepo) ||
-          seenGithubRepos.has(c.githubRepo)
-        ) {
-          totalSkipped++
-          continue
-        }
-
-        const keywords = ['mcp', 'mcp-server', 'model-context-protocol']
-        const category = classifyCategory(keywords, slug)
-
-        const result = await addDiscoveredService({
-          name: c.name,
-          slug,
-          publisher: c.publisher,
-          description: c.description,
-          category: category === 'infra' ? 'agent' : category, // default MCP to agent
-          github_repo: c.githubRepo,
-          source: 'smithery',
-          capabilities: deriveCapabilities(keywords),
-          tags: keywords,
-          homepage_url: c.homepage,
-        })
-
-        if (result === true) {
-          totalAdded++
-          existingSlugs.add(slug)
-          seenGithubRepos.add(c.githubRepo)
-        } else {
-          totalFailed++
-          if (errors.length < 10) errors.push(`smithery/${c.githubRepo}: ${result}`)
-        }
-
-        // Small delay to avoid overwhelming DB
-        if (totalAdded % 50 === 0) {
-          await new Promise(r => setTimeout(r, 100))
-        }
-      }
+      const result = await processSource(
+        'smithery', candidates, existingSlugs, existingGithubRepos, seenGithubRepos, offset, limit,
+      )
+      results.push(result)
     }
 
     // --- awesome-mcp-servers ---
     if (!source || source === 'mcpso') {
-      sourcesRun.push('mcpso')
       const candidates = await discoverMcpSoServers()
+      const result = await processSource(
+        'mcpso', candidates, existingSlugs, existingGithubRepos, seenGithubRepos, offset, limit,
+      )
+      results.push(result)
+    }
 
-      for (const c of candidates) {
-        totalDiscovered++
-        const slug = toSlug(c.name)
-
-        if (
-          existingSlugs.has(slug) ||
-          existingGithubRepos.has(c.githubRepo) ||
-          seenGithubRepos.has(c.githubRepo)
-        ) {
-          totalSkipped++
-          continue
-        }
-
-        const keywords = ['mcp', 'mcp-server', 'model-context-protocol']
-        const descWords = c.description.toLowerCase().split(/\s+/)
-        const allKeywords = [...keywords, ...descWords.filter(w => w.length > 3)]
-        const category = classifyCategory(allKeywords, slug)
-
-        const result = await addDiscoveredService({
-          name: c.name,
-          slug,
-          publisher: c.publisher,
-          description: c.description,
-          category: category === 'infra' ? 'agent' : category,
-          github_repo: c.githubRepo,
-          source: 'mcpso',
-          capabilities: deriveCapabilities(keywords),
-          tags: keywords,
-          homepage_url: c.homepage,
-        })
-
-        if (result === true) {
-          totalAdded++
-          existingSlugs.add(slug)
-          seenGithubRepos.add(c.githubRepo)
-        } else {
-          totalFailed++
-          if (errors.length < 10) errors.push(`mcpso/${c.githubRepo}: ${result}`)
-        }
-
-        if (totalAdded % 50 === 0) {
-          await new Promise(r => setTimeout(r, 100))
-        }
-      }
+    // Flatten for single-source requests, nest for multi-source
+    if (results.length === 1) {
+      const r = results[0]
+      return NextResponse.json({
+        ok: true,
+        ...r,
+        errors: r.errors.length > 0 ? r.errors : undefined,
+        timestamp: new Date().toISOString(),
+      })
     }
 
     return NextResponse.json({
       ok: true,
-      sources: sourcesRun,
-      discovered: totalDiscovered,
-      added: totalAdded,
-      skipped: totalSkipped,
-      failed: totalFailed,
-      errors: errors.length > 0 ? errors : undefined,
+      sources: results.map(r => ({
+        ...r,
+        errors: r.errors.length > 0 ? r.errors : undefined,
+      })),
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
