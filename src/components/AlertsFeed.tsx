@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 export interface Incident {
@@ -142,10 +142,9 @@ export default function AlertsFeed({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open, onClose])
 
-  const PAGE_SIZE = 20
+  const PAGE_SIZE = 50
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [severityFilter, setSeverityFilter] = useState<string | null>(null)
-  const sentinelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Reset display count and filter when sidebar opens
@@ -159,24 +158,6 @@ export default function AlertsFeed({
   const filtered = severityFilter
     ? incidents.filter(i => i.severity === severityFilter)
     : incidents
-
-  // Infinite scroll observer
-  const handleObserver = useCallback((entries: IntersectionObserverEntry[]) => {
-    if (entries[0].isIntersecting && displayCount < filtered.length) {
-      setDisplayCount(prev => Math.min(prev + PAGE_SIZE, filtered.length))
-    }
-  }, [displayCount, filtered.length])
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
-    const observer = new IntersectionObserver(handleObserver, {
-      root: scrollRef.current,
-      rootMargin: '100px',
-    })
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [handleObserver])
 
   const displayed = filtered.slice(0, displayCount)
   const hasMore = displayCount < filtered.length
@@ -320,11 +301,15 @@ export default function AlertsFeed({
               })}
             </div>
             {hasMore && (
-              <div className="text-center py-4 font-mono text-[0.62rem] text-fabric-400">
-                Loading more...
+              <div className="text-center py-4">
+                <button
+                  onClick={() => setDisplayCount(prev => Math.min(prev + PAGE_SIZE, filtered.length))}
+                  className="font-mono text-[0.62rem] text-fabric-500 hover:text-fabric-800 cursor-pointer transition-colors"
+                >
+                  Load more ({filtered.length - displayCount} remaining)
+                </button>
               </div>
             )}
-            <div ref={sentinelRef} className="h-px" />
             </>
           )}
         </div>
