@@ -61,7 +61,16 @@ export const transparencyCollector: Collector = {
       description?: string
     } | null
 
-    if (repoData && !repoData.private) {
+    if (!repoData) {
+      return {
+        signal_name: 'transparency',
+        score: 2.0,
+        metadata: { reason: 'repo_not_accessible', checklist: {} },
+        sources: [`github:${repo}`],
+      }
+    }
+
+    if (!repoData.private) {
       checklist.public_source = true
       score += pointsPerItem
     } else {

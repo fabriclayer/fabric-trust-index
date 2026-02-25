@@ -77,7 +77,16 @@ export const publisherTrustCollector: Collector = {
       public_repos?: number
     } | null
 
-    if (orgData?.created_at) {
+    if (!orgData) {
+      return {
+        signal_name: 'publisher_trust',
+        score: 2.5,
+        metadata: { reason: 'github_api_failed', github_org: ghOrg },
+        sources: [],
+      }
+    }
+
+    if (orgData.created_at) {
       const ageYears = (Date.now() - new Date(orgData.created_at).getTime()) / (365.25 * 86400000)
       metadata.account_age_years = Math.round(ageYears * 10) / 10
 

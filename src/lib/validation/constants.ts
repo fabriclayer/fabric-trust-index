@@ -13,6 +13,7 @@ export const FALLBACK_REASONS = new Set([
   'no_publisher_github',
   'osv_api_unavailable',
   'repo_not_accessible',
+  'github_api_failed',
 ])
 
 /** Default/fallback scores assigned by each collector when real data is unavailable */
