@@ -178,7 +178,7 @@ function SignalDetailCards({ signals, metas, homepageUrl }: { signals: number[];
   const frMeta = metas.freshness
   const trMeta = metas.transparency
 
-  const cardClass = 'bg-white border border-fabric-200 rounded-xl p-5'
+  const cardClass = 'bg-fabric-50/50 border border-fabric-100 rounded-xl p-5'
   const headerClass = 'flex items-center justify-between mb-3'
   const titleClass = 'font-mono text-[0.72rem] font-semibold text-fabric-700 uppercase tracking-wider'
   const labelClass = 'font-mono text-[0.66rem] text-fabric-400'
@@ -186,7 +186,7 @@ function SignalDetailCards({ signals, metas, homepageUrl }: { signals: number[];
   const rowClass = 'flex items-center justify-between py-1.5 border-b border-fabric-100 last:border-0'
 
   return (
-    <div className="grid grid-cols-2 gap-5 mb-5 max-md:grid-cols-1">
+    <div className="grid grid-cols-2 gap-5 max-md:grid-cols-1">
       {/* CARD 1: VirusTotal Scan */}
       <div className={cardClass}>
         <div className={headerClass}>
@@ -734,13 +734,13 @@ export default function ProductPageClient({
 
         {/* ═══ SIGNAL DETAILS (skills only) ═══ */}
         {service.category === 'skill' && Object.keys(signalMetas).length > 0 && (
-          <>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+            <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Signal Details</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">from signal_history</span>
             </div>
             <SignalDetailCards signals={service.signals} metas={signalMetas} homepageUrl={service.homepage_url} />
-          </>
+          </div>
         )}
 
         {/* ═══ ABOUT THIS SERVICE ═══ */}
