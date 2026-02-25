@@ -118,6 +118,9 @@ export async function generateAssessment(serviceId: string): Promise<void> {
     service.readme_excerpt ? `README excerpt:\n${service.readme_excerpt.slice(0, 600)}` : 'No README available.',
   ].filter(Boolean).join('\n')
 
+  // Strip lone surrogates and control chars that break JSON serialization
+  const cleanMessage = userMessage.replace(/[\uD800-\uDFFF]|[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+
   // Call Claude API
   try {
     const res = await fetch(ANTHROPIC_API, {
@@ -131,7 +134,7 @@ export async function generateAssessment(serviceId: string): Promise<void> {
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{ role: 'user', content: cleanMessage }],
       }),
     })
 
