@@ -21,6 +21,7 @@ export function clampScore(score: number): number {
 
 export interface OsvVulnerability {
   id: string
+  aliases?: string[]
   summary?: string
   severity?: Array<{ type: string; score: string }>
   database_specific?: { severity?: string }
