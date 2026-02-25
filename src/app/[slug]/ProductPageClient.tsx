@@ -111,148 +111,325 @@ const SKILL_SIGNAL_KEYS = [
   'adoption', 'freshness', 'transparency',
 ]
 
+function scoreBadgeColor(score: number): string {
+  if (score >= 4) return 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]'
+  if (score >= 2) return 'bg-[rgba(247,147,30,0.1)] text-[#f7931e]'
+  return 'bg-[rgba(208,58,61,0.1)] text-[#d03a3d]'
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getSignalSummary(key: string, meta: Record<string, any>): { summary: string; details: React.ReactNode } | null {
+function getSignalSummary(key: string, meta: Record<string, any>): string {
   switch (key) {
     case 'virustotal_scan': {
       const reason = meta.reason as string | undefined
-      let summary = 'No scan data available'
-      if (reason === 'clean_moderation') summary = 'Clean — no issues detected by ClawHub moderation'
-      else if (reason === 'suspicious_flagged') summary = 'Flagged as suspicious by ClawHub moderation'
-      else if (reason === 'malware_blocked') summary = 'Blocked — malware detected by ClawHub moderation'
-      else if (reason === 'no_moderation_data') summary = 'Awaiting moderation scan'
-      else if (meta.source === 'virustotal_api') {
+      if (reason === 'clean_moderation') return 'Clean — no issues detected'
+      if (reason === 'suspicious_flagged') return 'Flagged as suspicious'
+      if (reason === 'malware_blocked') return 'Malware detected'
+      if (reason === 'no_moderation_data') return 'Awaiting scan'
+      if (meta.source === 'virustotal_api') {
         const m = (meta.malicious as number) ?? 0
         const s = (meta.suspicious as number) ?? 0
-        summary = m > 0 ? `${m} malicious + ${s} suspicious detections` : s > 0 ? `${s} suspicious detections` : 'Clean — 0 detections across 70+ vendors'
+        return m > 0 ? `${m} malicious + ${s} suspicious detections` : s > 0 ? `${s} suspicious detections` : 'Clean — 0 detections'
       }
-      return {
-        summary,
-        details: (
-          <div className="flex flex-col gap-1 mt-1.5">
-            {meta.isMalwareBlocked !== undefined && (
-              <span className="font-mono text-[0.66rem]">
-                Malware blocked: {meta.isMalwareBlocked ? <span className="text-[#d03a3d]">Yes</span> : <span className="text-[#0dc956]">No</span>}
-              </span>
-            )}
-            {meta.isSuspicious !== undefined && (
-              <span className="font-mono text-[0.66rem]">
-                Suspicious flag: {meta.isSuspicious ? <span className="text-[#f7931e]">Yes</span> : <span className="text-[#0dc956]">No</span>}
-              </span>
-            )}
-            <span className="font-mono text-[0.66rem] text-fabric-400">Source: {meta.source === 'virustotal_api' ? 'VirusTotal API' : 'ClawHub moderation'}</span>
-          </div>
-        ),
-      }
+      return 'No scan data'
     }
     case 'content_safety': {
       const count = (meta.findingsCount as number) ?? 0
-      const findings = (meta.findings as string[]) ?? []
-      const summary = count === 0 ? 'No malicious patterns detected' : `${count} finding${count > 1 ? 's' : ''} detected`
-      return {
-        summary,
-        details: (
-          <div className="flex flex-col gap-1 mt-1.5">
-            {findings.length > 0 ? (
-              findings.map((f: string, i: number) => (
-                <span key={i} className="font-mono text-[0.66rem] text-[#f7931e]">&#x26A0; {f}</span>
-              ))
-            ) : (
-              <span className="font-mono text-[0.66rem] text-fabric-400">
-                Scanned for: credential leaks, shell injection, config tampering, base64 payloads, sensitive path access, SOUL.md/AGENTS.md tampering
-              </span>
-            )}
-            {meta.contentLength != null && (
-              <span className="font-mono text-[0.66rem] text-fabric-400">{meta.contentLength.toLocaleString()} chars analyzed</span>
-            )}
-          </div>
-        ),
-      }
+      return count === 0 ? 'No malicious patterns detected' : `${count} finding${count > 1 ? 's' : ''} detected`
     }
     case 'publisher_reputation': {
-      const handle = meta.handle as string | undefined
-      const age = meta.accountAgeYears as number | undefined
-      const repos = meta.publicRepos as number | undefined
-      const followers = meta.followers as number | undefined
-      const isOrg = meta.isOrg as boolean | undefined
       const parts: string[] = []
-      if (isOrg) parts.push('Organization')
-      if (age != null) parts.push(`${age.toFixed(1)}yr account`)
-      if (repos != null) parts.push(`${repos} repos`)
-      const summary = parts.length > 0 ? parts.join(' · ') : 'No publisher data'
-      return {
-        summary,
-        details: (
-          <div className="flex flex-col gap-1 mt-1.5">
-            {handle && <span className="font-mono text-[0.66rem]">GitHub: <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">{handle}</a></span>}
-            {followers != null && <span className="font-mono text-[0.66rem] text-fabric-400">{followers} followers</span>}
-          </div>
-        ),
-      }
+      if (meta.isOrg) parts.push('Organization')
+      if (meta.accountAgeYears != null) parts.push(`${(meta.accountAgeYears as number).toFixed(1)}yr account`)
+      if (meta.publicRepos != null) parts.push(`${meta.publicRepos} repos`)
+      return parts.length > 0 ? parts.join(' · ') : 'No publisher data'
     }
     case 'adoption': {
-      const installs = meta.installsAllTime as number | undefined
-      const stars = meta.stars as number | undefined
       const parts: string[] = []
-      if (installs != null) parts.push(`${installs.toLocaleString()} installs`)
-      if (stars != null) parts.push(`${stars} stars`)
-      const summary = parts.length > 0 ? parts.join(' · ') : 'No adoption data'
-      return {
-        summary,
-        details: (
-          <div className="flex flex-col gap-1 mt-1.5">
-            {meta.downloads != null && <span className="font-mono text-[0.66rem] text-fabric-400">{meta.downloads.toLocaleString()} downloads</span>}
-            {meta.comments != null && <span className="font-mono text-[0.66rem] text-fabric-400">{meta.comments} comments</span>}
-          </div>
-        ),
-      }
+      if (meta.installsAllTime != null) parts.push(`${(meta.installsAllTime as number).toLocaleString()} installs`)
+      if (meta.stars != null) parts.push(`${meta.stars} stars`)
+      return parts.length > 0 ? parts.join(' · ') : 'No adoption data'
     }
     case 'freshness': {
-      const days = meta.daysSinceUpdate as number | undefined
-      const ver = meta.latestVersion as string | undefined
-      const versions = meta.versions as number | undefined
       const parts: string[] = []
+      const days = meta.daysSinceUpdate as number | undefined
       if (days != null) parts.push(days === 0 ? 'Updated today' : `Updated ${days}d ago`)
-      if (ver) parts.push(`v${ver}`)
-      const summary = parts.length > 0 ? parts.join(' · ') : 'No freshness data'
-      return {
-        summary,
-        details: (
-          <div className="flex flex-col gap-1 mt-1.5">
-            {versions != null && <span className="font-mono text-[0.66rem] text-fabric-400">{versions} version{versions !== 1 ? 's' : ''} published</span>}
-            {meta.hasChangelog != null && <span className="font-mono text-[0.66rem] text-fabric-400">Changelog: {meta.hasChangelog ? 'Present' : 'None'}</span>}
-          </div>
-        ),
-      }
+      if (meta.latestVersion) parts.push(`v${meta.latestVersion}`)
+      return parts.length > 0 ? parts.join(' · ') : 'No freshness data'
     }
     case 'transparency': {
       const checks = meta.checks as Record<string, boolean> | undefined
-      if (!checks) return { summary: 'No transparency data', details: null }
+      if (!checks) return 'No transparency data'
       const total = Object.keys(checks).length
       const passed = Object.values(checks).filter(Boolean).length
-      const summary = `${passed}/${total} metadata checks passed`
-      return {
-        summary,
-        details: (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1.5">
-            {Object.entries(checks).map(([k, v]) => (
-              <span key={k} className="font-mono text-[0.66rem]">
-                <span className={v ? 'text-[#0dc956]' : 'text-[#d03a3d]'}>{v ? '\u2713' : '\u2717'}</span>
-                {' '}{k.replace(/_/g, ' ')}
-              </span>
-            ))}
-          </div>
-        ),
-      }
+      return `${passed}/${total} metadata checks passed`
     }
     default:
-      return null
+      return ''
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SignalDetailCards({ signals, metas, homepageUrl }: { signals: number[]; metas: Record<string, Record<string, any>>; homepageUrl?: string | null }) {
+  const vtMeta = metas.virustotal_scan
+  const csMeta = metas.content_safety
+  const pubMeta = metas.publisher_reputation
+  const adMeta = metas.adoption
+  const frMeta = metas.freshness
+  const trMeta = metas.transparency
+
+  const cardClass = 'bg-white border border-fabric-200 rounded-xl p-5'
+  const headerClass = 'flex items-center justify-between mb-3'
+  const titleClass = 'font-mono text-[0.72rem] font-semibold text-fabric-700 uppercase tracking-wider'
+  const labelClass = 'font-mono text-[0.66rem] text-fabric-400'
+  const valueClass = 'font-mono text-[0.72rem] text-fabric-700'
+  const rowClass = 'flex items-center justify-between py-1.5 border-b border-fabric-100 last:border-0'
+
+  return (
+    <div className="grid grid-cols-2 gap-5 mb-5 max-md:grid-cols-1">
+      {/* CARD 1: VirusTotal Scan */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>VirusTotal Scan</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[0])}`}>{signals[0].toFixed(1)}</span>
+        </div>
+        {vtMeta ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`inline-block text-[0.62rem] font-mono font-semibold px-2 py-0.5 rounded-full ${
+                vtMeta.reason === 'clean_moderation' ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' :
+                vtMeta.reason === 'malware_blocked' ? 'bg-[rgba(208,58,61,0.1)] text-[#d03a3d]' :
+                vtMeta.reason === 'suspicious_flagged' ? 'bg-[rgba(247,147,30,0.1)] text-[#f7931e]' :
+                'bg-fabric-100 text-fabric-500'
+              }`}>
+                {vtMeta.reason === 'clean_moderation' ? 'CLEAN' :
+                 vtMeta.reason === 'malware_blocked' ? 'MALWARE BLOCKED' :
+                 vtMeta.reason === 'suspicious_flagged' ? 'SUSPICIOUS' : 'PENDING'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {vtMeta.isMalwareBlocked !== undefined && (
+                <div className={rowClass}>
+                  <span className={labelClass}>Malware blocked</span>
+                  <span className={`font-mono text-[0.68rem] font-medium ${vtMeta.isMalwareBlocked ? 'text-[#d03a3d]' : 'text-[#0dc956]'}`}>{vtMeta.isMalwareBlocked ? 'Yes' : 'No'}</span>
+                </div>
+              )}
+              {vtMeta.isSuspicious !== undefined && (
+                <div className={rowClass}>
+                  <span className={labelClass}>Suspicious flag</span>
+                  <span className={`font-mono text-[0.68rem] font-medium ${vtMeta.isSuspicious ? 'text-[#f7931e]' : 'text-[#0dc956]'}`}>{vtMeta.isSuspicious ? 'Yes' : 'No'}</span>
+                </div>
+              )}
+            </div>
+            <p className="text-[0.68rem] text-fabric-400 leading-relaxed">ClawHub submits every skill to VirusTotal on publish. Scanned by 70+ security vendors for malware, trojans, and suspicious patterns.</p>
+            <span className={labelClass}>Source: {vtMeta.source === 'virustotal_api' ? 'VirusTotal API' : 'ClawHub moderation'}</span>
+          </div>
+        ) : (
+          <p className={labelClass}>No scan data available</p>
+        )}
+      </div>
+
+      {/* CARD 2: Content Safety */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>Content Safety</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[1])}`}>{signals[1].toFixed(1)}</span>
+        </div>
+        {csMeta ? (
+          <div className="flex flex-col gap-2">
+            {(csMeta.findingsCount as number ?? 0) === 0 ? (
+              <span className="inline-block text-[0.62rem] font-mono font-semibold px-2 py-0.5 rounded-full bg-[rgba(13,201,86,0.1)] text-[#0dc956] w-fit">NO ISSUES</span>
+            ) : (
+              <span className="inline-block text-[0.62rem] font-mono font-semibold px-2 py-0.5 rounded-full bg-[rgba(247,147,30,0.1)] text-[#f7931e] w-fit">{csMeta.findingsCount} FINDING{(csMeta.findingsCount as number) > 1 ? 'S' : ''}</span>
+            )}
+            {((csMeta.findings as string[]) ?? []).length > 0 && (
+              <div className="flex flex-col gap-1">
+                {(csMeta.findings as string[]).map((f: string, i: number) => (
+                  <span key={i} className="font-mono text-[0.66rem] text-[#f7931e]">{'\u26A0'} {f}</span>
+                ))}
+              </div>
+            )}
+            {csMeta.hasDisclosures && (
+              <span className="font-mono text-[0.66rem] text-[#0dc956]">{'\u2713'} Self-disclosed sensitive operations</span>
+            )}
+            <p className="text-[0.68rem] text-fabric-400 leading-relaxed">Scanned for credential leaks, shell injection, config tampering, base64 payloads, sensitive path access, SOUL.md/AGENTS.md tampering.</p>
+            {csMeta.contentLength != null && (
+              <span className={labelClass}>{(csMeta.contentLength as number).toLocaleString()} characters analyzed</span>
+            )}
+          </div>
+        ) : (
+          <p className={labelClass}>No content safety data available</p>
+        )}
+      </div>
+
+      {/* CARD 3: Publisher Reputation */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>Publisher Reputation</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[2])}`}>{signals[2].toFixed(1)}</span>
+        </div>
+        {pubMeta ? (
+          <div className="flex flex-col gap-0.5">
+            {pubMeta.handle && (
+              <div className={rowClass}>
+                <span className={labelClass}>GitHub</span>
+                <a href={`https://github.com/${pubMeta.handle}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[0.68rem] text-blue hover:underline">{pubMeta.handle as string}</a>
+              </div>
+            )}
+            {pubMeta.accountAgeYears != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Account age</span>
+                <span className={valueClass}>{(pubMeta.accountAgeYears as number).toFixed(1)} years</span>
+              </div>
+            )}
+            {pubMeta.publicRepos != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Public repos</span>
+                <span className={valueClass}>{pubMeta.publicRepos as number}</span>
+              </div>
+            )}
+            {pubMeta.followers != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Followers</span>
+                <span className={valueClass}>{pubMeta.followers as number}</span>
+              </div>
+            )}
+            {pubMeta.isOrg && (
+              <div className={rowClass}>
+                <span className={labelClass}>Type</span>
+                <span className={valueClass}>Organization</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className={labelClass}>No publisher data available</p>
+        )}
+      </div>
+
+      {/* CARD 4: Adoption */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>Adoption</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[3])}`}>{signals[3].toFixed(1)}</span>
+        </div>
+        {adMeta ? (
+          <div className="flex flex-col gap-0.5">
+            {adMeta.installsAllTime != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Installs</span>
+                <span className={valueClass}>{(adMeta.installsAllTime as number).toLocaleString()}</span>
+              </div>
+            )}
+            {adMeta.downloads != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Downloads</span>
+                <span className={valueClass}>{(adMeta.downloads as number).toLocaleString()}</span>
+              </div>
+            )}
+            {adMeta.stars != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Stars</span>
+                <span className={valueClass}>{adMeta.stars as number}</span>
+              </div>
+            )}
+            {adMeta.comments != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Comments</span>
+                <span className={valueClass}>{adMeta.comments as number}</span>
+              </div>
+            )}
+            {homepageUrl && (
+              <div className="pt-2">
+                <a href={homepageUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-[0.66rem] text-blue hover:underline">View on ClawHub</a>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className={labelClass}>No adoption data available</p>
+        )}
+      </div>
+
+      {/* CARD 5: Freshness */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>Freshness</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[4])}`}>{signals[4].toFixed(1)}</span>
+        </div>
+        {frMeta ? (
+          <div className="flex flex-col gap-0.5">
+            {frMeta.daysSinceUpdate != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Last updated</span>
+                <span className={valueClass}>{(frMeta.daysSinceUpdate as number) === 0 ? 'Today' : `${frMeta.daysSinceUpdate}d ago`}</span>
+              </div>
+            )}
+            {frMeta.latestVersion && (
+              <div className={rowClass}>
+                <span className={labelClass}>Latest version</span>
+                <span className={valueClass}>v{frMeta.latestVersion as string}</span>
+              </div>
+            )}
+            {frMeta.versions != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Versions published</span>
+                <span className={valueClass}>{frMeta.versions as number}</span>
+              </div>
+            )}
+            {frMeta.hasChangelog != null && (
+              <div className={rowClass}>
+                <span className={labelClass}>Changelog</span>
+                <span className={`font-mono text-[0.68rem] font-medium ${frMeta.hasChangelog ? 'text-[#0dc956]' : 'text-fabric-400'}`}>{frMeta.hasChangelog ? 'Present' : 'None'}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className={labelClass}>No freshness data available</p>
+        )}
+      </div>
+
+      {/* CARD 6: Transparency */}
+      <div className={cardClass}>
+        <div className={headerClass}>
+          <span className={titleClass}>Transparency</span>
+          <span className={`font-mono text-[0.68rem] font-semibold px-2 py-0.5 rounded-full ${scoreBadgeColor(signals[5])}`}>{signals[5].toFixed(1)}</span>
+        </div>
+        {trMeta?.checks ? (() => {
+          const checks = trMeta.checks as Record<string, boolean>
+          const total = Object.keys(checks).length
+          const passed = Object.values(checks).filter(Boolean).length
+          const pct = total > 0 ? (passed / total) * 100 : 0
+          return (
+            <div className="flex flex-col gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={labelClass}>{passed}/{total} checks passed</span>
+                  <span className={`font-mono text-[0.66rem] font-medium ${pct === 100 ? 'text-[#0dc956]' : pct >= 50 ? 'text-[#f7931e]' : 'text-[#d03a3d]'}`}>{pct.toFixed(0)}%</span>
+                </div>
+                <div className="h-1.5 bg-fabric-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${pct === 100 ? 'bg-[#0dc956]' : pct >= 50 ? 'bg-[#f7931e]' : 'bg-[#d03a3d]'}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {Object.entries(checks).map(([k, v]) => (
+                  <span key={k} className="font-mono text-[0.64rem]">
+                    <span className={v ? 'text-[#0dc956]' : 'text-[#d03a3d]'}>{v ? '\u2713' : '\u2717'}</span>
+                    {' '}<span className="text-fabric-500">{k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim()}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })() : (
+          <p className={labelClass}>No transparency data available</p>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ---------- Helper components ----------
 
-function SignalRow({ name, score, weight, detail, note, meta }: { name: string; score: number; weight: string; detail: string; note?: string; meta?: { summary: string; details: React.ReactNode } | null }) {
+function SignalRow({ name, score, weight, detail, note, summary, isSkill }: { name: string; score: number; weight: string; detail: string; note?: string; summary?: string; isSkill?: boolean }) {
   const [open, setOpen] = useState(false)
   const pct = (score / 5) * 100
   const level = score >= 4 ? 'high' : score >= 3 ? 'medium' : 'low'
@@ -260,35 +437,36 @@ function SignalRow({ name, score, weight, detail, note, meta }: { name: string; 
 
   return (
     <div>
-      <div className="grid grid-cols-[180px_1fr_50px_42px_20px] items-center gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2">
+      <div className={`grid items-center gap-4 max-md:gap-2 ${isSkill ? 'grid-cols-[180px_1fr_50px_42px] max-md:grid-cols-[100px_1fr_40px_36px]' : 'grid-cols-[180px_1fr_50px_42px_20px] max-md:grid-cols-[100px_1fr_40px_36px_20px]'}`}>
         <span className="font-mono text-[0.72rem] text-fabric-600">{name}</span>
         <div className="h-1.5 bg-fabric-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full signal-bar-fill ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
         <span className="font-mono text-[0.78rem] font-medium text-black text-right">{score.toFixed(1)}</span>
         <span className="font-mono text-[0.62rem] text-fabric-400 text-right">{weight}</span>
-        <button
-          onClick={() => setOpen(!open)}
-          className={`w-5 h-5 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.6rem] font-semibold cursor-pointer transition-all flex-shrink-0 leading-none ${open ? 'border-blue text-blue bg-[rgba(61,138,247,0.08)]' : 'border-fabric-200 bg-white hover:border-blue hover:text-blue'}`}
-        >
-          i
-        </button>
+        {!isSkill && (
+          <button
+            onClick={() => setOpen(!open)}
+            className={`w-5 h-5 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.6rem] font-semibold cursor-pointer transition-all flex-shrink-0 leading-none ${open ? 'border-blue text-blue bg-[rgba(61,138,247,0.08)]' : 'border-fabric-200 bg-white hover:border-blue hover:text-blue'}`}
+          >
+            i
+          </button>
+        )}
       </div>
-      {/* Metadata summary line (always visible for skills) */}
-      {meta && (
-        <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 mt-0.5">
+      {/* Summary line for skills */}
+      {summary && (
+        <div className={`grid gap-4 max-md:gap-2 mt-0.5 ${isSkill ? 'grid-cols-[180px_1fr_50px_42px] max-md:grid-cols-[100px_1fr_40px_36px]' : 'grid-cols-[180px_1fr_50px_42px_20px] max-md:grid-cols-[100px_1fr_40px_36px_20px]'}`}>
           <div />
-          <span className="font-mono text-[0.66rem] text-fabric-400">{meta.summary}</span>
+          <span className="font-mono text-[0.66rem] text-fabric-400">{summary}</span>
         </div>
       )}
-      {/* Expandable detail (info description + metadata details) */}
-      {open && (
+      {/* Expandable detail for non-skills */}
+      {!isSkill && open && (
         <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 py-1.5">
           <div />
           <div className="text-[0.75rem] text-fabric-500 leading-normal">
             {detail}
             {note && <p className="mt-1.5 text-[0.68rem] text-fabric-400 italic">{note}</p>}
-            {meta?.details}
           </div>
         </div>
       )}
@@ -532,9 +710,10 @@ export default function ProductPageClient({
           </div>
           <div className="flex flex-col gap-3.5">
             {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
-              const signalKey = service.category === 'skill' ? SKILL_SIGNAL_KEYS[i] : undefined
+              const isSkill = service.category === 'skill'
+              const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : undefined
               const rawMeta = signalKey ? signalMetas[signalKey] : undefined
-              const meta = signalKey && rawMeta ? getSignalSummary(signalKey, rawMeta) : undefined
+              const summary = signalKey && rawMeta ? getSignalSummary(signalKey, rawMeta) : undefined
               return (
                 <SignalRow
                   key={signal.name}
@@ -542,15 +721,27 @@ export default function ProductPageClient({
                   score={service.signals[i]}
                   weight={signal.weight}
                   detail={signal.detail}
-                  note={service.category === 'skill' && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
+                  note={isSkill && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
                     ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
                     : undefined}
-                  meta={meta}
+                  summary={summary}
+                  isSkill={isSkill}
                 />
               )
             })}
           </div>
         </div>
+
+        {/* ═══ SIGNAL DETAILS (skills only) ═══ */}
+        {service.category === 'skill' && Object.keys(signalMetas).length > 0 && (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[1.05rem] font-semibold text-black tracking-tight">Signal Details</span>
+              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">from signal_history</span>
+            </div>
+            <SignalDetailCards signals={service.signals} metas={signalMetas} homepageUrl={service.homepage_url} />
+          </>
+        )}
 
         {/* ═══ ABOUT THIS SERVICE ═══ */}
         <div className="bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
