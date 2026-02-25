@@ -103,7 +103,7 @@ const MODIFIER_LABELS: Record<string, string> = {
 
 // ---------- Helper components ----------
 
-function SignalRow({ name, score, weight, detail }: { name: string; score: number; weight: string; detail: string }) {
+function SignalRow({ name, score, weight, detail, note }: { name: string; score: number; weight: string; detail: string; note?: string }) {
   const [open, setOpen] = useState(false)
   const pct = (score / 5) * 100
   const level = score >= 4 ? 'high' : score >= 3 ? 'medium' : 'low'
@@ -128,7 +128,10 @@ function SignalRow({ name, score, weight, detail }: { name: string; score: numbe
       {open && (
         <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 py-1.5">
           <div />
-          <div className="text-[0.75rem] text-fabric-500 leading-normal">{detail}</div>
+          <div className="text-[0.75rem] text-fabric-500 leading-normal">
+            {detail}
+            {note && <p className="mt-1.5 text-[0.68rem] text-fabric-400 italic">{note}</p>}
+          </div>
         </div>
       )}
     </div>
@@ -226,12 +229,14 @@ export default function ProductPageClient({
   const chartData = hasScoreHistory ? buildScoreHistoryPath(signalHistory, 800, 160) : null
 
   // Data source count
-  const activeSourceCount = [
-    service.npm_package ? 1 : 0,
-    service.pypi_package ? 1 : 0,
-    service.github_repo ? 1 : 0,
-    service.endpoint_url ? 1 : 0,
-  ].reduce((a, b) => a + b, 0)
+  const activeSourceCount = service.category === 'skill'
+    ? SKILL_DATA_SOURCES.length
+    : [
+        service.npm_package ? 1 : 0,
+        service.pypi_package ? 1 : 0,
+        service.github_repo ? 1 : 0,
+        service.endpoint_url ? 1 : 0,
+      ].reduce((a, b) => a + b, 0)
 
   return (
     <>
@@ -374,6 +379,9 @@ export default function ProductPageClient({
                 score={service.signals[i]}
                 weight={signal.weight}
                 detail={signal.detail}
+                note={service.category === 'skill' && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
+                  ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
+                  : undefined}
               />
             ))}
           </div>
