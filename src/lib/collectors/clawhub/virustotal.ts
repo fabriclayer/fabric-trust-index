@@ -16,7 +16,7 @@ import { getVTReport } from './vt-client'
  * - VT scan found, 1-2 malicious -> 1.5
  * - VT scan found, 3+ malicious -> 0.0
  * - ClawHub moderation: isMalwareBlocked -> 0.0
- * - ClawHub moderation: isSuspicious only -> 3.0
+ * - ClawHub moderation: isSuspicious only -> 1.5
  * - ClawHub moderation: clean (both false) -> 4.5
  * - No moderation data -> 2.5 (neutral)
  * - VT not available / hash unknown -> 2.5
@@ -96,8 +96,8 @@ export async function collectVirusTotalScan(
     score = 0.0
     metadata.reason = 'malware_blocked'
   } else if (mod.isSuspicious) {
-    // Flagged but not blocked — could be false positive (link-brain, qa-patrol)
-    score = 3.0
+    // Flagged but not blocked — drags composite into caution range
+    score = 1.5
     metadata.reason = 'suspicious_flagged'
   } else {
     // Clean moderation — slightly below 5.0 since we don't have full VT data
