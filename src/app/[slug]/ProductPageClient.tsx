@@ -252,7 +252,7 @@ export default function ProductPageClient({
                 <h1 className="text-3xl font-bold tracking-tight leading-tight max-md:text-xl">{service.name}</h1>
                 <div className="font-mono text-[0.78rem] text-fabric-500 mt-0.5">
                   by {service.publisher_url ? (
-                    <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-blue transition-colors no-underline">{service.publisher}</a>
+                    <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-pink transition-colors no-underline">{service.publisher}</a>
                   ) : (
                     <span className="text-fabric-600">{service.publisher}</span>
                   )} · last scanned {service.updated}

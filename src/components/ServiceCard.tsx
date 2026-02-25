@@ -31,7 +31,7 @@ export default function ServiceCard({ service }: { service: Service }) {
                 href={service.publisher_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-blue transition-colors no-underline"
+                className="hover:text-pink transition-colors no-underline"
                 onClick={(e) => e.stopPropagation()}
               >
                 {service.publisher}
