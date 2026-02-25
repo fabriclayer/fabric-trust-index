@@ -83,13 +83,13 @@ export const GOLDEN_SET: GoldenService[] = [
   { slug: 'opencv-python', name: 'opencv-python', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Computer vision library' },
   { slug: 'fastapi', name: 'FastAPI', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Popular web framework' },
   { slug: 'scikit-learn', name: 'scikit-learn', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Foundational ML library' },
-  { slug: 'nltk', name: 'nltk', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Classic NLP toolkit' },
+  { slug: 'nltk', name: 'nltk', expected_status: 'caution', min_composite: 2.50, max_composite: 5.0, required_signals: ['transparency', 'maintenance'], notes: 'Classic NLP toolkit — has critical unpatched CVEs, legitimately capped' },
   { slug: 'wandb', name: 'Weights & Biases', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Popular ML tracking' },
   { slug: 'streamlit', name: 'Streamlit', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Snowflake data app framework' },
   { slug: 'ollama', name: 'Ollama', expected_status: 'trusted', min_composite: 2.50, max_composite: 5.0, required_signals: [], notes: 'Local LLM runner' },
   { slug: 'litellm', name: 'LiteLLM', expected_status: 'trusted', min_composite: 3.25, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'LLM proxy/gateway' },
   { slug: 'groq', name: 'Groq', expected_status: 'trusted', min_composite: 2.50, max_composite: 5.0, required_signals: [], notes: 'Fast inference provider' },
-  { slug: 'vllm', name: 'vLLM', expected_status: 'trusted', min_composite: 2.50, max_composite: 5.0, required_signals: REGISTRY_SIGNALS, notes: 'Popular inference engine' },
+  { slug: 'vllm', name: 'vLLM', expected_status: 'blocked', min_composite: 0.0, max_composite: 5.0, required_signals: ['transparency', 'maintenance'], notes: 'Popular inference engine — has critical unpatched CVEs, legitimately blocked' },
 ]
 
 const SIGNAL_ORDER = [
