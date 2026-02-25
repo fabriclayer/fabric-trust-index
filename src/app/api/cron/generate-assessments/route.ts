@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
 
     let succeeded = 0
     let failed = 0
+    const errors: string[] = []
 
     for (const service of services) {
       try {
@@ -60,6 +61,8 @@ export async function GET(request: NextRequest) {
         succeeded++
       } catch (err) {
         failed++
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`${service.slug}: ${msg}`)
         console.error(`Assessment failed for ${service.slug}:`, err)
       }
     }
@@ -79,6 +82,7 @@ export async function GET(request: NextRequest) {
       remaining: remaining ?? 0,
       generatedToday: generatedToday + succeeded,
       dailyCap: DAILY_CAP,
+      errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {

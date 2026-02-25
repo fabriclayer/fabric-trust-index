@@ -28,8 +28,7 @@ export async function generateAssessment(serviceId: string): Promise<void> {
   const supabase = createServerClient()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    console.error('ANTHROPIC_API_KEY not set, skipping assessment')
-    return
+    throw new Error('ANTHROPIC_API_KEY not set')
   }
 
   // Fetch service
@@ -138,26 +137,28 @@ export async function generateAssessment(serviceId: string): Promise<void> {
 
     if (!res.ok) {
       const errText = await res.text()
-      console.error(`Anthropic API error for ${service.slug}: ${res.status} ${errText}`)
-      return
+      throw new Error(`Anthropic API ${res.status}: ${errText}`)
     }
 
     const result = await res.json()
     const assessment = result.content?.[0]?.text?.trim()
 
     if (!assessment) {
-      console.error(`Empty assessment for ${service.slug}`)
-      return
+      throw new Error(`Empty assessment response for ${service.slug}`)
     }
 
     // Store assessment
-    await supabase
+    const { error: updateError } = await supabase
       .from('services')
       .update({
         ai_assessment: assessment,
         ai_assessment_updated_at: new Date().toISOString(),
       })
       .eq('id', serviceId)
+
+    if (updateError) {
+      throw new Error(`DB update failed for ${service.slug}: ${updateError.message}`)
+    }
 
     // Log cost
     const inputTokens = result.usage?.input_tokens ?? 0
@@ -166,6 +167,7 @@ export async function generateAssessment(serviceId: string): Promise<void> {
 
   } catch (err) {
     console.error(`Assessment generation failed for ${service.slug}:`, err)
+    throw err
   }
 }
 
