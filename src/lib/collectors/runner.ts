@@ -311,11 +311,12 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('zero_signal_override')
   }
 
-  // 2. Vulnerability overrides — critical findings force blocked
+  // 2. Vulnerability overrides
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
 
   if (vulnResult?.result.metadata.has_critical_unpatched) {
-    status = 'blocked'
+    // Critical unpatched CVE caps at caution — the vuln signal deduction handles severity
+    if (status === 'trusted') status = 'caution'
     modifiers.push('critical_cve_override')
   }
 
@@ -326,8 +327,10 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   // Cap composite_score to match forced status range
   let finalScore = compositeScore
-  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override')) {
     finalScore = Math.min(finalScore, 0.99)
+  } else if (modifiers.includes('critical_cve_override')) {
+    finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
   }
@@ -475,16 +478,20 @@ export async function runCollectors(
   }
 
   // Apply carried-forward + fresh overrides to status
-  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override')) {
     status = 'blocked'
+  } else if (modifiers.includes('critical_cve_override') && status === 'trusted') {
+    status = 'caution'
   } else if (modifiers.includes('zero_signal_override') && status === 'trusted') {
     status = 'caution'
   }
 
   // Cap composite_score to match forced status range
   let finalScore = compositeScore
-  if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override')) {
     finalScore = Math.min(finalScore, 0.99)
+  } else if (modifiers.includes('critical_cve_override')) {
+    finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
   }

@@ -246,14 +246,16 @@ export async function POST(request: NextRequest) {
     const hasCriticalCve = criticalCveSet.has(service.id) ||
       (service.active_modifiers ?? []).includes('critical_cve_override')
     if (hasCriticalCve && !fallbackSignals.has('vulnerability')) {
-      status = 'blocked'
+      if (status === 'trusted') status = 'caution'
       if (!modifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
     }
 
     // Cap composite_score to match forced status range
     let finalScore = compositeScore
-    if (modifiers.includes('critical_cve_override') || modifiers.includes('vulnerability_zero_override')) {
+    if (modifiers.includes('vulnerability_zero_override')) {
       finalScore = Math.min(finalScore, 0.99)
+    } else if (modifiers.includes('critical_cve_override')) {
+      finalScore = Math.min(finalScore, 3.24)
     } else if (modifiers.includes('zero_signal_override')) {
       finalScore = Math.min(finalScore, 3.24)
     }
