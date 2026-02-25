@@ -4,8 +4,6 @@ import { generateAssessment } from '@/lib/assessment-generator'
 
 export const maxDuration = 300
 
-const DAILY_CAP = 500
-
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -17,26 +15,6 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient()
 
-    // Check daily cap: count assessments generated today
-    const todayStart = new Date()
-    todayStart.setUTCHours(0, 0, 0, 0)
-
-    const { count: todayCount } = await supabase
-      .from('services')
-      .select('id', { count: 'exact', head: true })
-      .gte('ai_assessment_updated_at', todayStart.toISOString())
-
-    const generatedToday = todayCount ?? 0
-    if (generatedToday >= DAILY_CAP) {
-      return NextResponse.json({
-        ok: true,
-        message: `Daily cap reached (${generatedToday}/${DAILY_CAP})`,
-        processed: 0,
-      })
-    }
-
-    const effectiveLimit = Math.min(limit, DAILY_CAP - generatedToday)
-
     // Fetch services that need assessments (no ai_assessment, has a score)
     const { data: services, error } = await supabase
       .from('services')
@@ -44,7 +22,7 @@ export async function GET(request: NextRequest) {
       .is('ai_assessment', null)
       .not('composite_score', 'is', null)
       .order('composite_score', { ascending: false })
-      .limit(effectiveLimit)
+      .limit(limit)
 
     if (error) throw error
     if (!services || services.length === 0) {
@@ -80,8 +58,6 @@ export async function GET(request: NextRequest) {
       succeeded,
       failed,
       remaining: remaining ?? 0,
-      generatedToday: generatedToday + succeeded,
-      dailyCap: DAILY_CAP,
       errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
       timestamp: new Date().toISOString(),
     })
