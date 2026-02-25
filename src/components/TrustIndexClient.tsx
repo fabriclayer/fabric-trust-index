@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import SearchToolbar from '@/components/SearchToolbar'
@@ -46,6 +46,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [activeStatuses, setActiveStatuses] = useState<Set<string>>(new Set(['trusted', 'caution', 'blocked']))
+  const router = useRouter()
   const searchParams = useSearchParams()
   const categoryParam = searchParams.get('category') || 'all'
   const [activeCategory, setActiveCategory] = useState(categoryParam)
@@ -53,6 +54,12 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   useEffect(() => {
     setActiveCategory(categoryParam)
   }, [categoryParam])
+
+  const handleCategoryChange = useCallback((c: string) => {
+    setActiveCategory(c)
+    const url = c === 'all' ? '/' : `/?category=${c}`
+    router.replace(url, { scroll: false })
+  }, [router])
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -141,7 +148,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
         activeStatuses={activeStatuses}
         onToggleStatus={toggleStatus}
         activeCategory={activeCategory}
-        onCategoryChange={c => setActiveCategory(c)}
+        onCategoryChange={handleCategoryChange}
         activeSort={activeSort}
         onSortChange={s => setActiveSort(s)}
         searchInputRef={searchInputRef}
