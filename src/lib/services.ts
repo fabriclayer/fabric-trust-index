@@ -69,6 +69,8 @@ function dbToService(db: any): Service {
     active_modifiers: db.active_modifiers?.length > 0 ? db.active_modifiers : undefined,
     ai_assessment: db.ai_assessment || null,
     ai_assessment_updated_at: db.ai_assessment_updated_at || null,
+    score_confidence: db.score_confidence ?? null,
+    signals_with_data: db.signals_with_data ?? null,
   }
 }
 

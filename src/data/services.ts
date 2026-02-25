@@ -40,4 +40,7 @@ export interface Service {
   // AI assessment
   ai_assessment?: string | null
   ai_assessment_updated_at?: string | null
+  // Score confidence
+  score_confidence?: number | null
+  signals_with_data?: number | null
 }

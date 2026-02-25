@@ -791,7 +791,11 @@ export default function ProductPageClient({
         <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
           <div className="flex items-center justify-between mb-5">
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
-            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">6 signals · weighted composite</span>
+            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
+              {service.signals_with_data != null
+                ? `${service.signals_with_data}/6 signals scored`
+                : '6 signals · weighted composite'}
+            </span>
           </div>
           <div className="flex flex-col gap-3.5">
             {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
@@ -817,6 +821,11 @@ export default function ProductPageClient({
               )
             })}
           </div>
+          {service.signals_with_data != null && service.signals_with_data < 4 && (
+            <p className="font-mono text-[0.62rem] text-fabric-400 mt-3 pt-3 border-t border-fabric-100">
+              Limited data available — {6 - service.signals_with_data} of 6 signals pending evaluation
+            </p>
+          )}
         </div>
 
         {/* ═══ SIGNAL DETAILS (skills only) ═══ */}

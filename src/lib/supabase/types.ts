@@ -128,6 +128,10 @@ export interface DbService {
   last_activity_at: string
   active_modifiers: string[]
 
+  // Score confidence
+  score_confidence: number | null
+  signals_with_data: number | null
+
   // Cached operational metrics
   uptime_30d: number
   avg_latency_ms: number

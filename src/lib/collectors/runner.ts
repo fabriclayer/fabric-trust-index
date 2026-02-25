@@ -11,18 +11,7 @@ import { collectSupplyChain } from './supply-chain'
 import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
 import { generateAssessment } from '@/lib/assessment-generator'
 import { resolveGitHubRepo } from '@/lib/discovery/github-resolver'
-
-/** Metadata reasons that indicate a fallback/default score (no real data evaluated) */
-const FALLBACK_REASONS = new Set([
-  'no_github_repo',
-  'no_packages_to_scan',
-  'no_endpoint_configured',
-  'no_download_data',
-  'publisher_not_found',
-  'no_publisher_github',
-  'osv_api_unavailable',
-  'repo_not_accessible',
-])
+import { FALLBACK_REASONS } from '@/lib/validation/constants'
 
 /** Check if a collector result represents a genuine zero (not a default/fallback) */
 function isGenuineZero(cr: { key: string; result: CollectorResult } | null): boolean {
@@ -380,10 +369,19 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     finalScore = Math.min(finalScore, 3.24)
   }
 
+  // Compute score confidence (how many signals used real data vs fallbacks)
+  const signalsWithRealData = collectorResults.filter(cr => {
+    if (!cr) return false
+    const reason = cr.result.metadata?.reason as string | undefined
+    return !reason || !FALLBACK_REASONS.has(reason)
+  }).length
+
   updates.raw_composite_score = compositeScore
   updates.composite_score = finalScore
   updates.status = status
   updates.active_modifiers = modifiers
+  updates.score_confidence = signalsWithRealData / SIGNAL_ORDER.length
+  updates.signals_with_data = signalsWithRealData
 
   // Update service
   await supabase
