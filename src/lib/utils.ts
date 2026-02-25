@@ -31,6 +31,7 @@ export function cn(...classes: (string | false | undefined | null)[]): string {
 // Category display names
 export const CATEGORIES: Record<string, string> = {
   'all': 'Categories',
+  'skill': 'Skills',
   'image-generation': 'Image Gen',
   'llm': 'LLMs',
   'web-search': 'Search',
@@ -42,7 +43,6 @@ export const CATEGORIES: Record<string, string> = {
   'vision': 'Vision',
   'infra': 'Infra',
   'framework': 'Frameworks',
-  'skill': 'Skills',
 }
 
 // Tag class mapping
