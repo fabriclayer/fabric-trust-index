@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { discoverNpmPackages, type NpmCandidate } from './npm'
 import { discoverPyPIPackages, type PyPICandidate } from './pypi'
 import { discoverGitHubRepos, type GitHubCandidate } from './github'
+import { resolveGitHubFromNpm } from './github-resolver'
 // HF discovery disabled — 1,452 models imported with no scoreable data sources.
 // Re-enable when model-specific scoring pipeline is built (safetensors check,
 // model card quality, licence, publisher verification).
@@ -184,6 +185,9 @@ export async function runDiscoveryPipeline(): Promise<{
     const slug = toSlug(pkg.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
+    // Resolve GitHub repo from npm registry metadata
+    const githubRepo = await resolveGitHubFromNpm(pkg.name)
+
     await addDiscoveredService({
       name: pkg.name,
       slug,
@@ -191,6 +195,7 @@ export async function runDiscoveryPipeline(): Promise<{
       description: pkg.description,
       category: classifyCategory(pkg.keywords, pkg.name),
       npm_package: pkg.name,
+      github_repo: githubRepo ?? undefined,
       source: 'npm',
       capabilities: deriveCapabilities(pkg.keywords),
       pricing: { model: 'open-source' },
@@ -213,6 +218,7 @@ export async function runDiscoveryPipeline(): Promise<{
       description: pkg.description,
       category: classifyCategory(pkg.keywords, pkg.name),
       pypi_package: pkg.name,
+      github_repo: pkg.githubRepo ?? undefined,
       source: 'pypi',
       capabilities: deriveCapabilities(pkg.keywords),
       pricing: { model: 'open-source' },
@@ -337,6 +343,24 @@ export async function addDiscoveredService(params: {
 
   if (!publisher) {
     return `publisher "${publisherSlug}": upsert=${upsertError?.message ?? 'ok'}, then not found`
+  }
+
+  // Set publisher github_org from github_repo owner if not already set
+  if (params.github_repo) {
+    const owner = params.github_repo.split('/')[0]
+    if (owner) {
+      const { data: pub } = await supabase
+        .from('publishers')
+        .select('github_org')
+        .eq('id', publisher.id)
+        .single()
+      if (pub && !pub.github_org) {
+        await supabase
+          .from('publishers')
+          .update({ github_org: owner })
+          .eq('id', publisher.id)
+      }
+    }
   }
 
   const icon = ICON_MAP[params.category] ?? '◇'

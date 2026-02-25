@@ -7,6 +7,7 @@
  */
 
 import { CI_BOT_NAMES } from './bot-filter'
+import { extractGitHubRepo } from './github-resolver'
 
 export interface PyPICandidate {
   name: string
@@ -15,6 +16,7 @@ export interface PyPICandidate {
   version: string
   keywords: string[]
   projectUrl: string
+  githubRepo: string | null
 }
 
 // Well-known AI/ML packages to scan
@@ -116,6 +118,34 @@ export async function getPyPIPackageInfo(packageName: string): Promise<PyPICandi
       publisher = candidates[0]
     }
 
+    // Extract GitHub repo from project_urls dict
+    let githubRepo: string | null = null
+    const projectUrls: Record<string, string> = info.project_urls ?? {}
+    const githubKeys = ['source', 'source code', 'repository', 'github', 'code', 'homepage', 'home']
+    for (const [key, url] of Object.entries(projectUrls)) {
+      if (
+        githubKeys.includes(key.toLowerCase()) &&
+        typeof url === 'string' &&
+        url.includes('github.com')
+      ) {
+        githubRepo = extractGitHubRepo(url)
+        if (githubRepo) break
+      }
+    }
+    // Fallback: any project_url value that's a GitHub URL
+    if (!githubRepo) {
+      for (const url of Object.values(projectUrls)) {
+        if (typeof url === 'string' && url.includes('github.com')) {
+          githubRepo = extractGitHubRepo(url)
+          if (githubRepo) break
+        }
+      }
+    }
+    // Fallback: info.home_page
+    if (!githubRepo && info.home_page && info.home_page.includes('github.com')) {
+      githubRepo = extractGitHubRepo(info.home_page)
+    }
+
     return {
       name: info.name,
       description: info.summary ?? '',
@@ -123,6 +153,7 @@ export async function getPyPIPackageInfo(packageName: string): Promise<PyPICandi
       version: info.version,
       keywords: info.keywords?.split(',').map((k: string) => k.trim()).filter(Boolean) ?? [],
       projectUrl: info.project_url ?? `https://pypi.org/project/${packageName}`,
+      githubRepo,
     }
   } catch {
     return null

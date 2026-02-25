@@ -10,6 +10,7 @@ import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
 import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
 import { generateAssessment } from '@/lib/assessment-generator'
+import { resolveGitHubRepo } from '@/lib/discovery/github-resolver'
 
 /** Metadata reasons that indicate a fallback/default score (no real data evaluated) */
 const FALLBACK_REASONS = new Set([
@@ -275,6 +276,33 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 }> {
   const supabase = createServerClient()
 
+  // Pre-scoring: resolve github_repo if missing but npm/pypi package exists
+  if (!service.github_repo && (service.npm_package || service.pypi_package)) {
+    try {
+      const resolved = await resolveGitHubRepo({
+        npm_package: service.npm_package,
+        pypi_package: service.pypi_package,
+      })
+      if (resolved) {
+        await supabase.from('services').update({ github_repo: resolved }).eq('id', service.id)
+        service = { ...service, github_repo: resolved } as DbService
+
+        // Also update publisher github_org if null
+        const owner = resolved.split('/')[0]
+        const { data: pub } = await supabase
+          .from('publishers')
+          .select('id, github_org')
+          .eq('id', service.publisher_id)
+          .single()
+        if (pub && !pub.github_org) {
+          await supabase.from('publishers').update({ github_org: owner }).eq('id', pub.id)
+        }
+      }
+    } catch (err) {
+      console.error(`GitHub repo resolution failed for ${service.name}:`, err)
+    }
+  }
+
   const results = await Promise.allSettled(
     COLLECTORS.map(c => c.collect(service))
   )
@@ -409,6 +437,33 @@ export async function runCollectors(
   collectorNames: string[]
 ): Promise<void> {
   const supabase = createServerClient()
+
+  // Pre-scoring: resolve github_repo if missing but npm/pypi package exists
+  if (!service.github_repo && (service.npm_package || service.pypi_package)) {
+    try {
+      const resolved = await resolveGitHubRepo({
+        npm_package: service.npm_package,
+        pypi_package: service.pypi_package,
+      })
+      if (resolved) {
+        await supabase.from('services').update({ github_repo: resolved }).eq('id', service.id)
+        service = { ...service, github_repo: resolved } as DbService
+
+        const owner = resolved.split('/')[0]
+        const { data: pub } = await supabase
+          .from('publishers')
+          .select('id, github_org')
+          .eq('id', service.publisher_id)
+          .single()
+        if (pub && !pub.github_org) {
+          await supabase.from('publishers').update({ github_org: owner }).eq('id', pub.id)
+        }
+      }
+    } catch (err) {
+      console.error(`GitHub repo resolution failed for ${service.name}:`, err)
+    }
+  }
+
   const collectorResults: Array<{ key: string; result: CollectorResult } | null> = []
   const updatedKeys: string[] = []
 
