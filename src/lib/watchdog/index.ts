@@ -12,7 +12,6 @@
  */
 
 import { createServerClient } from '@/lib/supabase/server'
-import { FALLBACK_REASONS, SIGNAL_DEFAULTS } from '@/lib/validation/constants'
 import { resolveGitHubFromNpm, resolveGitHubFromPyPI, validateGitHubRepo } from '@/lib/discovery/github-resolver'
 
 // ═══ Types ═══
@@ -140,8 +139,13 @@ async function detectMissingGithubRepos(supabase: ReturnType<typeof createServer
 
 async function detectPublisherGaps(supabase: ReturnType<typeof createServerClient>): Promise<WatchdogIssue[]> {
   // Publishers missing github_org where we have a service.github_repo to derive it from
-  const { data } = await supabase.rpc('publishers_missing_github_org_with_repo', { max_rows: 30 })
-    .catch(() => ({ data: null }))
+  let data: any[] | null = null
+  try {
+    const result = await supabase.rpc('publishers_missing_github_org_with_repo', { max_rows: 30 })
+    data = result.data
+  } catch {
+    // RPC not available — fall through to manual query
+  }
 
   // Fallback: manual query if RPC not available
   if (!data) {
@@ -237,7 +241,7 @@ async function detectFallbackHeavyServices(supabase: ReturnType<typeof createSer
     severity: 'low' as const,
     service_slug: s.slug,
     service_name: s.name,
-    description: `Trusted with only ${s.signals_with_data}/6 real signals (confidence=${(s.score_confidence * 100).toFixed(0)}%) — score may be unreliable`,
+    description: `Trusted with only ${s.signals_with_data}/6 real signals (confidence=${((s.score_confidence ?? 0) * 100).toFixed(0)}%) — score may be unreliable`,
     auto_fixable: false,
   }))
 }
