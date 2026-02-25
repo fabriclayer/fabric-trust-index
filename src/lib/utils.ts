@@ -99,8 +99,8 @@ export const SKILL_SIGNAL_LABELS = [
 
 // Data sources for skill category (displayed on product page)
 export const SKILL_DATA_SOURCES = [
-  { icon: '◎', label: 'VirusTotal', meta: 'Malware scanning by 70+ security vendors' },
-  { icon: '◈', label: 'ClawHub Registry', meta: 'Install counts, stars, version history, moderation status' },
-  { icon: '◈', label: 'GitHub API', meta: 'Publisher account age, activity, reputation' },
-  { icon: '△', label: 'SKILL.md Analysis', meta: 'Static content analysis for credential leaks, malicious patterns' },
+  { icon: '◎', label: 'VirusTotal', meta: 'Malware scanning by 70+ security vendors', url: 'https://www.virustotal.com' },
+  { icon: '◈', label: 'ClawHub Registry', meta: 'Install counts, stars, version history, moderation status', url: 'https://clawhub.org' },
+  { icon: '◈', label: 'GitHub API', meta: 'Publisher account age, activity, reputation', url: 'https://github.com' },
+  { icon: '△', label: 'SKILL.md Analysis', meta: 'Static content analysis for credential leaks, malicious patterns', url: null as string | null },
 ]

@@ -83,14 +83,16 @@ const HERO_TAGS: Record<string, string[]> = {
   skill: ['skill', 'openclaw', 'agent-skill'],
 }
 
-const DATA_SOURCES = [
-  { icon: '◎', label: 'OSV.dev', meta: 'CVE database · vulnerability scanning for npm & PyPI packages' },
-  { icon: '◈', label: 'GitHub API', meta: 'Commits, issues, releases, repo metadata, transparency checks' },
-  { icon: '⬡', label: 'npm Registry', meta: 'Package metadata, weekly downloads, maintainers, dependencies' },
-  { icon: '⬡', label: 'PyPI', meta: 'Package metadata, weekly downloads, dependency tree' },
-  { icon: '△', label: 'HTTP Health Checks', meta: '15-min pings · uptime, latency, status monitoring' },
-  { icon: '◎', label: 'PyPI Stats', meta: 'Download statistics and trends' },
-]
+function getDataSources(service: Service) {
+  return [
+    { icon: '◎', label: 'OSV.dev', meta: 'CVE database · vulnerability scanning for npm & PyPI packages', url: 'https://osv.dev' },
+    { icon: '◈', label: 'GitHub API', meta: 'Commits, issues, releases, repo metadata, transparency checks', url: service.github_repo ? `https://github.com/${service.github_repo}` : 'https://github.com' },
+    { icon: '⬡', label: 'npm Registry', meta: 'Package metadata, weekly downloads, maintainers, dependencies', url: service.npm_package ? `https://www.npmjs.com/package/${service.npm_package}` : 'https://www.npmjs.com' },
+    { icon: '⬡', label: 'PyPI', meta: 'Package metadata, weekly downloads, dependency tree', url: service.pypi_package ? `https://pypi.org/project/${service.pypi_package}` : 'https://pypi.org' },
+    { icon: '△', label: 'HTTP Health Checks', meta: '15-min pings · uptime, latency, status monitoring', url: service.endpoint_url || (service.domain ? `https://${service.domain}` : null) },
+    { icon: '◎', label: 'PyPI Stats', meta: 'Download statistics and trends', url: service.pypi_package ? `https://pypistats.org/packages/${service.pypi_package}` : 'https://pypistats.org' },
+  ]
+}
 const ITEMS_INITIAL = 6
 const LOAD_MORE_BATCH = 10
 
@@ -565,7 +567,8 @@ export default function ProductPageClient({
   const hasScoreHistory = signalHistory.length >= 2
   const chartData = hasScoreHistory ? buildScoreHistoryPath(signalHistory, 800, 160) : null
 
-  // Data source count
+  // Data sources
+  const dataSources = service.category === 'skill' ? SKILL_DATA_SOURCES : getDataSources(service)
   const activeSourceCount = service.category === 'skill'
     ? SKILL_DATA_SOURCES.length
     : [
@@ -912,31 +915,50 @@ export default function ProductPageClient({
               </span>
             </div>
             <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-              {[
-                { key: 'public_source', label: 'Open Source Code', metaTrue: 'Public repository on GitHub', metaFalse: 'No public source code found' },
-                { key: 'recognized_license', label: 'OSI License', metaTrue: `Licensed under ${(transparencyMeta?.license as string)?.toUpperCase() || 'OSI-approved'}`, metaFalse: 'No recognized open-source license' },
-                { key: 'readme_with_examples', label: 'Documentation', metaTrue: 'README with examples/code blocks', metaFalse: 'README missing or lacks examples' },
-                { key: 'security_md', label: 'SECURITY.md', metaTrue: 'Security policy published', metaFalse: 'No security policy found' },
-                { key: 'api_docs', label: 'API Documentation', metaTrue: 'OpenAPI spec or docs directory found', metaFalse: 'No API documentation detected' },
-                { key: 'model_card', label: 'Model / System Card', metaTrue: 'Model card or system card published', metaFalse: 'No model card found' },
-              ].filter(item => {
-                if (item.key === 'model_card' && transparencyMeta?.model_card_applicable === false) return false
-                if (item.key === 'model_card' && checklist?.['model_card_skipped']) return false
-                return true
-              }).map(item => {
-                const passed = checklist?.[item.key] ?? false
-                return (
-                  <div key={item.key} className="flex items-start gap-2.5 p-3 bg-fabric-50 border border-fabric-100 rounded-lg">
-                    <div className={`w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0 text-sm ${passed ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' : 'bg-fabric-100 text-fabric-500'}`}>
-                      {passed ? '✓' : '✗'}
+              {(() => {
+                const gh = service.github_repo ? `https://github.com/${service.github_repo}` : null
+                const items = [
+                  { key: 'public_source', label: 'Open Source Code', metaTrue: 'Public repository on GitHub', metaFalse: 'No public source code found', url: gh },
+                  { key: 'recognized_license', label: 'OSI License', metaTrue: `Licensed under ${(transparencyMeta?.license as string)?.toUpperCase() || 'OSI-approved'}`, metaFalse: 'No recognized open-source license', url: gh ? `${gh}/blob/main/LICENSE` : null },
+                  { key: 'readme_with_examples', label: 'Documentation', metaTrue: 'README with examples/code blocks', metaFalse: 'README missing or lacks examples', url: gh ? `${gh}#readme` : null },
+                  { key: 'security_md', label: 'SECURITY.md', metaTrue: 'Security policy published', metaFalse: 'No security policy found', url: gh ? `${gh}/security` : null },
+                  { key: 'api_docs', label: 'API Documentation', metaTrue: 'OpenAPI spec or docs directory found', metaFalse: 'No API documentation detected', url: service.docs_url || null },
+                  { key: 'model_card', label: 'Model / System Card', metaTrue: 'Model card or system card published', metaFalse: 'No model card found', url: null as string | null },
+                ]
+                return items.filter(item => {
+                  if (item.key === 'model_card' && transparencyMeta?.model_card_applicable === false) return false
+                  if (item.key === 'model_card' && checklist?.['model_card_skipped']) return false
+                  return true
+                }).map(item => {
+                  const passed = checklist?.[item.key] ?? false
+                  const linkUrl = passed ? item.url : null
+                  const inner = (
+                    <>
+                      <div className={`w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0 text-sm ${passed ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' : 'bg-fabric-100 text-fabric-500'}`}>
+                        {passed ? '✓' : '✗'}
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="font-mono text-[0.72rem] font-medium text-fabric-800">{item.label}</span>
+                        <span className="font-mono text-[0.62rem] text-fabric-400">{passed ? item.metaTrue : item.metaFalse}</span>
+                      </div>
+                      {linkUrl && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-fabric-300 flex-shrink-0 mt-1">
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                        </svg>
+                      )}
+                    </>
+                  )
+                  return linkUrl ? (
+                    <a key={item.key} href={linkUrl} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2.5 p-3 bg-fabric-50 border border-fabric-100 rounded-lg no-underline hover:border-blue hover:bg-[rgba(61,138,247,0.04)] transition-all cursor-pointer">
+                      {inner}
+                    </a>
+                  ) : (
+                    <div key={item.key} className="flex items-start gap-2.5 p-3 bg-fabric-50 border border-fabric-100 rounded-lg">
+                      {inner}
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-[0.72rem] font-medium text-fabric-800">{item.label}</span>
-                      <span className="font-mono text-[0.62rem] text-fabric-400">{passed ? item.metaTrue : item.metaFalse}</span>
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
           </div>
         )}
@@ -1134,18 +1156,34 @@ export default function ProductPageClient({
           <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{(service.category === 'skill' ? SKILL_DATA_SOURCES : DATA_SOURCES).length} indexed</span>
+              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{dataSources.length} indexed</span>
             </div>
             <div className="flex flex-col gap-2.5">
-              {(service.category === 'skill' ? SKILL_DATA_SOURCES : DATA_SOURCES).map(src => (
-                <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
-                  <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
-                  <div className="flex flex-col gap-px">
-                    <span className="font-mono text-[0.7rem] font-medium text-fabric-800">{src.label}</span>
-                    <span className="font-mono text-[0.62rem] text-fabric-400">{src.meta}</span>
+              {dataSources.map(src => {
+                const inner = (
+                  <>
+                    <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
+                    <div className="flex flex-col gap-px flex-1 min-w-0">
+                      <span className="font-mono text-[0.7rem] font-medium text-fabric-800">{src.label}</span>
+                      <span className="font-mono text-[0.62rem] text-fabric-400">{src.meta}</span>
+                    </div>
+                    {src.url && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-fabric-300 flex-shrink-0">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                      </svg>
+                    )}
+                  </>
+                )
+                return src.url ? (
+                  <a key={src.label} href={src.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg no-underline hover:border-blue hover:bg-[rgba(61,138,247,0.04)] transition-all cursor-pointer">
+                    {inner}
+                  </a>
+                ) : (
+                  <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
+                    {inner}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
