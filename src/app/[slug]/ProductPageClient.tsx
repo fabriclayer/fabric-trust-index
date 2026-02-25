@@ -56,6 +56,8 @@ interface ProductPageProps {
   transparencyMeta: Record<string, unknown> | null
   adoptionMeta: Record<string, unknown> | null
   maintenanceMeta: Record<string, unknown> | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  signalMetas?: Record<string, Record<string, any>>
 }
 
 // ---------- Constants ----------
@@ -101,9 +103,156 @@ const MODIFIER_LABELS: Record<string, string> = {
   stale_transparency: 'Transparency data stale',
 }
 
+// ---------- Signal detail helpers ----------
+
+// Map SKILL_SIGNAL_LABELS index to signal_history signal_name
+const SKILL_SIGNAL_KEYS = [
+  'virustotal_scan', 'content_safety', 'publisher_reputation',
+  'adoption', 'freshness', 'transparency',
+]
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSignalSummary(key: string, meta: Record<string, any>): { summary: string; details: React.ReactNode } | null {
+  switch (key) {
+    case 'virustotal_scan': {
+      const reason = meta.reason as string | undefined
+      let summary = 'No scan data available'
+      if (reason === 'clean_moderation') summary = 'Clean — no issues detected by ClawHub moderation'
+      else if (reason === 'suspicious_flagged') summary = 'Flagged as suspicious by ClawHub moderation'
+      else if (reason === 'malware_blocked') summary = 'Blocked — malware detected by ClawHub moderation'
+      else if (reason === 'no_moderation_data') summary = 'Awaiting moderation scan'
+      else if (meta.source === 'virustotal_api') {
+        const m = (meta.malicious as number) ?? 0
+        const s = (meta.suspicious as number) ?? 0
+        summary = m > 0 ? `${m} malicious + ${s} suspicious detections` : s > 0 ? `${s} suspicious detections` : 'Clean — 0 detections across 70+ vendors'
+      }
+      return {
+        summary,
+        details: (
+          <div className="flex flex-col gap-1 mt-1.5">
+            {meta.isMalwareBlocked !== undefined && (
+              <span className="font-mono text-[0.66rem]">
+                Malware blocked: {meta.isMalwareBlocked ? <span className="text-[#d03a3d]">Yes</span> : <span className="text-[#0dc956]">No</span>}
+              </span>
+            )}
+            {meta.isSuspicious !== undefined && (
+              <span className="font-mono text-[0.66rem]">
+                Suspicious flag: {meta.isSuspicious ? <span className="text-[#f7931e]">Yes</span> : <span className="text-[#0dc956]">No</span>}
+              </span>
+            )}
+            <span className="font-mono text-[0.66rem] text-fabric-400">Source: {meta.source === 'virustotal_api' ? 'VirusTotal API' : 'ClawHub moderation'}</span>
+          </div>
+        ),
+      }
+    }
+    case 'content_safety': {
+      const count = (meta.findingsCount as number) ?? 0
+      const findings = (meta.findings as string[]) ?? []
+      const summary = count === 0 ? 'No malicious patterns detected' : `${count} finding${count > 1 ? 's' : ''} detected`
+      return {
+        summary,
+        details: (
+          <div className="flex flex-col gap-1 mt-1.5">
+            {findings.length > 0 ? (
+              findings.map((f: string, i: number) => (
+                <span key={i} className="font-mono text-[0.66rem] text-[#f7931e]">&#x26A0; {f}</span>
+              ))
+            ) : (
+              <span className="font-mono text-[0.66rem] text-fabric-400">
+                Scanned for: credential leaks, shell injection, config tampering, base64 payloads, sensitive path access, SOUL.md/AGENTS.md tampering
+              </span>
+            )}
+            {meta.contentLength != null && (
+              <span className="font-mono text-[0.66rem] text-fabric-400">{meta.contentLength.toLocaleString()} chars analyzed</span>
+            )}
+          </div>
+        ),
+      }
+    }
+    case 'publisher_reputation': {
+      const handle = meta.handle as string | undefined
+      const age = meta.accountAgeYears as number | undefined
+      const repos = meta.publicRepos as number | undefined
+      const followers = meta.followers as number | undefined
+      const isOrg = meta.isOrg as boolean | undefined
+      const parts: string[] = []
+      if (isOrg) parts.push('Organization')
+      if (age != null) parts.push(`${age.toFixed(1)}yr account`)
+      if (repos != null) parts.push(`${repos} repos`)
+      const summary = parts.length > 0 ? parts.join(' · ') : 'No publisher data'
+      return {
+        summary,
+        details: (
+          <div className="flex flex-col gap-1 mt-1.5">
+            {handle && <span className="font-mono text-[0.66rem]">GitHub: <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">{handle}</a></span>}
+            {followers != null && <span className="font-mono text-[0.66rem] text-fabric-400">{followers} followers</span>}
+          </div>
+        ),
+      }
+    }
+    case 'adoption': {
+      const installs = meta.installsAllTime as number | undefined
+      const stars = meta.stars as number | undefined
+      const parts: string[] = []
+      if (installs != null) parts.push(`${installs.toLocaleString()} installs`)
+      if (stars != null) parts.push(`${stars} stars`)
+      const summary = parts.length > 0 ? parts.join(' · ') : 'No adoption data'
+      return {
+        summary,
+        details: (
+          <div className="flex flex-col gap-1 mt-1.5">
+            {meta.downloads != null && <span className="font-mono text-[0.66rem] text-fabric-400">{meta.downloads.toLocaleString()} downloads</span>}
+            {meta.comments != null && <span className="font-mono text-[0.66rem] text-fabric-400">{meta.comments} comments</span>}
+          </div>
+        ),
+      }
+    }
+    case 'freshness': {
+      const days = meta.daysSinceUpdate as number | undefined
+      const ver = meta.latestVersion as string | undefined
+      const versions = meta.versions as number | undefined
+      const parts: string[] = []
+      if (days != null) parts.push(days === 0 ? 'Updated today' : `Updated ${days}d ago`)
+      if (ver) parts.push(`v${ver}`)
+      const summary = parts.length > 0 ? parts.join(' · ') : 'No freshness data'
+      return {
+        summary,
+        details: (
+          <div className="flex flex-col gap-1 mt-1.5">
+            {versions != null && <span className="font-mono text-[0.66rem] text-fabric-400">{versions} version{versions !== 1 ? 's' : ''} published</span>}
+            {meta.hasChangelog != null && <span className="font-mono text-[0.66rem] text-fabric-400">Changelog: {meta.hasChangelog ? 'Present' : 'None'}</span>}
+          </div>
+        ),
+      }
+    }
+    case 'transparency': {
+      const checks = meta.checks as Record<string, boolean> | undefined
+      if (!checks) return { summary: 'No transparency data', details: null }
+      const total = Object.keys(checks).length
+      const passed = Object.values(checks).filter(Boolean).length
+      const summary = `${passed}/${total} metadata checks passed`
+      return {
+        summary,
+        details: (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1.5">
+            {Object.entries(checks).map(([k, v]) => (
+              <span key={k} className="font-mono text-[0.66rem]">
+                <span className={v ? 'text-[#0dc956]' : 'text-[#d03a3d]'}>{v ? '\u2713' : '\u2717'}</span>
+                {' '}{k.replace(/_/g, ' ')}
+              </span>
+            ))}
+          </div>
+        ),
+      }
+    }
+    default:
+      return null
+  }
+}
+
 // ---------- Helper components ----------
 
-function SignalRow({ name, score, weight, detail, note }: { name: string; score: number; weight: string; detail: string; note?: string }) {
+function SignalRow({ name, score, weight, detail, note, meta }: { name: string; score: number; weight: string; detail: string; note?: string; meta?: { summary: string; details: React.ReactNode } | null }) {
   const [open, setOpen] = useState(false)
   const pct = (score / 5) * 100
   const level = score >= 4 ? 'high' : score >= 3 ? 'medium' : 'low'
@@ -125,12 +274,21 @@ function SignalRow({ name, score, weight, detail, note }: { name: string; score:
           i
         </button>
       </div>
+      {/* Metadata summary line (always visible for skills) */}
+      {meta && (
+        <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 mt-0.5">
+          <div />
+          <span className="font-mono text-[0.66rem] text-fabric-400">{meta.summary}</span>
+        </div>
+      )}
+      {/* Expandable detail (info description + metadata details) */}
       {open && (
         <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 py-1.5">
           <div />
           <div className="text-[0.75rem] text-fabric-500 leading-normal">
             {detail}
             {note && <p className="mt-1.5 text-[0.68rem] text-fabric-400 italic">{note}</p>}
+            {meta?.details}
           </div>
         </div>
       )}
@@ -202,6 +360,7 @@ export default function ProductPageClient({
   transparencyMeta,
   adoptionMeta,
   maintenanceMeta,
+  signalMetas = {},
 }: ProductPageProps) {
   const [incidentsCount, setIncidentsCount] = useState(ITEMS_INITIAL)
   const [depsCount, setDepsCount] = useState(ITEMS_INITIAL)
@@ -372,18 +531,24 @@ export default function ProductPageClient({
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">6 signals · weighted composite</span>
           </div>
           <div className="flex flex-col gap-3.5">
-            {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => (
-              <SignalRow
-                key={signal.name}
-                name={signal.name}
-                score={service.signals[i]}
-                weight={signal.weight}
-                detail={signal.detail}
-                note={service.category === 'skill' && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
-                  ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
-                  : undefined}
-              />
-            ))}
+            {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
+              const signalKey = service.category === 'skill' ? SKILL_SIGNAL_KEYS[i] : undefined
+              const rawMeta = signalKey ? signalMetas[signalKey] : undefined
+              const meta = signalKey && rawMeta ? getSignalSummary(signalKey, rawMeta) : undefined
+              return (
+                <SignalRow
+                  key={signal.name}
+                  name={signal.name}
+                  score={service.signals[i]}
+                  weight={signal.weight}
+                  detail={signal.detail}
+                  note={service.category === 'skill' && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
+                    ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
+                    : undefined}
+                  meta={meta}
+                />
+              )
+            })}
           </div>
         </div>
 

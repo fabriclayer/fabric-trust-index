@@ -26,12 +26,13 @@ async function loadDetailData(slug: string) {
       getServiceVersions,
       getServiceSupplyChain,
       getLatestSignalMeta,
+      getAllSignalMetas,
     } = await import('@/lib/services')
 
     const serviceId = await getServiceId(slug)
     if (!serviceId) return null
 
-    const [incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta] = await Promise.all([
+    const [incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta, signalMetas] = await Promise.all([
       getServiceIncidents(serviceId),
       getSignalHistory(serviceId, 'composite'),
       getServiceVersions(serviceId),
@@ -39,9 +40,10 @@ async function loadDetailData(slug: string) {
       getLatestSignalMeta(serviceId, 'transparency'),
       getLatestSignalMeta(serviceId, 'adoption'),
       getLatestSignalMeta(serviceId, 'maintenance'),
+      getAllSignalMetas(serviceId),
     ])
 
-    return { incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta }
+    return { incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta, signalMetas }
   } catch (err) {
     console.error('Failed to load detail data:', err)
     return null
@@ -80,6 +82,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       transparencyMeta={detailData?.transparencyMeta ?? null}
       adoptionMeta={detailData?.adoptionMeta ?? null}
       maintenanceMeta={detailData?.maintenanceMeta ?? null}
+      signalMetas={detailData?.signalMetas ?? {}}
     />
   )
 }
