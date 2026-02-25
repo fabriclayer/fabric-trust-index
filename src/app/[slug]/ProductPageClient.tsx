@@ -97,7 +97,7 @@ const ITEMS_INITIAL = 6
 const LOAD_MORE_BATCH = 10
 
 const MODIFIER_LABELS: Record<string, string> = {
-  critical_cve_override: 'Critical CVE — score capped',
+  critical_cve_override: 'Critical CVE detected — score capped',
   vulnerability_zero_override: 'Vulnerability failure — score capped',
   zero_signal_override: 'Missing signal — held at caution',
   pending_evaluation: 'Awaiting first evaluation',
@@ -111,6 +111,12 @@ const MODIFIER_LABELS: Record<string, string> = {
 const SKILL_SIGNAL_KEYS = [
   'virustotal_scan', 'content_safety', 'publisher_reputation',
   'adoption', 'freshness', 'transparency',
+]
+
+// Map SIGNAL_LABELS index to signal_history signal_name (standard services)
+const STANDARD_SIGNAL_KEYS = [
+  'vulnerability', 'operational', 'maintenance',
+  'adoption', 'transparency', 'publisher_trust',
 ]
 
 function scoreBadgeColor(score: number): string {
@@ -169,6 +175,67 @@ function getSignalSummary(key: string, meta: Record<string, any>): string {
     default:
       return ''
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getStandardSignalSummary(key: string, meta: Record<string, any>): string {
+  switch (key) {
+    case 'vulnerability': {
+      const total = meta.total_cves as number | undefined
+      if (total == null) return 'No vulnerability data'
+      if (total === 0) return 'No known CVEs'
+      const cves = meta.cves as Array<{ severity: string; patch_status: string }> | undefined
+      if (!cves) return `${total} CVE${total > 1 ? 's' : ''}`
+      const unpatched = cves.filter(c => c.patch_status === 'unpatched').length
+      const patchAvail = cves.filter(c => c.patch_status === 'patch_available').length
+      const patched = cves.filter(c => c.patch_status === 'patched').length
+      const parts: string[] = [`${total} CVE${total > 1 ? 's' : ''}`]
+      if (patched > 0) parts.push(`${patched} patched`)
+      if (patchAvail > 0) parts.push(`${patchAvail} patch available`)
+      if (unpatched > 0) parts.push(`${unpatched} unpatched`)
+      return parts.join(' · ')
+    }
+    case 'operational': {
+      const parts: string[] = []
+      if (meta.uptime_percent != null) parts.push(`${(meta.uptime_percent as number).toFixed(1)}% uptime`)
+      if (meta.p50_ms != null) parts.push(`p50: ${meta.p50_ms}ms`)
+      return parts.length > 0 ? parts.join(' · ') : 'No operational data'
+    }
+    case 'maintenance': {
+      const parts: string[] = []
+      if (meta.days_since_release != null) parts.push(`${meta.days_since_release}d since release`)
+      if (meta.days_since_commit != null) parts.push(`${meta.days_since_commit}d since commit`)
+      if (meta.commits_90d != null) parts.push(`${meta.commits_90d} commits (90d)`)
+      return parts.length > 0 ? parts.join(' · ') : 'No maintenance data'
+    }
+    case 'adoption': {
+      const parts: string[] = []
+      if (meta.weekly_downloads != null) parts.push(`${formatCompact(meta.weekly_downloads as number)} weekly downloads`)
+      if (meta.stars != null) parts.push(`${formatCompact(meta.stars as number)} stars`)
+      return parts.length > 0 ? parts.join(' · ') : 'No adoption data'
+    }
+    case 'transparency': {
+      const parts: string[] = []
+      if (meta.has_readme != null) parts.push(meta.has_readme ? 'has README' : 'no README')
+      if (meta.has_license != null) parts.push(meta.has_license ? 'licensed' : 'no license')
+      if (meta.has_description != null) parts.push(meta.has_description ? 'described' : 'no description')
+      return parts.length > 0 ? parts.join(' · ') : 'No transparency data'
+    }
+    case 'publisher_trust': {
+      const parts: string[] = []
+      if (meta.account_age_days != null) parts.push(`${Math.round((meta.account_age_days as number) / 365)}yr account`)
+      if (meta.npm_maintainers) parts.push(`${(meta.npm_maintainers as string[]).length} maintainers`)
+      return parts.length > 0 ? parts.join(' · ') : 'No publisher data'
+    }
+    default:
+      return ''
+  }
+}
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -662,10 +729,25 @@ export default function ProductPageClient({
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <span className="font-mono text-[0.72rem] text-fabric-700 leading-relaxed">
-                {service.active_modifiers.includes('critical_cve_override') || service.active_modifiers.includes('vulnerability_zero_override')
-                  ? `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''} due to critical vulnerability findings. Individual signal scores may be higher but the composite is overridden until vulnerabilities are resolved.`
-                  : `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
-                }
+                {(() => {
+                  const scorePart = `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''}`
+                  if (service.active_modifiers!.includes('vulnerability_zero_override')) {
+                    return `${scorePart} due to critical vulnerability failures. The composite is overridden until vulnerabilities are resolved.`
+                  }
+                  if (service.active_modifiers!.includes('critical_cve_override')) {
+                    const vulnMeta = signalMetas.vulnerability
+                    const patchStatus = vulnMeta?.critical_patch_status as string | undefined
+                    const fixedVersion = vulnMeta?.critical_fixed_version as string | undefined
+                    if (patchStatus === 'patched') {
+                      return `${scorePart} — critical CVE detected but patched${fixedVersion ? ` in v${fixedVersion}` : ''}. The composite is held at caution until historical CVE record clears.`
+                    }
+                    if (patchStatus === 'patch_available') {
+                      return `${scorePart} — critical CVE with patch available${fixedVersion ? ` (v${fixedVersion})` : ''} but not yet applied to the latest release. Update recommended.`
+                    }
+                    return `${scorePart} — critical unpatched CVE detected with no known fix. The composite is overridden until the vulnerability is resolved.`
+                  }
+                  return `${scorePart} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
+                })()}
               </span>
             </div>
           )}
@@ -714,9 +796,11 @@ export default function ProductPageClient({
           <div className="flex flex-col gap-3.5">
             {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
               const isSkill = service.category === 'skill'
-              const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : undefined
+              const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : STANDARD_SIGNAL_KEYS[i]
               const rawMeta = signalKey ? signalMetas[signalKey] : undefined
-              const summary = signalKey && rawMeta ? getSignalSummary(signalKey, rawMeta) : undefined
+              const summary = signalKey && rawMeta
+                ? (isSkill ? getSignalSummary(signalKey, rawMeta) : getStandardSignalSummary(signalKey, rawMeta))
+                : undefined
               return (
                 <SignalRow
                   key={signal.name}

@@ -105,15 +105,32 @@ async function detectIncidents(
     })
   }
 
-  // Critical unpatched CVE detected
+  // Critical CVE detected — patch-aware alert
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
-  if (vulnResult?.result.metadata.has_critical_unpatched) {
+  if (vulnResult?.result.metadata.critical_patch_status) {
+    const patchStatus = vulnResult.result.metadata.critical_patch_status as string
+    const fixedVersion = vulnResult.result.metadata.critical_fixed_version as string | null
+    const totalCves = vulnResult.result.metadata.total_cves as number
+
+    let title: string
+    let description: string
+    if (patchStatus === 'unpatched') {
+      title = 'Critical unpatched CVE — no fix available'
+      description = `${totalCves} CVE(s) found, including critical vulnerabilities with no known fix`
+    } else if (patchStatus === 'patch_available') {
+      title = `Critical CVE — patch available${fixedVersion ? ` in v${fixedVersion}` : ''}`
+      description = `${totalCves} CVE(s) found. A fix exists but the latest published version has not applied it`
+    } else {
+      title = `Critical CVE detected — patched${fixedVersion ? ` in v${fixedVersion}` : ''}`
+      description = `${totalCves} CVE(s) found. Critical vulnerability has been patched in the latest version`
+    }
+
     await createIncident({
       service_id: service.id,
       type: 'cve_found',
-      severity: 'critical',
-      title: 'Critical unpatched CVE detected',
-      description: `${vulnResult.result.metadata.total_cves} CVE(s) found, including critical unpatched vulnerabilities`,
+      severity: patchStatus === 'patched' ? 'warning' : 'critical',
+      title,
+      description,
       score_at_time: newComposite,
     })
   }

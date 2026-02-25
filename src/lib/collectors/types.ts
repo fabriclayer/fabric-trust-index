@@ -30,11 +30,56 @@ export interface OsvVulnerability {
   }>
 }
 
+export type PatchStatus = 'patched' | 'patch_available' | 'unpatched'
+
+/** Extract all fixed versions from an OSV vulnerability across all affected entries */
+export function getFixedVersions(vuln: OsvVulnerability): string[] {
+  const versions: string[] = []
+  for (const a of vuln.affected ?? []) {
+    for (const r of a.ranges ?? []) {
+      for (const e of r.events) {
+        if (e.fixed) versions.push(e.fixed)
+      }
+    }
+  }
+  return versions
+}
+
 /** Check if an OSV vulnerability has a fix available */
 export function hasFixAvailable(vuln: OsvVulnerability): boolean {
-  return vuln.affected?.some(a =>
-    a.ranges?.some(r => r.events.some(e => e.fixed))
-  ) ?? false
+  return getFixedVersions(vuln).length > 0
+}
+
+/** Compare two version strings (semver-like). Returns -1, 0, or 1. */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/[^0-9.]/g, '').split('.').map(Number)
+  const pb = b.replace(/[^0-9.]/g, '').split('.').map(Number)
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] ?? 0
+    const nb = pb[i] ?? 0
+    if (na > nb) return 1
+    if (na < nb) return -1
+  }
+  return 0
+}
+
+/**
+ * Determine the patch status of a vulnerability against the service's latest version.
+ * - 'patched': latest version >= fix version (vulnerability resolved in current release)
+ * - 'patch_available': fix exists but latest version < fix version
+ * - 'unpatched': no fix version exists in the advisory
+ */
+export function determinePatchStatus(vuln: OsvVulnerability, latestVersion: string | null): PatchStatus {
+  const fixedVersions = getFixedVersions(vuln)
+  if (fixedVersions.length === 0) return 'unpatched'
+  if (!latestVersion) return 'patch_available'
+
+  // Check if the latest version is >= any fix version
+  for (const fixed of fixedVersions) {
+    if (compareVersions(latestVersion, fixed) >= 0) return 'patched'
+  }
+  return 'patch_available'
 }
 
 /** Classify an OSV vulnerability into a severity tier based on database metadata or CVSS */

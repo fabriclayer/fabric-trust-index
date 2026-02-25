@@ -224,7 +224,13 @@ export async function getLatestSignalMeta(serviceId: string, signalName: string)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAllSignalMetas(serviceId: string): Promise<Record<string, Record<string, any>>> {
   const supabase = createServerClient()
-  const signals = ['virustotal_scan', 'content_safety', 'publisher_reputation', 'adoption', 'freshness', 'transparency']
+  // Fetch both skill and standard signal metadata
+  const signals = [
+    // Skill signals
+    'virustotal_scan', 'content_safety', 'publisher_reputation', 'adoption', 'freshness', 'transparency',
+    // Standard signals
+    'vulnerability', 'operational', 'maintenance', 'publisher_trust',
+  ]
   const results = await Promise.all(
     signals.map(s => getLatestSignalMeta(serviceId, s).then(meta => [s, meta] as const))
   )
