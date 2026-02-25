@@ -81,7 +81,7 @@ export default function SubmitServiceModal({ initialName, onClose }: SubmitServi
                   value={serviceName}
                   onChange={e => setServiceName(e.target.value)}
                   placeholder="e.g. Acme AI"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 
@@ -94,7 +94,7 @@ export default function SubmitServiceModal({ initialName, onClose }: SubmitServi
                   value={url}
                   onChange={e => setUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 
@@ -107,7 +107,7 @@ export default function SubmitServiceModal({ initialName, onClose }: SubmitServi
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 

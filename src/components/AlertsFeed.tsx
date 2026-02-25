@@ -330,7 +330,7 @@ export function AlertsBellButton({
   return (
     <button
       onClick={onClick}
-      className={`relative p-2 rounded-lg border transition-all cursor-pointer ${active ? 'border-pink bg-white shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200 bg-white hover:border-fabric-300'}`}
+      className={`relative p-2 rounded-lg border transition-all cursor-pointer ${active ? 'border-blue bg-white shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200 bg-white hover:border-fabric-300'}`}
       title="Alerts"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fabric-600">

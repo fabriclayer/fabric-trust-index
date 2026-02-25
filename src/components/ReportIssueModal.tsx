@@ -101,7 +101,7 @@ export default function ReportIssueModal({ serviceName, serviceSlug, onClose }: 
                 <select
                   value={issueType}
                   onChange={e => setIssueType(e.target.value)}
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)] appearance-none"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)] appearance-none"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a0a09c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
                 >
                   <option value="" disabled>Select an issue type</option>
@@ -120,7 +120,7 @@ export default function ReportIssueModal({ serviceName, serviceSlug, onClose }: 
                   onChange={e => setDescription(e.target.value)}
                   placeholder="Describe the issue in detail"
                   rows={3}
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)] resize-none"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)] resize-none"
                 />
               </div>
 
@@ -133,7 +133,7 @@ export default function ReportIssueModal({ serviceName, serviceSlug, onClose }: 
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 

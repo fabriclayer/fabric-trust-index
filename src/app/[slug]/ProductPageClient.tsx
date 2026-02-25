@@ -120,7 +120,7 @@ function SignalRow({ name, score, weight, detail, note }: { name: string; score:
         <span className="font-mono text-[0.62rem] text-fabric-400 text-right">{weight}</span>
         <button
           onClick={() => setOpen(!open)}
-          className={`w-5 h-5 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.6rem] font-semibold cursor-pointer transition-all flex-shrink-0 leading-none ${open ? 'border-pink text-pink bg-[rgba(254,131,224,0.08)]' : 'border-fabric-200 bg-white hover:border-pink hover:text-pink'}`}
+          className={`w-5 h-5 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.6rem] font-semibold cursor-pointer transition-all flex-shrink-0 leading-none ${open ? 'border-blue text-blue bg-[rgba(61,138,247,0.08)]' : 'border-fabric-200 bg-white hover:border-blue hover:text-blue'}`}
         >
           i
         </button>
@@ -252,7 +252,7 @@ export default function ProductPageClient({
                 <h1 className="text-3xl font-bold tracking-tight leading-tight max-md:text-xl">{service.name}</h1>
                 <div className="font-mono text-[0.78rem] text-fabric-500 mt-0.5">
                   by {service.publisher_url ? (
-                    <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-pink transition-colors no-underline">{service.publisher}</a>
+                    <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-blue transition-colors no-underline">{service.publisher}</a>
                   ) : (
                     <span className="text-fabric-600">{service.publisher}</span>
                   )} · last scanned {service.updated}
@@ -265,7 +265,7 @@ export default function ProductPageClient({
                   <Link
                     key={t}
                     href={`/?category=${service.category}`}
-                    className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 cursor-pointer transition-all hover:text-pink hover:border-pink hover:bg-[rgba(254,131,224,0.08)] no-underline"
+                    className="font-mono text-[0.58rem] py-[3px] px-2 rounded-full uppercase tracking-wider font-medium border border-fabric-200 text-fabric-400 cursor-pointer transition-all hover:text-blue hover:border-blue hover:bg-[rgba(61,138,247,0.08)] no-underline"
                   >
                     {t}
                   </Link>
@@ -290,7 +290,7 @@ export default function ProductPageClient({
                     target="_blank"
                     rel="noopener noreferrer"
                     title={link.title}
-                    className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-fabric-400 border border-fabric-200 bg-white cursor-pointer transition-all hover:border-pink hover:text-pink hover:bg-[rgba(254,131,224,0.06)] no-underline"
+                    className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-fabric-400 border border-fabric-200 bg-white cursor-pointer transition-all hover:border-blue hover:text-blue hover:bg-[rgba(61,138,247,0.06)] no-underline"
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill={link.fill ? 'currentColor' : 'none'} stroke={link.fill ? 'none' : 'currentColor'} strokeWidth={link.fill ? undefined : 2}>
                       <path d={link.d} />
@@ -608,7 +608,7 @@ export default function ProductPageClient({
                   </button>
                 )}
                 {incidentsCount < incidents.length && (
-                  <button onClick={() => setIncidentsCount(c => Math.min(c + LOAD_MORE_BATCH, incidents.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  <button onClick={() => setIncidentsCount(c => Math.min(c + LOAD_MORE_BATCH, incidents.length))} className="font-mono text-[0.68rem] text-blue cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
                     Show more →
                   </button>
                 )}
@@ -755,7 +755,7 @@ export default function ProductPageClient({
                   </button>
                 )}
                 {depsCount < supplyChain.length && (
-                  <button onClick={() => setDepsCount(c => Math.min(c + LOAD_MORE_BATCH, supplyChain.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  <button onClick={() => setDepsCount(c => Math.min(c + LOAD_MORE_BATCH, supplyChain.length))} className="font-mono text-[0.68rem] text-blue cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
                     Show more →
                   </button>
                 )}
@@ -867,7 +867,7 @@ export default function ProductPageClient({
                   </button>
                 )}
                 {versionsCount < versions.length && (
-                  <button onClick={() => setVersionsCount(c => Math.min(c + LOAD_MORE_BATCH, versions.length))} className="font-mono text-[0.68rem] text-pink cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
+                  <button onClick={() => setVersionsCount(c => Math.min(c + LOAD_MORE_BATCH, versions.length))} className="font-mono text-[0.68rem] text-blue cursor-pointer hover:opacity-70 transition-opacity bg-transparent border-none p-0">
                     Show more →
                   </button>
                 )}
@@ -887,8 +887,8 @@ export default function ProductPageClient({
               <p className="font-mono text-[0.72rem] text-fabric-400 leading-relaxed">Claim this profile to unlock deeper evaluation, real-time monitoring,<br className="max-md:hidden" />and trust signals that help agents discover your service.</p>
             </div>
             <div className="flex gap-3 flex-shrink-0">
-              <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:!bg-pink hover:!text-white hover:!border-pink whitespace-nowrap">Claim Provider</button>
-              <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-pink border border-pink/40 rounded-lg cursor-pointer transition-all hover:!bg-pink hover:!text-white hover:!border-pink whitespace-nowrap">Report Issue</button>
+              <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-blue border border-blue/40 rounded-lg cursor-pointer transition-all hover:!bg-blue hover:!text-white hover:!border-blue whitespace-nowrap">Claim Provider</button>
+              <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-blue border border-blue/40 rounded-lg cursor-pointer transition-all hover:!bg-blue hover:!text-white hover:!border-blue whitespace-nowrap">Report Issue</button>
             </div>
           </div>
 

@@ -21,7 +21,7 @@ export default function Nav() {
             <a href="https://fabriclayer.ai" className="flex items-center gap-2.5 text-black no-underline">
               <FabricLogo className="h-[18px] w-auto" />
             </a>
-            <Link href="/" className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 no-underline hover:text-pink transition-colors">
+            <Link href="/" className="font-mono text-[0.78rem] font-normal tracking-wide text-fabric-400 border-l border-fabric-200 pl-2.5 no-underline hover:text-blue transition-colors">
               trust index
             </Link>
           </div>
@@ -35,7 +35,7 @@ export default function Nav() {
                   </span>
                 </span>
               ) : (
-                <a key={l.href} href={l.href} className="font-mono text-[0.78rem] font-normal text-fabric-500 no-underline transition-colors hover:text-pink">
+                <a key={l.href} href={l.href} className="font-mono text-[0.78rem] font-normal text-fabric-500 no-underline transition-colors hover:text-blue">
                   {l.label}
                 </a>
               ))}

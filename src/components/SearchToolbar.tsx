@@ -56,7 +56,7 @@ function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-pink shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200'}`}
+        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
       >
         <span className="font-medium text-fabric-800">{displayLabel}</span>
         {badge && <span className="text-[0.6rem] text-fabric-400 bg-fabric-50 rounded px-1 py-px">{badge}</span>}
@@ -71,9 +71,9 @@ function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
             <div
               key={k}
               onClick={() => { onChange(k); setUserChanged(true); setOpen(false) }}
-              className={`font-mono text-[0.72rem] text-fabric-600 py-2 px-2.5 rounded-md cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap hover:bg-fabric-50 hover:text-fabric-800 ${value === k ? 'text-pink bg-[rgba(254,131,224,0.06)]' : ''}`}
+              className={`font-mono text-[0.72rem] text-fabric-600 py-2 px-2.5 rounded-md cursor-pointer flex items-center gap-2 transition-all whitespace-nowrap hover:bg-fabric-50 hover:text-fabric-800 ${value === k ? 'text-blue bg-[rgba(61,138,247,0.06)]' : ''}`}
             >
-              {value === k && <span className="w-[5px] h-[5px] rounded-full bg-pink flex-shrink-0" />}
+              {value === k && <span className="w-[5px] h-[5px] rounded-full bg-blue flex-shrink-0" />}
               {v}
             </div>
           ))}
@@ -113,7 +113,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-pink shadow-[0_0_0_3px_rgba(254,131,224,0.1)]' : 'border-fabric-200'}`}
+        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
       >
         <span className="font-medium text-fabric-800">{label}</span>
         <svg className={`w-2.5 h-2.5 text-fabric-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +134,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
                 <span className="w-[5px] h-[5px] rounded-full flex-shrink-0" style={{ backgroundColor: s.dot }} />
                 {s.label}
                 {active && (
-                  <svg className="w-3 h-3 ml-1 text-pink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3 h-3 ml-1 text-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
                 )}
@@ -152,7 +152,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
     <div className={`sticky top-14 z-[90] bg-fabric-50/[0.92] backdrop-blur-2xl border-b border-fabric-200 py-2.5 px-8 max-md:px-4 transition-[margin] duration-200 ${props.alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
       <div className="max-w-container mx-auto flex items-center gap-3 flex-wrap">
         {/* Search */}
-        <div className="flex items-center gap-2 py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] min-w-[200px] flex-1 transition-all focus-within:border-pink focus-within:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]">
+        <div className="flex items-center gap-2 py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] min-w-[200px] flex-1 transition-all focus-within:border-blue focus-within:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]">
           <svg className="flex-shrink-0 text-fabric-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />

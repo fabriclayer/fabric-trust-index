@@ -98,7 +98,7 @@ export default function ClaimProviderModal({ serviceName, serviceSlug, onClose }
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
                   placeholder="Jane Smith"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 
@@ -111,7 +111,7 @@ export default function ClaimProviderModal({ serviceName, serviceSlug, onClose }
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="you@company.com"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 
@@ -124,7 +124,7 @@ export default function ClaimProviderModal({ serviceName, serviceSlug, onClose }
                   value={role}
                   onChange={e => setRole(e.target.value)}
                   placeholder="e.g. CTO, Developer Relations"
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)]"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)]"
                 />
               </div>
 
@@ -137,7 +137,7 @@ export default function ClaimProviderModal({ serviceName, serviceSlug, onClose }
                   onChange={e => setMessage(e.target.value)}
                   placeholder="Any details that help verify your affiliation"
                   rows={3}
-                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-pink focus:shadow-[0_0_0_3px_rgba(254,131,224,0.1)] resize-none"
+                  className="w-full py-2 px-3.5 bg-white border border-fabric-200 rounded-[10px] text-[0.85rem] font-sans text-fabric-800 placeholder:text-fabric-300 transition-all focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(61,138,247,0.1)] resize-none"
                 />
               </div>
 
