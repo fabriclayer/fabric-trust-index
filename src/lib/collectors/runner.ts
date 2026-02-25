@@ -9,6 +9,7 @@ import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
 import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
+import { generateAssessment } from '@/lib/assessment-generator'
 
 /** Metadata reasons that indicate a fallback/default score (no real data evaluated) */
 const FALLBACK_REASONS = new Set([
@@ -352,6 +353,19 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   // Detect and create incidents
   await detectIncidents(service, oldComposite, finalScore, collectorResults)
+
+  // Generate AI assessment if needed (non-blocking)
+  const needsAssessment =
+    !service.ai_assessment ||
+    Math.abs(finalScore - oldComposite) > 0.25 ||
+    service.status !== status
+  if (needsAssessment) {
+    try {
+      await generateAssessment(service.id)
+    } catch (err) {
+      console.error(`Assessment generation failed for ${service.name}:`, err)
+    }
+  }
 
   // Run supply-chain collector (informational, non-scoring)
   if (!options?.skipSupplyChain) {

@@ -37,4 +37,7 @@ export interface Service {
   discord_url?: string | null
   status_page_url?: string | null
   active_modifiers?: string[]
+  // AI assessment
+  ai_assessment?: string | null
+  ai_assessment_updated_at?: string | null
 }

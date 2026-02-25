@@ -67,6 +67,8 @@ function dbToService(db: any): Service {
     discord_url: db.discord_url || undefined,
     status_page_url: db.status_page_url || undefined,
     active_modifiers: db.active_modifiers?.length > 0 ? db.active_modifiers : undefined,
+    ai_assessment: db.ai_assessment || null,
+    ai_assessment_updated_at: db.ai_assessment_updated_at || null,
   }
 }
 

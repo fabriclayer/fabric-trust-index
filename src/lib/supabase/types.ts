@@ -151,6 +151,14 @@ export interface DbService {
   discovered_from: string | null
   discovery_query: string | null
 
+  // AI assessment
+  ai_assessment: string | null
+  ai_assessment_updated_at: string | null
+  readme_excerpt: string | null
+  license: string | null
+  dependency_count: number | null
+  dependencies_raw: string | null
+
   created_at: string
   updated_at: string
 
