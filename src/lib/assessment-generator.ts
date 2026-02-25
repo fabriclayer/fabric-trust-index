@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { enrichService } from '@/lib/enrichment'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
-const MODEL = 'claude-sonnet-4-5-20250514'
+const MODEL = 'claude-sonnet-4-5-20250929'
 const MAX_TOKENS = 300
 
 const SYSTEM_PROMPT = `You are the Fabric Trust Index scoring engine. Write a concise 2-paragraph trust assessment (80-100 words total) for the given service based on its signal data, metadata, and README.
