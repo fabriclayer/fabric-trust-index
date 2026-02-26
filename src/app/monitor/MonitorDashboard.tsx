@@ -290,8 +290,140 @@ function PipelineTab() {
   )
 }
 
+// ─── CATEGORIES ───────────────────────────────────────────────────
+const CATEGORIES = [
+  'llm', 'agent', 'framework', 'code', 'embedding', 'image-generation',
+  'speech', 'web-search', 'vision', 'data-api', 'infra', 'mcp-tool',
+]
+
+// ─── MANUAL ENTRY FORM ───────────────────────────────────────────
+function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [form, setForm] = useState({
+    name: '', slug: '', publisher: '', description: '', category: '',
+    github_repo: '', npm_package: '', pypi_package: '', homepage_url: '',
+  })
+
+  const set = (field: string, value: string) => {
+    setForm(prev => {
+      const next = { ...prev, [field]: value }
+      // Auto-generate slug from name
+      if (field === 'name' && (!prev.slug || prev.slug === toSlug(prev.name))) {
+        next.slug = toSlug(value)
+      }
+      return next
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name || !form.slug) return
+    setSubmitting(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/monitor/add-service', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResult({ ok: true, message: `Added "${form.name}" — will be scored on next cron run` })
+        setForm({ name: '', slug: '', publisher: '', description: '', category: '', github_repo: '', npm_package: '', pypi_package: '', homepage_url: '' })
+        onAdded(data.slug)
+      } else {
+        setResult({ ok: false, message: data.error || 'Failed to add service' })
+      }
+    } catch {
+      setResult({ ok: false, message: 'Network error' })
+    }
+    setSubmitting(false)
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`,
+    borderRadius: 8, color: C.text, fontFamily: F.mono, fontSize: 12, outline: 'none', boxSizing: 'border-box',
+  }
+  const labelStyle: React.CSSProperties = { fontFamily: F.mono, fontSize: 10, color: C.t3, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} style={{
+        fontFamily: F.mono, fontSize: 11, color: C.blue, background: C.blueDim,
+        border: `1px solid ${C.blue}22`, borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
+      }}>+ Add Service Manually</button>
+    )
+  }
+
+  return (
+    <Card title="Add Service Manually" right={
+      <button onClick={() => { setOpen(false); setResult(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
+    }>
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>Name *</label>
+            <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. CodePilot Pro" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Slug *</label>
+            <input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="e.g. codepilot-pro" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Publisher</label>
+            <input value={form.publisher} onChange={e => set('publisher', e.target.value)} placeholder="e.g. CodePilot Inc" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Category</label>
+            <select value={form.category} onChange={e => set('category', e.target.value)} style={{ ...inputStyle, appearance: 'none' }}>
+              <option value="">Auto-detect</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Description</label>
+            <input value={form.description} onChange={e => set('description', e.target.value)} placeholder="Short description of the service" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>GitHub Repo</label>
+            <input value={form.github_repo} onChange={e => set('github_repo', e.target.value)} placeholder="owner/repo" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Homepage URL</label>
+            <input value={form.homepage_url} onChange={e => set('homepage_url', e.target.value)} placeholder="https://..." style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>npm Package</label>
+            <input value={form.npm_package} onChange={e => set('npm_package', e.target.value)} placeholder="e.g. @org/package" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>PyPI Package</label>
+            <input value={form.pypi_package} onChange={e => set('pypi_package', e.target.value)} placeholder="e.g. package-name" style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+          <button type="submit" disabled={submitting || !form.name || !form.slug} style={{
+            fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: '#fff', background: C.blue,
+            border: 'none', borderRadius: 8, padding: '8px 20px', cursor: submitting ? 'not-allowed' : 'pointer',
+            opacity: submitting || !form.name || !form.slug ? 0.5 : 1,
+          }}>{submitting ? 'Adding...' : 'Add to Index'}</button>
+          {result && (
+            <Mono style={{ fontSize: 11, color: result.ok ? C.green : C.red }}>{result.message}</Mono>
+          )}
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
 // ─── DISCOVERY TAB ────────────────────────────────────────────────
-function DiscoveryTab({ data, onAction }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => void }) {
+function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => void; onRefresh: () => void }) {
   const [filter, setFilter] = useState('all')
   const [acting, setActing] = useState<string | null>(null)
 
@@ -306,6 +438,9 @@ function DiscoveryTab({ data, onAction }: { data: MonitorData; onAction: (id: st
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Manual Entry */}
+      <ManualEntryForm onAdded={() => onRefresh()} />
+
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
@@ -639,7 +774,7 @@ export default function MonitorDashboard() {
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
         {tab === 'pipeline' && <PipelineTab />}
-        {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} />}
+        {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'overrides' && <OverridesTab data={data} />}
         {tab === 'crons' && <CronsTab />}
       </div>
