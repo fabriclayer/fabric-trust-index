@@ -349,70 +349,83 @@ async function fetchProductHunt(): Promise<NewsCandidate[]> {
   const candidates: NewsCandidate[] = []
 
   try {
-    const query = `{
-      posts(order: VOTES, first: 50) {
+    // PH GraphQL has a 500k complexity limit — fetch 20 posts per page to stay under
+    const query = `query($cursor: String) {
+      posts(order: VOTES, first: 20, after: $cursor) {
         edges {
           node {
-            id
             name
             tagline
-            description
             url
             votesCount
-            website
             thumbnail { url }
-            topics { edges { node { slug name } } }
+            topics { edges { node { slug } } }
             makers { username }
           }
+          cursor
         }
       }
     }`
 
-    const res = await fetch('https://api.producthunt.com/v2/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'FabricTrustIndex/1.0',
-      },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(15000),
-    })
+    type PHEdge = { node: Record<string, unknown>; cursor: string }
+    const allPosts: PHEdge[] = []
 
-    if (!res.ok) {
-      console.warn(`Product Hunt API returned ${res.status}`)
-      return candidates
+    // Fetch up to 3 pages (60 posts)
+    let cursor: string | null = null
+    for (let page = 0; page < 3; page++) {
+      const res: Response = await fetch('https://api.producthunt.com/v2/api/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'User-Agent': 'FabricTrustIndex/1.0',
+        },
+        body: JSON.stringify({ query, variables: { cursor } }),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!res.ok) {
+        console.warn(`Product Hunt API returned ${res.status}`)
+        break
+      }
+
+      const json: { data?: { posts?: { edges?: PHEdge[] } } } = await res.json()
+      const edges: PHEdge[] = json.data?.posts?.edges ?? []
+      if (edges.length === 0) break
+      allPosts.push(...edges)
+      cursor = edges[edges.length - 1].cursor
     }
 
-    const json = await res.json()
-    const posts = json.data?.posts?.edges ?? []
+    const posts = allPosts
 
     for (const { node: post } of posts) {
-      if (!post || post.votesCount < 5) continue
+      if (!post || (post.votesCount as number) < 5) continue
 
-      const topicSlugs: string[] = (post.topics?.edges ?? []).map(
+      const topicSlugs: string[] = ((post.topics as { edges: Array<{ node: { slug: string } }> })?.edges ?? []).map(
         (e: { node: { slug: string } }) => e.node.slug
       )
       const hasTopic = topicSlugs.some(s => PH_AI_TOPICS.has(s))
-      const fullText = `${post.name} ${post.tagline ?? ''} ${post.description ?? ''}`
+      const fullText = `${post.name} ${(post.tagline as string) ?? ''}`
       const hasKeyword = isAIRelevant(fullText, topicSlugs)
 
       if (!hasTopic && !hasKeyword) continue
 
-      const homepage = post.website || post.url
+      const homepage = (post.url as string) ?? ''
       let domain = ''
       try {
         domain = new URL(homepage).hostname.replace('www.', '')
       } catch { /* use empty */ }
 
-      const publisher = post.makers?.[0]?.username ?? (domain || 'unknown')
-      const logoUrl = post.thumbnail?.url
+      const makers = post.makers as Array<{ username: string }> | undefined
+      const publisher = makers?.[0]?.username ?? (domain || 'unknown')
+      const thumb = post.thumbnail as { url: string } | undefined
+      const logoUrl = thumb?.url
         || (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : '')
 
       candidates.push({
-        name: post.name,
-        slug: toSlug(post.name),
-        description: post.tagline ?? post.description ?? '',
+        name: post.name as string,
+        slug: toSlug(post.name as string),
+        description: (post.tagline as string) ?? '',
         publisher,
         homepage_url: homepage,
         logo_url: logoUrl,
