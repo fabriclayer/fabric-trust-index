@@ -2,8 +2,12 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://trust.fabriclayer.ai'),
   title: 'Trust Index — Fabric',
   description: 'Discover and verify trust scores for AI services, models, and MCP tools. The trust layer for the agent economy.',
+  alternates: {
+    canonical: '/',
+  },
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -30,6 +34,10 @@ export const metadata: Metadata = {
     title: 'Trust Index — Fabric',
     description: 'Discover and verify trust scores for AI services, models, and MCP tools.',
     images: ['https://trust.fabriclayer.ai/og-home.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 
