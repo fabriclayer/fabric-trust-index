@@ -1,9 +1,8 @@
 import type { MetadataRoute } from 'next'
 import { getAllSlugs } from '@/lib/services'
 
-// Force dynamic — query Supabase at request time, not build time
-export const dynamic = 'force-dynamic'
-export const revalidate = 3600 // Cache for 1 hour
+// ISR: revalidate every hour — Supabase data refreshed on schedule
+export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slugs = await getAllSlugs()
