@@ -1,4 +1,4 @@
-import { createServerClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/server'
 import type { Service } from '@/data/services'
 import { TAG_CLASSES } from '@/lib/utils'
 
@@ -77,7 +77,7 @@ function dbToService(db: any): Service {
 }
 
 export async function getAllSlugs(): Promise<{ slug: string; updated_at: string | null }[]> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const all: { slug: string; updated_at: string | null }[] = []
   let from = 0
   const PAGE = 1000
@@ -105,7 +105,7 @@ export async function getAllSlugs(): Promise<{ slug: string; updated_at: string 
 }
 
 export async function getServices(): Promise<Service[]> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const all: any[] = []
   let from = 0
@@ -131,7 +131,7 @@ export async function getServices(): Promise<Service[]> {
 }
 
 export async function getServiceBySlug(slug: string): Promise<Service | null> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data, error } = await supabase
     .from('services')
     .select('*, publisher:publishers(name, website_url)')
@@ -143,7 +143,7 @@ export async function getServiceBySlug(slug: string): Promise<Service | null> {
 
 // Additional helpers for product page data
 export async function getServiceId(slug: string): Promise<string | null> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('services')
     .select('id')
@@ -153,7 +153,7 @@ export async function getServiceId(slug: string): Promise<string | null> {
 }
 
 export async function getServiceIncidents(serviceId: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('incidents')
     .select('*')
@@ -164,7 +164,7 @@ export async function getServiceIncidents(serviceId: string) {
 }
 
 export async function getServiceVersions(serviceId: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('versions')
     .select('*')
@@ -175,7 +175,7 @@ export async function getServiceVersions(serviceId: string) {
 }
 
 export async function getServiceSupplyChain(serviceId: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('supply_chain')
     .select('*')
@@ -185,7 +185,7 @@ export async function getServiceSupplyChain(serviceId: string) {
 }
 
 export async function getServiceHealthSummary(serviceId: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('health_checks')
     .select('*')
@@ -196,7 +196,7 @@ export async function getServiceHealthSummary(serviceId: string) {
 }
 
 export async function getServiceCves(serviceId: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('cve_records')
     .select('*')
@@ -206,7 +206,7 @@ export async function getServiceCves(serviceId: string) {
 }
 
 export async function getSignalHistory(serviceId: string, signalName?: string) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   let query = supabase
     .from('signal_history')
     .select('*')
@@ -221,7 +221,7 @@ export async function getSignalHistory(serviceId: string, signalName?: string) {
 }
 
 export async function getRecentIncidents(limit = 200) {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('incidents')
     .select('*, service:services(name, slug, status)')
@@ -232,7 +232,7 @@ export async function getRecentIncidents(limit = 200) {
 }
 
 export async function getLatestSignalMeta(serviceId: string, signalName: string): Promise<Record<string, any> | null> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   const { data } = await supabase
     .from('signal_history')
     .select('metadata')
@@ -246,7 +246,7 @@ export async function getLatestSignalMeta(serviceId: string, signalName: string)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAllSignalMetas(serviceId: string): Promise<Record<string, Record<string, any>>> {
-  const supabase = createServerClient()
+  const supabase = createAnonClient()
   // Fetch both skill and standard signal metadata
   const signals = [
     // Skill signals

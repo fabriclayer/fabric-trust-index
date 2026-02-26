@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/server'
 import { getStatus as getStatusEnum, getScoreColor } from '@/lib/scoring/thresholds'
 
 /**
@@ -133,7 +133,7 @@ export async function GET(
   const style = _request.nextUrl.searchParams.get('style')
 
   try {
-    const supabase = createServerClient()
+    const supabase = createAnonClient()
     const { data: service } = await supabase
       .from('services')
       .select('name, composite_score, status')
