@@ -155,15 +155,18 @@ export default function AlertsFeed({
     }
   }, [open])
 
+  // Filter out initial_index log events — they're not real alerts
+  const alertIncidents = incidents.filter(i => i.type !== 'initial_index')
+
   const filtered = severityFilter
-    ? incidents.filter(i => i.severity === severityFilter)
-    : incidents
+    ? alertIncidents.filter(i => i.severity === severityFilter)
+    : alertIncidents
 
   const displayed = filtered.slice(0, displayCount)
   const hasMore = displayCount < filtered.length
 
-  const criticalCount = incidents.filter(i => i.severity === 'critical').length
-  const warningCount = incidents.filter(i => i.severity === 'warning').length
+  const criticalCount = alertIncidents.filter(i => i.severity === 'critical').length
+  const warningCount = alertIncidents.filter(i => i.severity === 'warning').length
 
   const toggleFilter = (severity: string) => {
     setSeverityFilter(prev => prev === severity ? null : severity)
@@ -227,7 +230,7 @@ export default function AlertsFeed({
 
         {/* Incident list */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          {incidents.length === 0 ? (
+          {alertIncidents.length === 0 ? (
             <div className="text-center py-12 px-4">
               <svg className="mx-auto text-fabric-300 mb-3" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
