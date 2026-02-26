@@ -56,7 +56,8 @@ async function detectIncidents(
   service: DbService,
   oldComposite: number,
   newComposite: number,
-  collectorResults: Array<{ key: string; result: CollectorResult } | null>
+  collectorResults: Array<{ key: string; result: CollectorResult } | null>,
+  prevPubTrustMeta?: Record<string, unknown> | null,
 ): Promise<void> {
   const supabase = createServerClient()
 
@@ -174,17 +175,8 @@ async function detectIncidents(
   // npm_owner_changed — compare current maintainers with previous
   if (pubResult?.result.metadata.npm_maintainers) {
     const currentMaintainers = pubResult.result.metadata.npm_maintainers as string[]
-    // Look up previous maintainers from last signal history
-    const { data: prevHistory } = await supabase
-      .from('signal_history')
-      .select('metadata')
-      .eq('service_id', service.id)
-      .eq('signal_name', 'publisher_trust')
-      .order('recorded_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    const prevMaintainers = (prevHistory?.metadata?.npm_maintainers ?? []) as string[]
+    // Use pre-fetched metadata (captured before signal_history inserts) to avoid race condition
+    const prevMaintainers = (prevPubTrustMeta?.npm_maintainers ?? []) as string[]
     if (prevMaintainers.length > 0 && currentMaintainers.length > 0) {
       const prevSet = new Set(prevMaintainers.map((m: string) => m.toLowerCase()))
       const currSet = new Set(currentMaintainers.map((m: string) => m.toLowerCase()))
@@ -333,6 +325,18 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     }
   }
 
+  // Capture previous publisher_trust metadata BEFORE collection inserts new signal_history rows.
+  // This prevents the race where detectIncidents reads the just-inserted record as "previous".
+  const { data: prevPubTrustHistory } = await supabase
+    .from('signal_history')
+    .select('metadata')
+    .eq('service_id', service.id)
+    .eq('signal_name', 'publisher_trust')
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .single()
+  const prevPubTrustMeta = prevPubTrustHistory?.metadata ?? null
+
   const results = await Promise.allSettled(
     COLLECTORS.map(c => c.collect(service))
   )
@@ -420,30 +424,15 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('npm_deprecated')
   }
 
-  // 6. npm owner changed override
+  // 6. npm owner changed override — use pre-fetched metadata to avoid race
   if (pubResult2?.result.metadata.npm_maintainers) {
-    // Check if there's a prior history to compare against — if incident was created, apply modifier
-    // The incident detection already compares old vs new maintainers;
-    // re-check here for the modifier
     const currMaintainers = pubResult2.result.metadata.npm_maintainers as string[]
-    if (currMaintainers.length > 0) {
-      const supabaseCheck = createServerClient()
-      const { data: prevHistory } = await supabaseCheck
-        .from('signal_history')
-        .select('metadata')
-        .eq('service_id', service.id)
-        .eq('signal_name', 'publisher_trust')
-        .order('recorded_at', { ascending: false })
-        .limit(1)
-        .single()
-      const prevMaintainers = (prevHistory?.metadata?.npm_maintainers ?? []) as string[]
-      if (prevMaintainers.length > 0) {
-        const prevSet = new Set(prevMaintainers.map((m: string) => m.toLowerCase()))
-        const removed = prevMaintainers.filter((m: string) => !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase()))
-        if (removed.length > 0) {
-          if (status === 'trusted') status = 'caution'
-          modifiers.push('npm_owner_changed')
-        }
+    const prevMaintainers = (prevPubTrustMeta?.npm_maintainers ?? []) as string[]
+    if (currMaintainers.length > 0 && prevMaintainers.length > 0) {
+      const removed = prevMaintainers.filter((m: string) => !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase()))
+      if (removed.length > 0) {
+        if (status === 'trusted') status = 'caution'
+        modifiers.push('npm_owner_changed')
       }
     }
   }
@@ -500,8 +489,8 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     metadata: { modifiers },
   })
 
-  // Detect and create incidents
-  await detectIncidents(service, oldComposite, finalScore, collectorResults)
+  // Detect and create incidents (pass pre-fetched publisher_trust metadata to avoid race)
+  await detectIncidents(service, oldComposite, finalScore, collectorResults, prevPubTrustMeta)
 
   // Generate AI assessment if needed (non-blocking)
   const needsAssessment =
