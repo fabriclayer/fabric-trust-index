@@ -613,13 +613,15 @@ export default function MonitorDashboard() {
       </nav>
 
       {/* OVERVIEW STATS */}
-      <Grid cols={5} gap={1}>
-        <StatBox label="Total Services" value={d.total} color={C.text} />
-        <StatBox label="Trusted" value={d.trusted} color={C.green} sub={`${((d.trusted / (d.total || 1)) * 100).toFixed(0)}%`} />
-        <StatBox label="Caution" value={d.caution} color={C.orange} sub={`${((d.caution / (d.total || 1)) * 100).toFixed(0)}%`} />
-        <StatBox label="Blocked" value={d.blocked} color={C.red} sub={`${((d.blocked / (d.total || 1)) * 100).toFixed(0)}%`} />
-        <StatBox label="Pending" value={d.pending} color={C.t3} />
-      </Grid>
+      <div style={{ padding: '24px 40px 0', maxWidth: 1400, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+        <Grid cols={5} gap={1}>
+          <StatBox label="Total Services" value={d.total} color={C.text} />
+          <StatBox label="Trusted" value={d.trusted} color={C.green} sub={`${((d.trusted / (d.total || 1)) * 100).toFixed(0)}%`} />
+          <StatBox label="Caution" value={d.caution} color={C.orange} sub={`${((d.caution / (d.total || 1)) * 100).toFixed(0)}%`} />
+          <StatBox label="Blocked" value={d.blocked} color={C.red} sub={`${((d.blocked / (d.total || 1)) * 100).toFixed(0)}%`} />
+          <StatBox label="Pending" value={d.pending} color={C.t3} />
+        </Grid>
+      </div>
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, padding: '0 40px', background: 'rgba(255,255,255,0.01)' }}>
