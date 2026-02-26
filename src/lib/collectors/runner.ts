@@ -97,34 +97,66 @@ async function detectIncidents(
     })
   }
 
-  // Critical CVE detected — patch-aware alert
+  // Critical CVE detected — patch-aware alert (deduplicated)
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
   if (vulnResult?.result.metadata.critical_patch_status) {
     const patchStatus = vulnResult.result.metadata.critical_patch_status as string
     const fixedVersion = vulnResult.result.metadata.critical_fixed_version as string | null
     const totalCves = vulnResult.result.metadata.total_cves as number
 
-    let title: string
-    let description: string
-    if (patchStatus === 'unpatched') {
-      title = 'Critical unpatched CVE — no fix available'
-      description = `${totalCves} CVE(s) found, including critical vulnerabilities with no known fix`
-    } else if (patchStatus === 'patch_available') {
-      title = `Critical CVE — patch available${fixedVersion ? ` in v${fixedVersion}` : ''}`
-      description = `${totalCves} CVE(s) found. A fix exists but the latest published version has not applied it`
-    } else {
-      title = `Critical CVE detected — patched${fixedVersion ? ` in v${fixedVersion}` : ''}`
-      description = `${totalCves} CVE(s) found. Critical vulnerability has been patched in the latest version`
-    }
+    // Check for existing unresolved CVE incident
+    const { data: existingCve } = await supabase
+      .from('incidents')
+      .select('id, description')
+      .eq('service_id', service.id)
+      .eq('type', 'cve_found')
+      .is('resolved_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
 
-    await createIncident({
-      service_id: service.id,
-      type: 'cve_found',
-      severity: patchStatus === 'patched' ? 'warning' : 'critical',
-      title,
-      description,
-      score_at_time: newComposite,
-    })
+    // Determine existing patch status from description text
+    const existingPatchStatus = existingCve?.description?.includes('no known fix')
+      ? 'unpatched'
+      : existingCve?.description?.includes('fix exists but')
+      ? 'patch_available'
+      : existingCve?.description?.includes('patched in the latest')
+      ? 'patched'
+      : null
+
+    const shouldCreate = !existingCve || existingPatchStatus !== patchStatus
+
+    if (shouldCreate) {
+      // If patch status changed, resolve the old incident first
+      if (existingCve && existingPatchStatus !== patchStatus) {
+        await supabase
+          .from('incidents')
+          .update({ resolved_at: new Date().toISOString() })
+          .eq('id', existingCve.id)
+      }
+
+      let title: string
+      let description: string
+      if (patchStatus === 'unpatched') {
+        title = 'Critical unpatched CVE — no fix available'
+        description = `${totalCves} CVE(s) found, including critical vulnerabilities with no known fix`
+      } else if (patchStatus === 'patch_available') {
+        title = `Critical CVE — patch available${fixedVersion ? ` in v${fixedVersion}` : ''}`
+        description = `${totalCves} CVE(s) found. A fix exists but the latest published version has not applied it`
+      } else {
+        title = `Critical CVE detected — patched${fixedVersion ? ` in v${fixedVersion}` : ''}`
+        description = `${totalCves} CVE(s) found. Critical vulnerability has been patched in the latest version`
+      }
+
+      await createIncident({
+        service_id: service.id,
+        type: 'cve_found',
+        severity: patchStatus === 'patched' ? 'warning' : 'critical',
+        title,
+        description,
+        score_at_time: newComposite,
+      })
+    }
   }
 
   // Uptime change >= 5%
@@ -160,16 +192,27 @@ async function detectIncidents(
   const maintResult = collectorResults.find(r => r?.key === 'maintenance')
   const pubResult = collectorResults.find(r => r?.key === 'publisher_trust')
 
-  // npm_deprecated
+  // npm_deprecated (deduplicated)
   if (pubResult?.result.metadata.npm_deprecated) {
-    await createIncident({
-      service_id: service.id,
-      type: 'npm_deprecated',
-      severity: 'critical',
-      title: 'npm package marked as deprecated',
-      description: pubResult.result.metadata.npm_deprecated_reason as string || 'Package deprecated by maintainer',
-      score_at_time: newComposite,
-    })
+    const { data: existingDep } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'npm_deprecated')
+      .is('resolved_at', null)
+      .limit(1)
+      .single()
+
+    if (!existingDep) {
+      await createIncident({
+        service_id: service.id,
+        type: 'npm_deprecated',
+        severity: 'critical',
+        title: 'npm package marked as deprecated',
+        description: pubResult.result.metadata.npm_deprecated_reason as string || 'Package deprecated by maintainer',
+        score_at_time: newComposite,
+      })
+    }
   }
 
   // npm_owner_changed — compare current maintainers with previous
@@ -215,16 +258,27 @@ async function detectIncidents(
     })
   }
 
-  // repo_archived
+  // repo_archived (deduplicated)
   if (maintResult?.result.metadata.repo_archived) {
-    await createIncident({
-      service_id: service.id,
-      type: 'repo_archived',
-      severity: 'warning',
-      title: 'GitHub repository archived',
-      description: `The repository ${service.github_repo} has been archived by its owner`,
-      score_at_time: newComposite,
-    })
+    const { data: existingArchived } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'repo_archived')
+      .is('resolved_at', null)
+      .limit(1)
+      .single()
+
+    if (!existingArchived) {
+      await createIncident({
+        service_id: service.id,
+        type: 'repo_archived',
+        severity: 'warning',
+        title: 'GitHub repository archived',
+        description: `The repository ${service.github_repo} has been archived by its owner`,
+        score_at_time: newComposite,
+      })
+    }
   }
 
   // repo_renamed (same owner — benign rename)
@@ -271,17 +325,28 @@ async function detectIncidents(
     )
   }
 
-  // smithery_scan_failed
+  // smithery_scan_failed (deduplicated)
   if (maintResult?.result.metadata.smithery_scan_failed) {
-    const issues = maintResult.result.metadata.smithery_scan_issues as string[]
-    await createIncident({
-      service_id: service.id,
-      type: 'smithery_scan_failed',
-      severity: 'critical',
-      title: 'Smithery security scan failed',
-      description: issues?.length > 0 ? `Issues: ${issues.join(', ')}` : 'Security scan did not pass',
-      score_at_time: newComposite,
-    })
+    const { data: existingScan } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'smithery_scan_failed')
+      .is('resolved_at', null)
+      .limit(1)
+      .single()
+
+    if (!existingScan) {
+      const issues = maintResult.result.metadata.smithery_scan_issues as string[]
+      await createIncident({
+        service_id: service.id,
+        type: 'smithery_scan_failed',
+        severity: 'critical',
+        title: 'Smithery security scan failed',
+        description: issues?.length > 0 ? `Issues: ${issues.join(', ')}` : 'Security scan did not pass',
+        score_at_time: newComposite,
+      })
+    }
   }
 }
 
