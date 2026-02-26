@@ -108,6 +108,11 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
       case 'name-asc': result.sort((a, b) => a.name.localeCompare(b.name)); break
       case 'name-desc': result.sort((a, b) => b.name.localeCompare(a.name)); break
       case 'updated': result.sort((a, b) => b.score - a.score); break
+      case 'indexed': result.sort((a, b) => {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0
+        return bDate - aDate
+      }); break
     }
 
     return result

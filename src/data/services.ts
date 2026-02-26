@@ -43,4 +43,6 @@ export interface Service {
   // Score confidence
   score_confidence?: number | null
   signals_with_data?: number | null
+  // Timestamps
+  created_at?: string
 }

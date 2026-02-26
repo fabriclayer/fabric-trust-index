@@ -28,6 +28,7 @@ const SORTS: Record<string, string> = {
   'name-asc': 'A → Z',
   'name-desc': 'Z → A',
   'updated': 'Recently updated',
+  'indexed': 'Recently indexed',
 }
 
 function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
