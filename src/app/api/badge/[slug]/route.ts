@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { getStatus as getStatusEnum, getScoreColor } from '@/lib/scoring/thresholds'
 
 /**
  * Embeddable SVG Trust Score Badge
@@ -7,21 +8,20 @@ import { createServerClient } from '@/lib/supabase/server'
  * GET /api/badge/{slug}          → flat shields.io-style badge
  * GET /api/badge/{slug}?style=detailed → larger badge with score bar
  *
- * Color: green >= 3.25, amber >= 2.0, red < 2.0
+ * Uses canonical thresholds from thresholds.ts
  * Cache: public, 1 hour
  * CORS: open (embeddable anywhere)
  */
 
+const COLOR_HEX = { green: '#0dc956', orange: '#f7931e', red: '#d03a3d' } as const
+
 function getColor(score: number): string {
-  if (score >= 3.25) return '#0dc956'
-  if (score >= 2.0) return '#f7931e'
-  return '#d03a3d'
+  return COLOR_HEX[getScoreColor(score)]
 }
 
-function getStatus(score: number): string {
-  if (score >= 3.5) return 'Trusted'
-  if (score >= 2.5) return 'Caution'
-  return 'Blocked'
+function getStatusLabel(score: number): string {
+  const s = getStatusEnum(score)
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function escapeXml(s: string): string {
@@ -62,7 +62,7 @@ function flatBadge(score: number): string {
 
 function detailedBadge(name: string, score: number): string {
   const color = getColor(score)
-  const status = getStatus(score)
+  const status = getStatusLabel(score)
   const scoreText = score.toFixed(2)
   const safeName = escapeXml(name.length > 28 ? name.slice(0, 26) + '...' : name)
   const barWidth = Math.round((score / 5) * 120)
