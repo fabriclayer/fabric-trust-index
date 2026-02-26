@@ -8,7 +8,7 @@
 
 import { Resend } from 'resend'
 
-const DISCOVERY_RECIPIENT = 'kenny@block9.co'
+const DISCOVERY_RECIPIENT = process.env.DISCOVERY_EMAIL ?? 'kenny@block9.co'
 const FROM_ADDRESS = 'Fabric Trust Index <noreply@fabriclayer.ai>'
 
 export async function sendDiscoveryDigest(candidates: Array<{
