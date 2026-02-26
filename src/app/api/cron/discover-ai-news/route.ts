@@ -21,10 +21,21 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient()
 
-    // Fetch existing slugs + github_repos for dedup
-    const { data: existingServices } = await supabase
-      .from('services')
-      .select('slug, github_repo')
+    // Fetch existing slugs + github_repos for dedup (paginate past 1000-row limit)
+    const allServices: { slug: string; github_repo: string | null }[] = []
+    let offset = 0
+    const PAGE = 2000
+    while (true) {
+      const { data } = await supabase
+        .from('services')
+        .select('slug, github_repo')
+        .range(offset, offset + PAGE - 1)
+      if (!data || data.length === 0) break
+      allServices.push(...data)
+      if (data.length < PAGE) break
+      offset += PAGE
+    }
+    const existingServices = allServices
 
     const existingSlugs = new Set(existingServices?.map(s => s.slug) ?? [])
     const existingGithubRepos = new Set(
