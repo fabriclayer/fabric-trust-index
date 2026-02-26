@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
     recentDiscovered,
     // Timeline: recent incidents (last 15)
     recentIncidents,
+    // Schedule timestamps
+    lastComposite, lastCreated, lastIncident, todayUpdated,
   ] = await Promise.all([
     // Status counts
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'trusted'),
@@ -103,6 +105,14 @@ export async function GET(request: NextRequest) {
     supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(15),
     // Timeline: recent incidents
     supabase.from('incidents').select('type, severity, title, score_at_time, created_at, services!inner(name, slug)').order('created_at', { ascending: false }).limit(15),
+    // Schedule: last composite recorded timestamp
+    supabase.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1),
+    // Schedule: last service created timestamp
+    supabase.from('services').select('created_at').order('created_at', { ascending: false }).limit(1),
+    // Schedule: last incident created timestamp
+    supabase.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1),
+    // Schedule: services updated today (scored today)
+    supabase.from('services').select('id', { count: 'exact', head: true }).gte('updated_at', today).neq('status', 'pending'),
   ])
 
   // Count overrides from services with modifiers
@@ -210,6 +220,13 @@ export async function GET(request: NextRequest) {
         }
       }),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 30),
+    schedule: {
+      lastScoredAt: (lastComposite.data as Record<string, unknown>[])?.[0]?.recorded_at as string | null ?? null,
+      lastDiscoveredAt: (lastCreated.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null,
+      lastIncidentAt: (lastIncident.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null,
+      todayUpdated: todayUpdated.count ?? 0,
+      totalNonPending: nonPendingCount.count ?? 0,
+    },
     timestamp: new Date().toISOString(),
   })
 }

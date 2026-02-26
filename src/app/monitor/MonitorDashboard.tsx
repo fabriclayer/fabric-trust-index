@@ -36,6 +36,13 @@ interface MonitorData {
   incidents: { total: number; unresolved: number; critical: number; warning: number; info: number }
   discoveryQueue: DiscoveryItem[]
   timeline: TimelineEvent[]
+  schedule: {
+    lastScoredAt: string | null
+    lastDiscoveredAt: string | null
+    lastIncidentAt: string | null
+    todayUpdated: number
+    totalNonPending: number
+  }
   timestamp: string
 }
 
@@ -66,7 +73,7 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 
 const TABS = [
   { id: 'health', label: 'System Health' },
-  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'pipeline', label: 'Schedule' },
   { id: 'discovery', label: 'Discovery' },
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'crons', label: 'All Crons' },
@@ -88,18 +95,6 @@ const OVERRIDE_DEFS: Record<string, { effect: string; trigger: string; sev: stri
   npm_owner_changed: { effect: '→ caution', trigger: 'npm package ownership changed', sev: 'warning' },
   pypi_yanked: { effect: '→ blocked', trigger: 'PyPI package yanked', sev: 'critical' },
 }
-
-// ─── PIPELINE STEPS ───────────────────────────────────────────────
-const STEPS = [
-  { id: 'discovery', num: '1', title: 'Discovery', time: '4:00–6:00am', color: C.blue, desc: '8 sources scan for new AI tools. Registry crawlers (npm, PyPI, GitHub), news scanner (trending, Show HN, Product Hunt, YC Launches), ClawHub skills, MCP servers.', crons: ['discover', 'discover-ai-news', 'discover-clawhub', 'discover-mcp'] },
-  { id: 'enrichment', num: '2', title: 'Enrichment', time: 'Inline + backfill', color: C.purple, desc: 'Resolve github_repo from github_org, find npm/PyPI packages from org names. Ensures collectors have real data instead of fallback scores.', crons: ['enrich-metadata', 'enrich-publishers'] },
-  { id: 'collection', num: '3', title: 'Collection', time: '2:00am daily + continuous', color: C.pink, desc: '6 independent signal collectors: vulnerability (OSV.dev), operational (HTTP pings), maintenance (GitHub), adoption (npm/PyPI), transparency (repo metadata), publisher trust.', crons: ['collect-daily', 'collect-cve', 'collect-cve-fast', 'health-check', 'collect-clawhub'] },
-  { id: 'overrides', num: '4', title: 'Overrides', time: 'Inline', color: C.orange, desc: '8 safety rules evaluated post-scoring. Critical CVEs cap at caution. Malware → blocked. Deprecated/archived → blocked. Repo transfers → frozen with penalty.', crons: [] },
-  { id: 'watchdog', num: '5', title: 'Watchdog', time: '3:00am daily', color: C.green, desc: '6 detectors scan for anomalies: blocked popular services, score drops, missing repos, publisher gaps, orphan overrides, low-confidence trusted. Auto-remediates up to 20 fixes/run.', crons: ['watchdog'] },
-  { id: 'validation', num: '6', title: 'Validation', time: 'On demand', color: C.green, desc: 'Golden set of curated services with expected score ranges. Health checks verify distribution, fallback rates, volatility. Catches regressions before they ship.', crons: [] },
-  { id: 'assessment', num: '7', title: 'Assessment', time: 'On score change', color: C.purple, desc: 'Claude Sonnet 4.5 generates 2-paragraph trust assessment explaining the score. Triggered on new services, score delta > 0.25, or status transitions.', crons: ['generate-assessments'] },
-  { id: 'delivery', num: '8', title: 'Delivery', time: 'Real-time', color: C.blue, desc: 'Trust scores served via product pages (SSR), REST API (agent access), and embeddable SVG badges (growth loop). Agents use decision field for autonomous routing.', crons: [] },
-]
 
 // Static pipeline definitions for crons tab
 const PIPELINES = [
@@ -248,99 +243,159 @@ function HealthTab({ data }: { data: MonitorData }) {
   )
 }
 
-// ─── PIPELINE TAB (LIVE TIMELINE) ─────────────────────────────────
-const EVENT_CONFIG: Record<string, { color: string; dimColor: string; icon: string; label: string }> = {
-  scored: { color: C.pink, dimColor: C.pinkDim, icon: '◆', label: 'SCORED' },
-  discovered: { color: C.blue, dimColor: C.blueDim, icon: '●', label: 'DISCOVERED' },
-  incident: { color: C.orange, dimColor: C.orangeDim, icon: '▲', label: 'INCIDENT' },
+// ─── SCHEDULE TAB ─────────────────────────────────────────────────
+interface CronDef {
+  id: string; name: string; schedule: string; color: string
+  getProgress: (data: MonitorData) => { pct: number; label: string }
+  getLastRun: (data: MonitorData) => string | null
+  getNextRun: () => string
 }
 
-function PipelineTab({ data }: { data: MonitorData }) {
-  const events = data.timeline ?? []
+function nextCronUTC(hour: number, minute = 0): string {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute))
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString()
+}
 
-  // Group events by date
-  const grouped: Record<string, TimelineEvent[]> = {}
-  for (const ev of events) {
-    const date = new Date(ev.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    if (!grouped[date]) grouped[date] = []
-    grouped[date].push(ev)
-  }
+function nextHourlyCron(): string {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours() + 1, 0))
+  return next.toISOString()
+}
 
-  // Summary counts from today's events
-  const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const todayEvents = grouped[todayStr] ?? []
-  const todayScored = todayEvents.filter(e => e.type === 'scored').length
-  const todayDiscovered = todayEvents.filter(e => e.type === 'discovered').length
-  const todayIncidents = todayEvents.filter(e => e.type === 'incident').length
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+const SCHEDULED_CRONS: CronDef[] = [
+  {
+    id: 'collect-daily', name: 'Daily Scoring', schedule: '2:00 AM UTC', color: C.pink,
+    getProgress: (d) => {
+      const pct = d.schedule.totalNonPending > 0 ? Math.round((d.schedule.todayUpdated / d.schedule.totalNonPending) * 100) : 0
+      return { pct, label: `${d.schedule.todayUpdated.toLocaleString()} / ${d.schedule.totalNonPending.toLocaleString()} services` }
+    },
+    getLastRun: (d) => d.schedule.lastScoredAt,
+    getNextRun: () => nextCronUTC(2),
+  },
+  {
+    id: 'discover', name: 'Registry Discovery', schedule: '4:00 AM UTC', color: C.blue,
+    getProgress: (d) => {
+      const n = d.overview.todayDiscovered
+      return { pct: n > 0 ? 100 : 0, label: n > 0 ? `${n} new services found` : 'Waiting for next run' }
+    },
+    getLastRun: (d) => d.schedule.lastDiscoveredAt,
+    getNextRun: () => nextCronUTC(4),
+  },
+  {
+    id: 'discover-ai-news', name: 'AI News Scanner', schedule: '4:30 AM UTC', color: C.blue,
+    getProgress: (d) => {
+      const n = d.discoveryQueue.length
+      return { pct: 100, label: n > 0 ? `${n} pending review` : 'Queue clear' }
+    },
+    getLastRun: (d) => d.schedule.lastDiscoveredAt,
+    getNextRun: () => nextCronUTC(4, 30),
+  },
+  {
+    id: 'discover-clawhub', name: 'ClawHub Discovery', schedule: '5:00 AM UTC', color: C.blue,
+    getProgress: () => ({ pct: 100, label: 'Daily scan' }),
+    getLastRun: (d) => d.schedule.lastDiscoveredAt,
+    getNextRun: () => nextCronUTC(5),
+  },
+  {
+    id: 'discover-mcp', name: 'MCP Discovery', schedule: '6:00 AM UTC', color: C.blue,
+    getProgress: () => ({ pct: 100, label: 'Daily scan' }),
+    getLastRun: (d) => d.schedule.lastDiscoveredAt,
+    getNextRun: () => nextCronUTC(6),
+  },
+  {
+    id: 'watchdog', name: 'Watchdog QA', schedule: '3:00 AM UTC', color: C.green,
+    getProgress: () => ({ pct: 100, label: 'Anomaly detection + auto-fix' }),
+    getLastRun: (d) => d.schedule.lastIncidentAt,
+    getNextRun: () => nextCronUTC(3),
+  },
+  {
+    id: 'collect-cve', name: 'CVE Full Scan', schedule: 'Hourly :00', color: C.orange,
+    getProgress: (d) => {
+      const n = d.cves.unpatched
+      return { pct: 100, label: `${d.cves.total.toLocaleString()} CVEs tracked · ${n} unpatched` }
+    },
+    getLastRun: (d) => d.schedule.lastScoredAt,
+    getNextRun: () => nextHourlyCron(),
+  },
+  {
+    id: 'generate-assessments', name: 'AI Assessments', schedule: '8:00 AM UTC', color: C.purple,
+    getProgress: (d) => {
+      const total = d.health.assessments.total + d.health.assessments.pending
+      const pct = total > 0 ? Math.round((d.health.assessments.total / total) * 100) : 0
+      return { pct, label: `${d.health.assessments.total.toLocaleString()} generated · ${d.health.assessments.pending} pending` }
+    },
+    getLastRun: () => null,
+    getNextRun: () => nextCronUTC(8),
+  },
+]
+
+function ScheduleTab({ data }: { data: MonitorData }) {
+  const now = new Date()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Today's summary */}
-      <Grid cols={3} gap={1}>
-        <StatBox label="Scored Today" value={data.overview.todayScored} color={C.pink} sub="composites recorded" />
-        <StatBox label="Discovered Today" value={data.overview.todayDiscovered} color={C.blue} sub="new services added" />
-        <StatBox label="Incidents Today" value={todayIncidents} color={todayIncidents > 0 ? C.orange : C.green} sub={todayIncidents > 0 ? 'new alerts raised' : 'no new alerts'} />
-      </Grid>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {SCHEDULED_CRONS.map((cron) => {
+        const progress = cron.getProgress(data)
+        const lastRun = cron.getLastRun(data)
+        const nextRun = cron.getNextRun()
+        const nextTime = new Date(nextRun)
+        const msUntil = nextTime.getTime() - now.getTime()
+        const hoursUntil = Math.max(0, Math.floor(msUntil / 3600000))
+        const minsUntil = Math.max(0, Math.floor((msUntil % 3600000) / 60000))
+        const countdownLabel = hoursUntil > 0 ? `in ${hoursUntil}h ${minsUntil}m` : minsUntil > 0 ? `in ${minsUntil}m` : 'now'
 
-      {/* Pipeline steps overview */}
-      <Card title="Pipeline Steps" right={<Mono style={{ fontSize: 10, color: C.t3 }}>8-stage automated pipeline</Mono>}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {STEPS.map((step) => (
-            <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: `1px solid ${C.border}` }}>
-              <div style={{ width: 20, height: 20, borderRadius: 6, background: `${step.color}18`, border: `1px solid ${step.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Mono style={{ fontSize: 9, fontWeight: 700, color: step.color }}>{step.num}</Mono>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{step.title}</span>
-              <Mono style={{ fontSize: 10, color: C.t3 }}>{step.time}</Mono>
-              {step.crons.length > 0 && <Dot color={C.green} />}
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Live activity feed */}
-      <Card title="Recent Activity" right={<Mono style={{ fontSize: 10, color: C.t3 }}>last 30 events · auto-refreshes every 30s</Mono>} pad={false}>
-        {events.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No recent activity</Mono></div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {Object.entries(grouped).map(([date, evts]) => (
-              <div key={date}>
-                {/* Date header */}
-                <div style={{ padding: '10px 24px', background: 'rgba(255,255,255,0.015)', borderBottom: `1px solid ${C.border}`, borderTop: `1px solid ${C.border}` }}>
-                  <Mono style={{ fontSize: 10, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{date}</Mono>
+        return (
+          <div key={cron.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px', borderBottom: `1px solid ${C.border}` }}>
+              <Dot color={cron.color} pulse={progress.pct > 0 && progress.pct < 100} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.text, minWidth: 160 }}>{cron.name}</span>
+              <Mono style={{ fontSize: 11, color: C.t3, minWidth: 110 }}>{cron.schedule}</Mono>
+              <div style={{ flex: 1 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {lastRun && (
+                  <div style={{ textAlign: 'right' }}>
+                    <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Last run</Mono>
+                    <Mono style={{ fontSize: 11, color: C.t2, display: 'block' }}>{timeAgo(lastRun)}</Mono>
+                  </div>
+                )}
+                <div style={{ textAlign: 'right' }}>
+                  <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Next run</Mono>
+                  <Mono style={{ fontSize: 11, color: C.text, display: 'block' }}>{formatTime(nextRun)} <span style={{ color: C.t3 }}>({countdownLabel})</span></Mono>
                 </div>
-                {/* Events */}
-                {evts.map((ev, i) => {
-                  const cfg = EVENT_CONFIG[ev.type] ?? EVENT_CONFIG.scored
-                  const sevColor = ev.type === 'incident' && ev.severity === 'critical' ? C.red : cfg.color
-                  return (
-                    <div key={`${ev.timestamp}-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
-                      {/* Timeline line + dot */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 2, width: 14, flexShrink: 0 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: sevColor, boxShadow: `0 0 6px ${sevColor}40` }} />
-                      </div>
-                      {/* Content */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Badge text={cfg.label} color={sevColor} bg={ev.type === 'incident' && ev.severity === 'critical' ? C.redDim : cfg.dimColor} />
-                          <a href={`https://trust.fabriclayer.ai/${ev.slug}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>{ev.name}</a>
-                          <Mono style={{ fontSize: 10, color: C.t3, marginLeft: 'auto', flexShrink: 0 }}>
-                            {new Date(ev.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                          </Mono>
-                        </div>
-                        <div style={{ fontSize: 12, color: C.t2, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.detail}</div>
-                      </div>
-                    </div>
-                  )
-                })}
               </div>
-            ))}
+            </div>
+            {/* Progress bar */}
+            <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${Math.min(100, progress.pct)}%`, background: cron.color,
+                  borderRadius: 4, opacity: 0.7, transition: 'width 1s ease',
+                }} />
+              </div>
+              <Mono style={{ fontSize: 11, color: progress.pct >= 100 ? C.green : cron.color, minWidth: 36, textAlign: 'right' }}>
+                {progress.pct}%
+              </Mono>
+              <Mono style={{ fontSize: 11, color: C.t2 }}>{progress.label}</Mono>
+            </div>
           </div>
-        )}
-      </Card>
+        )
+      })}
     </div>
   )
+}
+
+// ─── RECENT ACTIVITY (used in timeline within schedule) ───────────
+const EVENT_CONFIG: Record<string, { color: string; dimColor: string; label: string }> = {
+  scored: { color: C.pink, dimColor: C.pinkDim, label: 'SCORED' },
+  discovered: { color: C.blue, dimColor: C.blueDim, label: 'DISCOVERED' },
+  incident: { color: C.orange, dimColor: C.orangeDim, label: 'INCIDENT' },
 }
 
 // ─── MANUAL ENTRY FORM ───────────────────────────────────────────
@@ -778,7 +833,7 @@ export default function MonitorDashboard() {
       {/* CONTENT */}
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
-        {tab === 'pipeline' && <PipelineTab data={data} />}
+        {tab === 'pipeline' && <ScheduleTab data={data} />}
         {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'overrides' && <OverridesTab data={data} />}
         {tab === 'crons' && <CronsTab />}
