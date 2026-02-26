@@ -25,8 +25,6 @@ interface SearchToolbarProps {
 const SORTS: Record<string, string> = {
   'score-desc': 'Highest trust',
   'score-asc': 'Lowest trust',
-  'name-asc': 'A → Z',
-  'name-desc': 'Z → A',
   'updated': 'Recently updated',
   'indexed': 'Recently indexed',
 }
