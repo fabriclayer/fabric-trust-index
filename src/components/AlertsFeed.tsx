@@ -42,10 +42,6 @@ function getBadge(type: string, description: string | null): { label: string; co
       return { label: 'INDEXED', color: 'gray' }
     case 'cve_found':
       return { label: 'CVE FOUND', color: 'red' }
-    case 'high_cve_found':
-      return { label: 'HIGH CVE', color: 'red' }
-    case 'cve_patched':
-      return { label: 'CVE PATCHED', color: 'green' }
     case 'score_change': {
       const isDown = description?.toLowerCase().includes('decreased')
       return isDown
@@ -56,16 +52,6 @@ function getBadge(type: string, description: string | null): { label: string; co
       return { label: 'DOWNTIME', color: 'amber' }
     case 'uptime_restored':
       return { label: 'RESTORED', color: 'green' }
-    case 'version_release':
-      return { label: 'NEW VERSION', color: 'green' }
-    case 'status_change': {
-      const isDown = description?.toLowerCase().includes('downgraded')
-      return isDown
-        ? { label: 'STATUS CHANGE', color: 'red' }
-        : { label: 'STATUS CHANGE', color: 'green' }
-    }
-    case 'abandoned':
-      return { label: 'ABANDONED', color: 'red' }
     case 'npm_deprecated':
       return { label: 'DEPRECATED', color: 'red' }
     case 'npm_owner_changed':
@@ -74,26 +60,15 @@ function getBadge(type: string, description: string | null): { label: string; co
       return { label: 'YANKED', color: 'red' }
     case 'repo_archived':
       return { label: 'ARCHIVED', color: 'red' }
+    case 'repo_renamed':
+      return { label: 'RENAMED', color: 'gray' }
     case 'repo_transferred':
       return { label: 'TRANSFERRED', color: 'amber' }
     case 'smithery_scan_failed':
       return { label: 'SCAN FAILED', color: 'amber' }
-    case 'supply_chain_cve':
-      return { label: 'SUPPLY CHAIN', color: 'amber' }
-    case 'license_removed':
-      return { label: 'LICENSE REMOVED', color: 'amber' }
-    case 'security_md_added':
-      return { label: 'SECURITY.MD', color: 'green' }
     default:
       return { label: type.replace(/_/g, ' ').toUpperCase(), color: 'gray' }
   }
-}
-
-// Left border classes per severity
-const SEVERITY_BORDER: Record<string, string> = {
-  critical: '',
-  warning: '',
-  info: '',
 }
 
 function formatRelativeTime(iso: string): string {
@@ -244,10 +219,8 @@ export default function AlertsFeed({
               {displayed.map(incident => {
                 const dotColor = DOT_COLORS[incident.severity] ?? DOT_COLORS.info
                 const badge = getBadge(incident.type, incident.description)
-                const borderClass = SEVERITY_BORDER[incident.severity] ?? ''
-
                 return (
-                  <div key={incident.id} className={`px-4 py-3 hover:bg-fabric-50/50 transition-colors ${borderClass}`}>
+                  <div key={incident.id} className="px-4 py-3 hover:bg-fabric-50/50 transition-colors">
                     <div className="flex items-start gap-2.5">
                       {/* Severity dot */}
                       <div className="flex-shrink-0 mt-1.5">
