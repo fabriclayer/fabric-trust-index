@@ -76,13 +76,32 @@ function dbToService(db: any): Service {
   }
 }
 
-export async function getAllSlugs(): Promise<string[]> {
+export async function getAllSlugs(): Promise<{ slug: string; updated_at: string | null }[]> {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('services')
-    .select('slug')
-  if (error) throw error
-  return (data ?? []).map((d: { slug: string }) => d.slug)
+  const all: { slug: string; updated_at: string | null }[] = []
+  let from = 0
+  const PAGE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('services')
+      .select('slug, updated_at, status, npm_package, github_repo, endpoint_url, pypi_package, homepage_url')
+      .neq('status', 'pending')
+      .order('slug')
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    // Match getServices() visibility filter
+    for (const d of data) {
+      if (d.npm_package || d.github_repo || d.endpoint_url || d.pypi_package || d.homepage_url) {
+        all.push({ slug: d.slug, updated_at: d.updated_at })
+      }
+    }
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  return all
 }
 
 export async function getServices(): Promise<Service[]> {
