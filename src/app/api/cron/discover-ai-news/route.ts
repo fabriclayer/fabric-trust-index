@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Fetch existing slugs + github_repos for dedup (paginate past 1000-row limit)
     const allServices: { slug: string; github_repo: string | null }[] = []
     let offset = 0
-    const PAGE = 2000
+    const PAGE = 1000
     while (true) {
       const { data } = await supabase
         .from('services')
