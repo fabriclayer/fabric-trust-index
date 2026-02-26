@@ -5,8 +5,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['DM Sans', '-apple-system', 'sans-serif'],
-        mono: ['DM Mono', 'monospace'],
+        sans: ['var(--font-sans)', 'DM Sans', '-apple-system', 'sans-serif'],
+        mono: ['var(--font-mono)', 'DM Mono', 'monospace'],
       },
       colors: {
         fabric: {
