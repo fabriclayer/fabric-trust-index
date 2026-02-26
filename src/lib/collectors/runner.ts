@@ -400,15 +400,27 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_zero_override')
   }
 
-  // 3. Repo ownership transfer override — different owner is a supply chain risk
+  // 3. Repo archived override — archived repos should never score trusted
   const maintResult2 = collectorResults.find(r => r?.key === 'maintenance')
+  if (maintResult2?.result.metadata.repo_archived) {
+    status = 'blocked'
+    modifiers.push('repo_archived')
+  }
+
+  // 4. Repo ownership transfer override — different owner is a supply chain risk
   if (maintResult2?.result.metadata.repo_transferred) {
     if (status === 'trusted') status = 'caution'
     modifiers.push('repo_transferred')
   }
 
-  // 4. npm owner changed override
+  // 5. npm deprecated override — deprecated packages should never score trusted
   const pubResult2 = collectorResults.find(r => r?.key === 'publisher_trust')
+  if (pubResult2?.result.metadata.npm_deprecated) {
+    status = 'blocked'
+    modifiers.push('npm_deprecated')
+  }
+
+  // 6. npm owner changed override
   if (pubResult2?.result.metadata.npm_maintainers) {
     // Check if there's a prior history to compare against — if incident was created, apply modifier
     // The incident detection already compares old vs new maintainers;
@@ -438,7 +450,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   // Cap composite_score to match forced status range
   let finalScore = compositeScore
-  if (modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('critical_cve_override')) {
     finalScore = Math.min(finalScore, 3.24)
@@ -617,12 +629,14 @@ export async function runCollectors(
   if (!ranAll && existingModifiers.includes('zero_signal_override')) {
     modifiers.push('zero_signal_override')
   }
-  // Carry forward transfer/ownership modifiers (require manual review to clear)
-  if (!ranMaintenance && existingModifiers.includes('repo_transferred')) {
-    modifiers.push('repo_transferred')
+  // Carry forward transfer/ownership/archived/deprecated modifiers
+  if (!ranMaintenance) {
+    if (existingModifiers.includes('repo_transferred')) modifiers.push('repo_transferred')
+    if (existingModifiers.includes('repo_archived')) modifiers.push('repo_archived')
   }
-  if (!ranPublisherTrust && existingModifiers.includes('npm_owner_changed')) {
-    modifiers.push('npm_owner_changed')
+  if (!ranPublisherTrust) {
+    if (existingModifiers.includes('npm_owner_changed')) modifiers.push('npm_owner_changed')
+    if (existingModifiers.includes('npm_deprecated')) modifiers.push('npm_deprecated')
   }
 
   // Override rules
@@ -647,15 +661,26 @@ export async function runCollectors(
     }
   }
 
-  // 3. Repo ownership transfer override — re-evaluate if maintenance was re-run
+  // 3. Repo archived/transferred overrides — re-evaluate if maintenance was re-run
   if (ranMaintenance) {
     const maintResultPartial = collectorResults.find(r => r?.key === 'maintenance')
+    if (maintResultPartial?.result.metadata.repo_archived && !modifiers.includes('repo_archived')) {
+      modifiers.push('repo_archived')
+    }
     if (maintResultPartial?.result.metadata.repo_transferred && !modifiers.includes('repo_transferred')) {
       modifiers.push('repo_transferred')
     }
   }
 
-  // 4. npm owner changed override — re-evaluate if publisher_trust was re-run
+  // 4. npm deprecated override — re-evaluate if publisher_trust was re-run
+  if (ranPublisherTrust) {
+    const pubResultDeprecated = collectorResults.find(r => r?.key === 'publisher_trust')
+    if (pubResultDeprecated?.result.metadata.npm_deprecated && !modifiers.includes('npm_deprecated')) {
+      modifiers.push('npm_deprecated')
+    }
+  }
+
+  // 5. npm owner changed override — re-evaluate if publisher_trust was re-run
   if (ranPublisherTrust) {
     const pubResultPartial = collectorResults.find(r => r?.key === 'publisher_trust')
     if (pubResultPartial?.result.metadata.npm_maintainers) {
@@ -683,7 +708,7 @@ export async function runCollectors(
   }
 
   // Apply carried-forward + fresh overrides to status
-  if (modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     status = 'blocked'
   } else if (modifiers.includes('critical_cve_override') && status === 'trusted') {
     status = 'caution'
@@ -699,7 +724,7 @@ export async function runCollectors(
 
   // Cap composite_score to match forced status range
   let finalScore = compositeScore
-  if (modifiers.includes('vulnerability_zero_override')) {
+  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('critical_cve_override')) {
     finalScore = Math.min(finalScore, 3.24)

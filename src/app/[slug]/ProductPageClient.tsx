@@ -103,7 +103,9 @@ const MODIFIER_LABELS: Record<string, string> = {
   pending_evaluation: 'Awaiting first evaluation',
   stale_publisher_trust: 'Publisher data stale',
   stale_transparency: 'Transparency data stale',
+  repo_archived: 'Repository archived — blocked',
   repo_transferred: 'Repository ownership changed — under review',
+  npm_deprecated: 'npm package deprecated — blocked',
   npm_owner_changed: 'npm package maintainers changed — under review',
 }
 
