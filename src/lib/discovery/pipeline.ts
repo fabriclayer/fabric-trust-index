@@ -3,6 +3,7 @@ import { discoverNpmPackages, type NpmCandidate } from './npm'
 import { discoverPyPIPackages, type PyPICandidate } from './pypi'
 import { discoverGitHubRepos, type GitHubCandidate } from './github'
 import { resolveGitHubFromNpm } from './github-resolver'
+import { resolveServiceMetadata } from './enrich'
 // HF discovery disabled — 1,452 models imported with no scoreable data sources.
 // Re-enable when model-specific scoring pipeline is built (safetensors check,
 // model card quality, licence, publisher verification).
@@ -316,6 +317,7 @@ export async function addDiscoveredService(params: {
   npm_package?: string
   pypi_package?: string
   github_repo?: string
+  github_org?: string
   source: string
   capabilities?: string[]
   pricing?: { model: string; tiers?: { label: string; value: string }[] } | null
@@ -400,6 +402,28 @@ export async function addDiscoveredService(params: {
     result: { slug: params.slug, category: params.category },
     processed_at: new Date().toISOString(),
   })
+
+  // Post-insert enrichment: resolve missing github_repo, npm/pypi packages
+  if (!params.github_repo || !params.npm_package || !params.pypi_package) {
+    try {
+      const ghOwner = params.github_repo?.split('/')[0] ?? null
+      const enriched = await resolveServiceMetadata({
+        slug: params.slug,
+        name: params.name,
+        github_org: params.github_org ?? ghOwner,
+        github_repo: params.github_repo,
+        npm_package: params.npm_package,
+        pypi_package: params.pypi_package,
+      })
+      const updates: Record<string, string> = {}
+      if (enriched.github_repo) updates.github_repo = enriched.github_repo
+      if (enriched.npm_package) updates.npm_package = enriched.npm_package
+      if (enriched.pypi_package) updates.pypi_package = enriched.pypi_package
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('services').update(updates).eq('slug', params.slug)
+      }
+    } catch { /* don't fail insert on enrichment failure */ }
+  }
 
   return true
 }

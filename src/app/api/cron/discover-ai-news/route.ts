@@ -6,6 +6,7 @@ import {
   classifyCategory,
   deriveCapabilities,
 } from '@/lib/discovery/pipeline'
+import { resolveServiceMetadata } from '@/lib/discovery/enrich'
 
 export const maxDuration = 300
 
@@ -82,13 +83,22 @@ export async function GET(request: NextRequest) {
         inserted++
         existingSlugs.add(c.slug)
 
-        // For watchlist entries, also update logo_url directly
-        // (addDiscoveredService doesn't set logo_url)
-        if (c.logo_url) {
-          await supabase
-            .from('services')
-            .update({ logo_url: c.logo_url })
-            .eq('slug', c.slug)
+        // Enrich: resolve missing github_repo, npm/pypi packages + set logo
+        const enriched = await resolveServiceMetadata({
+          slug: c.slug,
+          name: c.name,
+          github_org: c.github_org,
+          github_repo: c.github_repo,
+          npm_package: c.npm_package,
+          pypi_package: c.pypi_package,
+        })
+        const updates: Record<string, string> = {}
+        if (enriched.github_repo) updates.github_repo = enriched.github_repo
+        if (enriched.npm_package) updates.npm_package = enriched.npm_package
+        if (enriched.pypi_package) updates.pypi_package = enriched.pypi_package
+        if (c.logo_url) updates.logo_url = c.logo_url
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('services').update(updates).eq('slug', c.slug)
         }
       } else {
         failed++

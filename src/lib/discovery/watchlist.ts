@@ -406,6 +406,7 @@ export const WATCHLIST: WatchlistEntry[] = [
     logo_url: 'https://github.com/quiverai.png?size=80',
     description: 'Frontier AI models for generating, editing, and animating vector graphics (SVG)',
     tags: ['image-generation', 'svg', 'vector', 'design', 'api'],
+    npm_package: '@quiverai/sdk',
   },
 
   // ── Security ───────────────────────────────────────────────────
