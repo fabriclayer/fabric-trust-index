@@ -8,7 +8,8 @@ export const THRESHOLDS = {
   caution: 1.00,
 } as const
 
-// Order: vulnerability, operational, maintenance, adoption, transparency, publisher_trust
+// Weights sum to 1.0 — order matches SIGNAL_ORDER above
+// vulnerability 0.25, operational 0.15, maintenance 0.20, adoption 0.15, transparency 0.15, publisher_trust 0.10
 export const WEIGHTS = [0.25, 0.15, 0.20, 0.15, 0.15, 0.10] as const
 
 export const SIGNAL_ORDER = [
@@ -29,7 +30,13 @@ export function getStatus(score: number): 'trusted' | 'caution' | 'blocked' {
 }
 
 export function computeComposite(signals: number[]): number {
-  const raw = signals.reduce((sum, s, i) => sum + s * WEIGHTS[i], 0)
+  if (signals.length !== WEIGHTS.length) {
+    throw new Error(`computeComposite expects ${WEIGHTS.length} signals, got ${signals.length}`)
+  }
+  const raw = signals.reduce((sum, s, i) => {
+    const val = Number(s)
+    return sum + (isNaN(val) ? 0 : val) * WEIGHTS[i]
+  }, 0)
   return Math.round(raw * 100) / 100
 }
 
