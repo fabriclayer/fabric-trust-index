@@ -12,6 +12,7 @@ import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresho
 import { generateAssessment } from '@/lib/assessment-generator'
 import { resolveGitHubRepo } from '@/lib/discovery/github-resolver'
 import { FALLBACK_REASONS } from '@/lib/validation/constants'
+import { sendTelegramAlert } from '@/lib/alerts/telegram'
 
 /** Check if a collector result represents a genuine zero (not a default/fallback) */
 function isGenuineZero(cr: { key: string; result: CollectorResult } | null): boolean {
@@ -198,6 +199,14 @@ async function detectIncidents(
           description: `Removed: ${removed.join(', ') || 'none'} | Added: ${added.join(', ') || 'none'}`,
           score_at_time: newComposite,
         })
+        // Fire Telegram alert for maintainer changes
+        if (removed.length > 0) {
+          await sendTelegramAlert(
+            `\u26a0\ufe0f <b>NPM MAINTAINER CHANGE:</b> ${service.name}\n` +
+            `Removed: ${removed.join(', ') || 'none'}\nAdded: ${added.join(', ') || 'none'}\n` +
+            `Score held at caution, manual review required.`
+          )
+        }
       }
     }
   }
@@ -226,16 +235,48 @@ async function detectIncidents(
     })
   }
 
-  // repo_transferred
+  // repo_renamed (same owner — benign rename)
+  if (maintResult?.result.metadata.repo_renamed) {
+    const newName = maintResult.result.metadata.new_repo_name as string
+    await createIncident({
+      service_id: service.id,
+      type: 'repo_renamed',
+      severity: 'info',
+      title: 'GitHub repository renamed',
+      description: `Repository renamed from ${service.github_repo} to ${newName} (same owner)`,
+      score_at_time: newComposite,
+    })
+    // Auto-update github_repo so collectors keep working
+    await supabase
+      .from('services')
+      .update({ github_repo: newName })
+      .eq('id', service.id)
+  }
+
+  // repo_transferred (different owner — supply chain risk)
   if (maintResult?.result.metadata.repo_transferred) {
+    const oldOwner = maintResult.result.metadata.old_owner as string
+    const newOwner = maintResult.result.metadata.new_owner as string
+    const newName = maintResult.result.metadata.new_repo_name as string
     await createIncident({
       service_id: service.id,
       type: 'repo_transferred',
-      severity: 'warning',
-      title: 'GitHub repository transferred',
-      description: `Repository transferred from ${service.github_repo} to ${maintResult.result.metadata.new_repo_name}`,
+      severity: 'critical',
+      title: 'GitHub repository ownership changed',
+      description: `Repository transferred from ${service.github_repo} (${oldOwner}) to ${newName} (${newOwner}) — score frozen, manual review required`,
       score_at_time: newComposite,
     })
+    // Update github_repo to new name so we track the new location
+    await supabase
+      .from('services')
+      .update({ github_repo: newName })
+      .eq('id', service.id)
+    // Fire Telegram alert
+    await sendTelegramAlert(
+      `\u26a0\ufe0f <b>OWNERSHIP CHANGE:</b> ${service.name} repo transferred from <code>${oldOwner}</code> to <code>${newOwner}</code>\n` +
+      `Old: ${service.github_repo}\nNew: ${newName}\n` +
+      `Score frozen, manual review required.`
+    )
   }
 
   // smithery_scan_failed
@@ -359,6 +400,42 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_zero_override')
   }
 
+  // 3. Repo ownership transfer override — different owner is a supply chain risk
+  const maintResult2 = collectorResults.find(r => r?.key === 'maintenance')
+  if (maintResult2?.result.metadata.repo_transferred) {
+    if (status === 'trusted') status = 'caution'
+    modifiers.push('repo_transferred')
+  }
+
+  // 4. npm owner changed override
+  const pubResult2 = collectorResults.find(r => r?.key === 'publisher_trust')
+  if (pubResult2?.result.metadata.npm_maintainers) {
+    // Check if there's a prior history to compare against — if incident was created, apply modifier
+    // The incident detection already compares old vs new maintainers;
+    // re-check here for the modifier
+    const currMaintainers = pubResult2.result.metadata.npm_maintainers as string[]
+    if (currMaintainers.length > 0) {
+      const supabaseCheck = createServerClient()
+      const { data: prevHistory } = await supabaseCheck
+        .from('signal_history')
+        .select('metadata')
+        .eq('service_id', service.id)
+        .eq('signal_name', 'publisher_trust')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .single()
+      const prevMaintainers = (prevHistory?.metadata?.npm_maintainers ?? []) as string[]
+      if (prevMaintainers.length > 0) {
+        const prevSet = new Set(prevMaintainers.map((m: string) => m.toLowerCase()))
+        const removed = prevMaintainers.filter((m: string) => !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase()))
+        if (removed.length > 0) {
+          if (status === 'trusted') status = 'caution'
+          modifiers.push('npm_owner_changed')
+        }
+      }
+    }
+  }
+
   // Cap composite_score to match forced status range
   let finalScore = compositeScore
   if (modifiers.includes('vulnerability_zero_override')) {
@@ -367,6 +444,20 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
+  }
+
+  // Repo transfer penalty: freeze + apply -1.0
+  if (modifiers.includes('repo_transferred')) {
+    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
+    finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
+    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+  }
+
+  // npm owner changed penalty
+  if (modifiers.includes('npm_owner_changed')) {
+    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
+    finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
+    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
   }
 
   // Compute score confidence (how many signals used real data vs fallbacks)
@@ -517,12 +608,21 @@ export async function runCollectors(
   const ranAll = updatedKeys.length === SIGNAL_ORDER.length
 
   // Carry forward modifiers for signals NOT re-run in this partial run
+  const ranMaintenance = updatedKeys.includes('maintenance')
+  const ranPublisherTrust = updatedKeys.includes('publisher_trust')
   if (!ranVulnerability) {
     if (existingModifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
     if (existingModifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
   }
   if (!ranAll && existingModifiers.includes('zero_signal_override')) {
     modifiers.push('zero_signal_override')
+  }
+  // Carry forward transfer/ownership modifiers (require manual review to clear)
+  if (!ranMaintenance && existingModifiers.includes('repo_transferred')) {
+    modifiers.push('repo_transferred')
+  }
+  if (!ranPublisherTrust && existingModifiers.includes('npm_owner_changed')) {
+    modifiers.push('npm_owner_changed')
   }
 
   // Override rules
@@ -547,12 +647,53 @@ export async function runCollectors(
     }
   }
 
+  // 3. Repo ownership transfer override — re-evaluate if maintenance was re-run
+  if (ranMaintenance) {
+    const maintResultPartial = collectorResults.find(r => r?.key === 'maintenance')
+    if (maintResultPartial?.result.metadata.repo_transferred && !modifiers.includes('repo_transferred')) {
+      modifiers.push('repo_transferred')
+    }
+  }
+
+  // 4. npm owner changed override — re-evaluate if publisher_trust was re-run
+  if (ranPublisherTrust) {
+    const pubResultPartial = collectorResults.find(r => r?.key === 'publisher_trust')
+    if (pubResultPartial?.result.metadata.npm_maintainers) {
+      const currMaintainers = pubResultPartial.result.metadata.npm_maintainers as string[]
+      if (currMaintainers.length > 0) {
+        const { data: prevHistoryPartial } = await supabase
+          .from('signal_history')
+          .select('metadata')
+          .eq('service_id', service.id)
+          .eq('signal_name', 'publisher_trust')
+          .order('recorded_at', { ascending: false })
+          .limit(1)
+          .single()
+        const prevMaintainersPartial = (prevHistoryPartial?.metadata?.npm_maintainers ?? []) as string[]
+        if (prevMaintainersPartial.length > 0) {
+          const removed = prevMaintainersPartial.filter((m: string) =>
+            !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase())
+          )
+          if (removed.length > 0 && !modifiers.includes('npm_owner_changed')) {
+            modifiers.push('npm_owner_changed')
+          }
+        }
+      }
+    }
+  }
+
   // Apply carried-forward + fresh overrides to status
   if (modifiers.includes('vulnerability_zero_override')) {
     status = 'blocked'
   } else if (modifiers.includes('critical_cve_override') && status === 'trusted') {
     status = 'caution'
   } else if (modifiers.includes('zero_signal_override') && status === 'trusted') {
+    status = 'caution'
+  }
+  if (modifiers.includes('repo_transferred') && status === 'trusted') {
+    status = 'caution'
+  }
+  if (modifiers.includes('npm_owner_changed') && status === 'trusted') {
     status = 'caution'
   }
 
@@ -564,6 +705,20 @@ export async function runCollectors(
     finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
+  }
+
+  // Repo transfer penalty: freeze + apply -1.0
+  if (modifiers.includes('repo_transferred')) {
+    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
+    finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
+    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+  }
+
+  // npm owner changed penalty
+  if (modifiers.includes('npm_owner_changed')) {
+    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
+    finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
+    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
   }
 
   // Update composite, status, and modifiers

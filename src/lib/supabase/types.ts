@@ -182,7 +182,7 @@ export interface DbSignalHistory {
 export interface DbIncident {
   id: string
   service_id: string
-  type: 'score_change' | 'version_release' | 'cve_patched' | 'cve_found' | 'uptime_drop' | 'uptime_restored' | 'initial_index' | 'npm_deprecated' | 'npm_owner_changed' | 'pypi_yanked' | 'repo_archived' | 'repo_transferred' | 'smithery_scan_failed'
+  type: 'score_change' | 'version_release' | 'cve_patched' | 'cve_found' | 'uptime_drop' | 'uptime_restored' | 'initial_index' | 'npm_deprecated' | 'npm_owner_changed' | 'pypi_yanked' | 'repo_archived' | 'repo_renamed' | 'repo_transferred' | 'smithery_scan_failed'
   severity: 'info' | 'warning' | 'critical'
   title: string
   description: string | null

@@ -59,7 +59,18 @@ export const maintenanceCollector: Collector = {
 
     // Detect repo_transferred (full_name no longer matches expected owner/repo)
     if (repoData.full_name && repoData.full_name.toLowerCase() !== repo.toLowerCase()) {
-      metadata.repo_transferred = true
+      const oldOwner = repo.split('/')[0].toLowerCase()
+      const newOwner = repoData.full_name.split('/')[0].toLowerCase()
+      if (oldOwner === newOwner) {
+        // Same owner — just a rename, not a supply chain risk
+        metadata.repo_renamed = true
+      } else {
+        // Different owner — actual ownership transfer
+        metadata.repo_transferred = true
+      }
+      metadata.old_owner = repo.split('/')[0]
+      metadata.new_owner = repoData.full_name.split('/')[0]
+      metadata.old_repo_name = repo
       metadata.new_repo_name = repoData.full_name
     }
 
