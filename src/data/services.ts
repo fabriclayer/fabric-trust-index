@@ -45,4 +45,5 @@ export interface Service {
   signals_with_data?: number | null
   // Timestamps
   created_at?: string
+  updated_at?: string
 }
