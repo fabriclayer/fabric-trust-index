@@ -41,6 +41,12 @@ export async function GET(request: NextRequest) {
     discoveryPending,
     // GitHub rate limit
     githubRate,
+    // Timeline: recent scoring activity (last 15 composites)
+    recentScored,
+    // Timeline: recent discoveries (last 15 services created)
+    recentDiscovered,
+    // Timeline: recent incidents (last 15)
+    recentIncidents,
   ] = await Promise.all([
     // Status counts
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'trusted'),
@@ -91,6 +97,12 @@ export async function GET(request: NextRequest) {
     supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
     // GitHub rate limit
     fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+    // Timeline: recent composites scored
+    supabase.from('signal_history').select('service_id, score, recorded_at, services!inner(name, slug)').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(15),
+    // Timeline: recent services discovered
+    supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(15),
+    // Timeline: recent incidents
+    supabase.from('incidents').select('type, severity, title, score_at_time, created_at, services!inner(name, slug)').order('created_at', { ascending: false }).limit(15),
   ])
 
   // Count overrides from services with modifiers
@@ -168,6 +180,36 @@ export async function GET(request: NextRequest) {
       created_at: d.created_at,
       ...(d.result as Record<string, unknown> ?? {}),
     })),
+    timeline: [
+      ...(recentScored.data ?? []).map((r: Record<string, unknown>) => {
+        const svc = r.services as Record<string, unknown> | null
+        return {
+          type: 'scored' as const,
+          name: svc?.name ?? 'Unknown',
+          slug: svc?.slug ?? '',
+          detail: `Composite: ${(r.score as number)?.toFixed(2)}`,
+          timestamp: r.recorded_at as string,
+        }
+      }),
+      ...(recentDiscovered.data ?? []).map((r: Record<string, unknown>) => ({
+        type: 'discovered' as const,
+        name: r.name as string,
+        slug: r.slug as string,
+        detail: `${r.discovered_from ?? 'manual'} · ${r.status}${r.composite_score ? ` · ${(r.composite_score as number).toFixed(2)}` : ''}`,
+        timestamp: r.created_at as string,
+      })),
+      ...(recentIncidents.data ?? []).map((r: Record<string, unknown>) => {
+        const svc = r.services as Record<string, unknown> | null
+        return {
+          type: 'incident' as const,
+          name: svc?.name ?? 'Unknown',
+          slug: svc?.slug ?? '',
+          detail: r.title as string,
+          severity: r.severity as string,
+          timestamp: r.created_at as string,
+        }
+      }),
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 30),
     timestamp: new Date().toISOString(),
   })
 }

@@ -35,6 +35,7 @@ interface MonitorData {
   cves: { total: number; critical: number; high: number; medium: number; low: number; unpatched: number }
   incidents: { total: number; unresolved: number; critical: number; warning: number; info: number }
   discoveryQueue: DiscoveryItem[]
+  timeline: TimelineEvent[]
   timestamp: string
 }
 
@@ -43,6 +44,12 @@ interface DiscoveryItem {
   name?: string; slug?: string; description?: string; publisher?: string
   homepage_url?: string; github_repo?: string; stars?: number; votes?: number
   tags?: string[]
+}
+
+interface TimelineEvent {
+  type: 'scored' | 'discovered' | 'incident'
+  name: string; slug: string; detail: string
+  severity?: string; timestamp: string
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────
@@ -60,7 +67,7 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 const TABS = [
   { id: 'health', label: 'System Health' },
   { id: 'pipeline', label: 'Pipeline' },
-  { id: 'discovery', label: 'AI News Discovery' },
+  { id: 'discovery', label: 'Discovery' },
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'crons', label: 'All Crons' },
 ]
@@ -241,51 +248,97 @@ function HealthTab({ data }: { data: MonitorData }) {
   )
 }
 
-// ─── PIPELINE TAB ─────────────────────────────────────────────────
-function PipelineTab() {
+// ─── PIPELINE TAB (LIVE TIMELINE) ─────────────────────────────────
+const EVENT_CONFIG: Record<string, { color: string; dimColor: string; icon: string; label: string }> = {
+  scored: { color: C.pink, dimColor: C.pinkDim, icon: '◆', label: 'SCORED' },
+  discovered: { color: C.blue, dimColor: C.blueDim, icon: '●', label: 'DISCOVERED' },
+  incident: { color: C.orange, dimColor: C.orangeDim, icon: '▲', label: 'INCIDENT' },
+}
+
+function PipelineTab({ data }: { data: MonitorData }) {
+  const events = data.timeline ?? []
+
+  // Group events by date
+  const grouped: Record<string, TimelineEvent[]> = {}
+  for (const ev of events) {
+    const date = new Date(ev.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    if (!grouped[date]) grouped[date] = []
+    grouped[date].push(ev)
+  }
+
+  // Summary counts from today's events
+  const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const todayEvents = grouped[todayStr] ?? []
+  const todayScored = todayEvents.filter(e => e.type === 'scored').length
+  const todayDiscovered = todayEvents.filter(e => e.type === 'discovered').length
+  const todayIncidents = todayEvents.filter(e => e.type === 'incident').length
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {STEPS.map((step, i) => (
-        <div key={step.id}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 24px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.015)' }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: `${step.color}18`, border: `1px solid ${step.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Mono style={{ fontSize: 12, fontWeight: 700, color: step.color }}>{step.num}</Mono>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Today's summary */}
+      <Grid cols={3} gap={1}>
+        <StatBox label="Scored Today" value={data.overview.todayScored} color={C.pink} sub="composites recorded" />
+        <StatBox label="Discovered Today" value={data.overview.todayDiscovered} color={C.blue} sub="new services added" />
+        <StatBox label="Incidents Today" value={todayIncidents} color={todayIncidents > 0 ? C.orange : C.green} sub={todayIncidents > 0 ? 'new alerts raised' : 'no new alerts'} />
+      </Grid>
+
+      {/* Pipeline steps overview */}
+      <Card title="Pipeline Steps" right={<Mono style={{ fontSize: 10, color: C.t3 }}>8-stage automated pipeline</Mono>}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {STEPS.map((step) => (
+            <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ width: 20, height: 20, borderRadius: 6, background: `${step.color}18`, border: `1px solid ${step.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Mono style={{ fontSize: 9, fontWeight: 700, color: step.color }}>{step.num}</Mono>
               </div>
-              <span style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: -0.3 }}>{step.title}</span>
-              <Mono style={{ fontSize: 11, color: C.t3, marginLeft: 4 }}>{step.time}</Mono>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {step.crons.length === 0 && <Mono style={{ fontSize: 10, color: C.t4 }}>inline</Mono>}
-                {step.crons.length > 0 && step.crons.map(c => <Dot key={c} color={C.green} />)}
-              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{step.title}</span>
+              <Mono style={{ fontSize: 10, color: C.t3 }}>{step.time}</Mono>
+              {step.crons.length > 0 && <Dot color={C.green} />}
             </div>
-            <div style={{ padding: '20px 24px' }}>
-              <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.65, margin: 0, maxWidth: 800 }}>{step.desc}</p>
-              {step.crons.length > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-                  {step.crons.map(c => {
-                    const p = PIPELINES.find(pl => pl.id === c)
-                    return p ? (
-                      <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: `1px solid ${C.border}` }}>
-                        <Dot color={C.green} />
-                        <Mono style={{ fontSize: 10, color: C.text }}>{p.name}</Mono>
-                      </div>
-                    ) : null
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-          {i < STEPS.length - 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
-                <div style={{ width: 1, height: 8, background: C.border }} />
-                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M6 8L0 0h12L6 8z" fill="rgba(255,255,255,0.08)" /></svg>
-              </div>
-            </div>
-          )}
+          ))}
         </div>
-      ))}
+      </Card>
+
+      {/* Live activity feed */}
+      <Card title="Recent Activity" right={<Mono style={{ fontSize: 10, color: C.t3 }}>last 30 events · auto-refreshes every 30s</Mono>} pad={false}>
+        {events.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No recent activity</Mono></div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {Object.entries(grouped).map(([date, evts]) => (
+              <div key={date}>
+                {/* Date header */}
+                <div style={{ padding: '10px 24px', background: 'rgba(255,255,255,0.015)', borderBottom: `1px solid ${C.border}`, borderTop: `1px solid ${C.border}` }}>
+                  <Mono style={{ fontSize: 10, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{date}</Mono>
+                </div>
+                {/* Events */}
+                {evts.map((ev, i) => {
+                  const cfg = EVENT_CONFIG[ev.type] ?? EVENT_CONFIG.scored
+                  const sevColor = ev.type === 'incident' && ev.severity === 'critical' ? C.red : cfg.color
+                  return (
+                    <div key={`${ev.timestamp}-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+                      {/* Timeline line + dot */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 2, width: 14, flexShrink: 0 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: sevColor, boxShadow: `0 0 6px ${sevColor}40` }} />
+                      </div>
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Badge text={cfg.label} color={sevColor} bg={ev.type === 'incident' && ev.severity === 'critical' ? C.redDim : cfg.dimColor} />
+                          <a href={`https://trust.fabriclayer.ai/${ev.slug}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>{ev.name}</a>
+                          <Mono style={{ fontSize: 10, color: C.t3, marginLeft: 'auto', flexShrink: 0 }}>
+                            {new Date(ev.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                          </Mono>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.t2, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.detail}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
@@ -725,7 +778,7 @@ export default function MonitorDashboard() {
       {/* CONTENT */}
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
-        {tab === 'pipeline' && <PipelineTab />}
+        {tab === 'pipeline' && <PipelineTab data={data} />}
         {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'overrides' && <OverridesTab data={data} />}
         {tab === 'crons' && <CronsTab />}
