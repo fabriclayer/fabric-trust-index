@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
   let overrideCounts: Record<string, number> = {}
   let discoveryQueue: Record<string, unknown>[] = []
   let timeline: { type: string; name: string; slug: string; detail: string; severity?: string; timestamp: string }[] = []
+  let events: { type: string; name: string; slug: string; detail: string; severity?: string; timestamp: string }[] = []
   let githubRate: { rate?: { remaining: number; limit: number; reset: number } } | null = null
   let lastScoredAt: string | null = null
   let lastDiscoveredAt: string | null = null
@@ -83,16 +84,21 @@ export async function GET(request: NextRequest) {
       lastComposite,
       lastCreated,
       lastIncidentRow,
+      recentScored,
+      recentCves,
     ] = await Promise.all([
       supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
       supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
       fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
-      // Lightweight timeline queries (no JOINs on signal_history)
-      supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(15),
-      supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id').order('created_at', { ascending: false }).limit(15),
+      // Lightweight event queries (no JOINs on signal_history)
+      supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id').order('created_at', { ascending: false }).limit(50),
       supabase.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1),
       supabase.from('services').select('created_at').order('created_at', { ascending: false }).limit(1),
       supabase.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1),
+      // Additional event sources
+      supabase.from('services').select('name, slug, composite_score, status, updated_at').neq('status', 'pending').order('updated_at', { ascending: false }).limit(50),
+      supabase.from('cve_records').select('cve_id, severity, is_patched, package_name, created_at').order('created_at', { ascending: false }).limit(30),
     ])
 
     // Override counts
@@ -131,6 +137,26 @@ export async function GET(request: NextRequest) {
     timeline = [...discoveredEvents, ...incidentEvents]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 30)
+
+    // Full events feed (all event types)
+    const scoredEvents = (recentScored.data ?? []).map((r: Record<string, unknown>) => ({
+      type: 'scored' as const,
+      name: r.name as string,
+      slug: r.slug as string,
+      detail: `${r.status}${r.composite_score ? ` · ${(r.composite_score as number).toFixed(2)}` : ''}`,
+      timestamp: r.updated_at as string,
+    }))
+    const cveEvents = (recentCves.data ?? []).map((r: Record<string, unknown>) => ({
+      type: 'cve' as const,
+      name: r.cve_id as string,
+      slug: '',
+      detail: `${r.severity} · ${r.package_name || 'unknown'}${r.is_patched ? ' · patched' : ' · unpatched'}`,
+      severity: r.severity as string,
+      timestamp: r.created_at as string,
+    }))
+    events = [...discoveredEvents, ...incidentEvents, ...scoredEvents, ...cveEvents]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 200)
 
     // Schedule timestamps
     lastScoredAt = (lastComposite.data as Record<string, unknown>[])?.[0]?.recorded_at as string | null ?? null
@@ -203,6 +229,7 @@ export async function GET(request: NextRequest) {
     },
     discoveryQueue,
     timeline,
+    events,
     schedule: {
       lastScoredAt,
       lastDiscoveredAt,

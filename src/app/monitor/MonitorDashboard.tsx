@@ -36,6 +36,7 @@ interface MonitorData {
   incidents: { total: number; unresolved: number; critical: number; warning: number; info: number }
   discoveryQueue: DiscoveryItem[]
   timeline: TimelineEvent[]
+  events: ActivityEvent[]
   schedule: {
     lastScoredAt: string | null
     lastDiscoveredAt: string | null
@@ -59,6 +60,12 @@ interface TimelineEvent {
   severity?: string; timestamp: string
 }
 
+interface ActivityEvent {
+  type: 'scored' | 'discovered' | 'incident' | 'cve'
+  name: string; slug: string; detail: string
+  severity?: string; timestamp: string
+}
+
 // ─── HELPERS ───────────────────────────────────────────────────────
 const sevC = (s: string) => s === 'critical' ? C.red : s === 'high' || s === 'warning' || s === 'medium' ? C.orange : s === 'low' ? C.t3 : C.blue
 const sevBg = (s: string) => s === 'critical' ? C.redDim : s === 'warning' || s === 'high' || s === 'medium' ? C.orangeDim : C.blueDim
@@ -73,6 +80,7 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 
 const TABS = [
   { id: 'health', label: 'System Health' },
+  { id: 'activity', label: 'Activity' },
   { id: 'pipeline', label: 'Schedule' },
   { id: 'discovery', label: 'Discovery' },
   { id: 'overrides', label: 'Overrides & CVEs' },
@@ -239,6 +247,114 @@ function HealthTab({ data }: { data: MonitorData }) {
           </div>
         </Card>
       </div>
+    </div>
+  )
+}
+
+// ─── ACTIVITY TAB ─────────────────────────────────────────────────
+const ACTIVITY_TYPES: Record<string, { color: string; dimColor: string; label: string; icon: string }> = {
+  scored: { color: C.pink, dimColor: C.pinkDim, label: 'SCORED', icon: '◆' },
+  discovered: { color: C.blue, dimColor: C.blueDim, label: 'DISCOVERED', icon: '●' },
+  incident: { color: C.orange, dimColor: C.orangeDim, label: 'INCIDENT', icon: '▲' },
+  cve: { color: C.red, dimColor: C.redDim, label: 'CVE', icon: '■' },
+}
+
+function ActivityTab({ data }: { data: MonitorData }) {
+  const [filter, setFilter] = useState('all')
+  const events = data.events ?? []
+  const filtered = filter === 'all' ? events : events.filter(e => e.type === filter)
+
+  // Group events by date
+  const grouped: Record<string, ActivityEvent[]> = {}
+  for (const e of filtered) {
+    const date = new Date(e.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    if (!grouped[date]) grouped[date] = []
+    grouped[date].push(e)
+  }
+
+  // Count by type
+  const counts: Record<string, number> = {}
+  for (const e of events) {
+    counts[e.type] = (counts[e.type] ?? 0) + 1
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Summary row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: C.border, borderRadius: 16, overflow: 'hidden' }}>
+        {Object.entries(ACTIVITY_TYPES).map(([type, cfg]) => (
+          <div key={type} style={{ background: C.surface, padding: '16px 20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: F.sans, fontSize: 24, fontWeight: 700, color: cfg.color, letterSpacing: -1 }}>{(counts[type] ?? 0).toLocaleString()}</div>
+            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{cfg.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
+        {['all', ...Object.keys(ACTIVITY_TYPES)].map(f => {
+          const cfg = ACTIVITY_TYPES[f]
+          return (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              fontFamily: F.mono, fontSize: 10, color: filter === f ? (cfg?.color ?? C.pink) : C.t3,
+              background: filter === f ? (cfg?.dimColor ?? 'rgba(254,131,224,0.08)') : 'transparent',
+              border: `1px solid ${filter === f ? (cfg?.color ?? C.pink) + '33' : C.border}`,
+              borderRadius: 8, padding: '4px 12px', cursor: 'pointer', transition: 'all 0.15s',
+            }}>{f === 'all' ? `All (${events.length})` : `${cfg?.label ?? f} (${counts[f] ?? 0})`}</button>
+          )
+        })}
+      </div>
+
+      {/* Event timeline grouped by date */}
+      {Object.entries(grouped).map(([date, dayEvents]) => (
+        <div key={date}>
+          <div style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: C.t3, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingLeft: 4 }}>{date}</div>
+          <Card pad={false}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {dayEvents.map((event, i) => {
+                const cfg = ACTIVITY_TYPES[event.type] ?? ACTIVITY_TYPES.scored
+                return (
+                  <div key={`${event.timestamp}-${i}`} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px',
+                    borderBottom: i < dayEvents.length - 1 ? `1px solid ${C.border}` : 'none',
+                    background: 'transparent',
+                  }}>
+                    {/* Time */}
+                    <Mono style={{ fontSize: 11, color: C.t3, width: 50, flexShrink: 0 }}>
+                      {new Date(event.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </Mono>
+                    {/* Type indicator */}
+                    <span style={{ fontSize: 10, color: cfg.color, width: 14, textAlign: 'center', flexShrink: 0 }}>{cfg.icon}</span>
+                    <Badge text={cfg.label} color={cfg.color} bg={cfg.dimColor} />
+                    {/* Name */}
+                    {event.slug ? (
+                      <a href={`/${event.slug}`} target="_blank" rel="noreferrer" style={{
+                        fontSize: 13, fontWeight: 600, color: C.text, textDecoration: 'none', flexShrink: 0, maxWidth: 200,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{event.name}</a>
+                    ) : (
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.name}</span>
+                    )}
+                    {/* Detail */}
+                    <span style={{ fontSize: 12, color: C.t2, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.detail}</span>
+                    {/* Severity badge for incidents/CVEs */}
+                    {event.severity && (
+                      <Badge text={event.severity} color={sevC(event.severity)} bg={sevBg(event.severity)} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        </div>
+      ))}
+
+      {filtered.length === 0 && (
+        <div style={{ padding: 60, textAlign: 'center' }}>
+          <Mono style={{ fontSize: 13, color: C.t3 }}>No events{filter !== 'all' ? ` of type "${filter}"` : ''}</Mono>
+        </div>
+      )}
     </div>
   )
 }
@@ -833,6 +949,7 @@ export default function MonitorDashboard() {
       {/* CONTENT */}
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
+        {tab === 'activity' && <ActivityTab data={data} />}
         {tab === 'pipeline' && <ScheduleTab data={data} />}
         {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'overrides' && <OverridesTab data={data} />}
