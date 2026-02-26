@@ -290,36 +290,16 @@ function PipelineTab() {
   )
 }
 
-// ─── CATEGORIES ───────────────────────────────────────────────────
-const CATEGORIES = [
-  'llm', 'agent', 'framework', 'code', 'embedding', 'image-generation',
-  'speech', 'web-search', 'vision', 'data-api', 'infra', 'mcp-tool',
-]
-
 // ─── MANUAL ENTRY FORM ───────────────────────────────────────────
 function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const [form, setForm] = useState({
-    name: '', slug: '', publisher: '', description: '', category: '',
-    github_repo: '', npm_package: '', pypi_package: '', homepage_url: '',
-  })
-
-  const set = (field: string, value: string) => {
-    setForm(prev => {
-      const next = { ...prev, [field]: value }
-      // Auto-generate slug from name
-      if (field === 'name' && (!prev.slug || prev.slug === toSlug(prev.name))) {
-        next.slug = toSlug(value)
-      }
-      return next
-    })
-  }
+  const [form, setForm] = useState({ name: '', github_repo: '', homepage_url: '' })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name || !form.slug) return
+    if (!form.name) return
     setSubmitting(true)
     setResult(null)
     try {
@@ -330,8 +310,8 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       })
       const data = await res.json()
       if (res.ok) {
-        setResult({ ok: true, message: `Added "${form.name}" — will be scored on next cron run` })
-        setForm({ name: '', slug: '', publisher: '', description: '', category: '', github_repo: '', npm_package: '', pypi_package: '', homepage_url: '' })
+        setResult({ ok: true, message: `Added "${form.name}" — enrichment + scoring will run automatically` })
+        setForm({ name: '', github_repo: '', homepage_url: '' })
         onAdded(data.slug)
       } else {
         setResult({ ok: false, message: data.error || 'Failed to add service' })
@@ -362,52 +342,26 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       <button onClick={() => { setOpen(false); setResult(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
     }>
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <div>
             <label style={labelStyle}>Name *</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. CodePilot Pro" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Slug *</label>
-            <input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="e.g. codepilot-pro" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Publisher</label>
-            <input value={form.publisher} onChange={e => set('publisher', e.target.value)} placeholder="e.g. CodePilot Inc" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Category</label>
-            <select value={form.category} onChange={e => set('category', e.target.value)} style={{ ...inputStyle, appearance: 'none' }}>
-              <option value="">Auto-detect</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Description</label>
-            <input value={form.description} onChange={e => set('description', e.target.value)} placeholder="Short description of the service" style={inputStyle} />
+            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. CodePilot Pro" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>GitHub Repo</label>
-            <input value={form.github_repo} onChange={e => set('github_repo', e.target.value)} placeholder="owner/repo" style={inputStyle} />
+            <input value={form.github_repo} onChange={e => setForm(p => ({ ...p, github_repo: e.target.value }))} placeholder="owner/repo" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Homepage URL</label>
-            <input value={form.homepage_url} onChange={e => set('homepage_url', e.target.value)} placeholder="https://..." style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>npm Package</label>
-            <input value={form.npm_package} onChange={e => set('npm_package', e.target.value)} placeholder="e.g. @org/package" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>PyPI Package</label>
-            <input value={form.pypi_package} onChange={e => set('pypi_package', e.target.value)} placeholder="e.g. package-name" style={inputStyle} />
+            <input value={form.homepage_url} onChange={e => setForm(p => ({ ...p, homepage_url: e.target.value }))} placeholder="https://..." style={inputStyle} />
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-          <button type="submit" disabled={submitting || !form.name || !form.slug} style={{
+        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t4, marginTop: 8 }}>Slug, publisher, category, description, npm/pypi packages are resolved automatically via enrichment pipeline</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+          <button type="submit" disabled={submitting || !form.name} style={{
             fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: '#fff', background: C.blue,
             border: 'none', borderRadius: 8, padding: '8px 20px', cursor: submitting ? 'not-allowed' : 'pointer',
-            opacity: submitting || !form.name || !form.slug ? 0.5 : 1,
+            opacity: submitting || !form.name ? 0.5 : 1,
           }}>{submitting ? 'Adding...' : 'Add to Index'}</button>
           {result && (
             <Mono style={{ fontSize: 11, color: result.ok ? C.green : C.red }}>{result.message}</Mono>
@@ -416,10 +370,6 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       </form>
     </Card>
   )
-}
-
-function toSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 // ─── DISCOVERY TAB ────────────────────────────────────────────────

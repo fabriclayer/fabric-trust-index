@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { addDiscoveredService, classifyCategory, deriveCapabilities } from '@/lib/discovery/pipeline'
+import { resolveServiceMetadata } from '@/lib/discovery/enrich'
 
 export async function POST(request: NextRequest) {
   const auth = request.cookies.get('fabric_monitor_auth')?.value
@@ -8,32 +9,50 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, slug, publisher, description, category, github_repo, npm_package, pypi_package, homepage_url, tags } = body
+  const { name, github_repo, homepage_url } = body
 
-  if (!name || !slug) {
-    return NextResponse.json({ error: 'Name and slug are required' }, { status: 400 })
+  if (!name) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
-  const finalCategory = category || classifyCategory(tags ?? [], slug)
+  // Derive slug from name
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+  // Derive publisher from github org or name
+  const githubOrg = github_repo ? github_repo.split('/')[0] : undefined
+  const publisher = githubOrg || name
+
+  // Auto-detect category from any available info
+  const category = classifyCategory([], slug)
+
+  // Run enrichment to find npm/pypi packages
+  const enriched = await resolveServiceMetadata({
+    slug,
+    name,
+    github_org: githubOrg,
+    github_repo: github_repo || undefined,
+  })
+
+  const finalSlug = slug
 
   const result = await addDiscoveredService({
     name,
-    slug,
-    publisher: publisher || 'Unknown',
-    description: description || '',
-    category: finalCategory,
-    npm_package: npm_package || undefined,
-    pypi_package: pypi_package || undefined,
-    github_repo: github_repo || undefined,
-    github_org: github_repo ? github_repo.split('/')[0] : undefined,
+    slug: finalSlug,
+    publisher,
+    description: '',
+    category,
+    npm_package: enriched.npm_package,
+    pypi_package: enriched.pypi_package,
+    github_repo: github_repo || enriched.github_repo || undefined,
+    github_org: githubOrg,
     source: 'monitor:manual',
-    capabilities: deriveCapabilities(tags ?? []),
-    tags: tags ?? [],
+    capabilities: deriveCapabilities([]),
+    tags: [],
     homepage_url: homepage_url || undefined,
   })
 
   if (result === true) {
-    return NextResponse.json({ ok: true, slug })
+    return NextResponse.json({ ok: true, slug: finalSlug })
   }
 
   return NextResponse.json({ error: `Failed to add service: ${result}` }, { status: 500 })
