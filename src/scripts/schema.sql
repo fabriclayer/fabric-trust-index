@@ -86,7 +86,13 @@ CREATE TABLE signal_history (
 CREATE TABLE incidents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('score_change', 'version_release', 'cve_patched', 'cve_found', 'uptime_drop', 'uptime_restored', 'initial_index')),
+  type TEXT NOT NULL CHECK (type IN (
+    'score_change', 'version_release', 'cve_patched', 'cve_found',
+    'uptime_drop', 'uptime_restored', 'initial_index',
+    'npm_deprecated', 'npm_owner_changed', 'pypi_yanked',
+    'repo_archived', 'repo_renamed', 'repo_transferred',
+    'smithery_scan_failed'
+  )),
   severity TEXT DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'critical')),
   title TEXT NOT NULL,
   description TEXT,
