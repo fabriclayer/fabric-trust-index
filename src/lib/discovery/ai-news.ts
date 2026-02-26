@@ -1,12 +1,14 @@
 /**
- * AI News Discovery Scanner
+ * AI News Discovery Scanner v2
  *
  * Multi-source scanner that finds new AI services the registry crawlers miss.
  *
  * Sources:
  * 1. Watchlist — curated list of known services to auto-add (platforms, no npm/PyPI)
  * 2. GitHub Trending — trending repos in AI/ML topics (catches new launches)
- * 3. Hacker News — top stories mentioning AI tools/launches
+ * 3. Hacker News — Show HN posts mentioning AI tools/launches
+ * 4. Product Hunt — top AI product launches (requires PRODUCT_HUNT_TOKEN)
+ * 5. YC Launches — Launch HN posts from YC startups (via Algolia API)
  *
  * Runs daily after the main discover cron. Designed for Vercel serverless
  * (300s max, no persistent state, idempotent).
@@ -29,7 +31,7 @@ export interface NewsCandidate {
   tags: string[]
   npm_package?: string
   pypi_package?: string
-  source: string // 'watchlist' | 'github-trending' | 'hackernews'
+  source: string // 'watchlist' | 'github-trending' | 'hackernews' | 'producthunt' | 'yc-launches'
 }
 
 export interface DiscoverNewsResult {
@@ -37,6 +39,8 @@ export interface DiscoverNewsResult {
     watchlist: { checked: number; added: number; skipped: number }
     githubTrending: { fetched: number; relevant: number; added: number; skipped: number }
     hackerNews: { fetched: number; relevant: number; added: number; skipped: number }
+    productHunt: { fetched: number; relevant: number; added: number; skipped: number }
+    ycLaunches: { fetched: number; relevant: number; added: number; skipped: number }
   }
   totalAdded: number
   totalSkipped: number
@@ -55,6 +59,8 @@ const AI_KEYWORDS = new Set([
   'foundation-model', 'fine-tuning', 'inference', 'langchain',
   'llamaindex', 'openai', 'anthropic', 'huggingface', 'stable-diffusion',
   'copilot', 'code-assistant', 'autonomous', 'multimodal',
+  'chatgpt', 'claude', 'gemini', 'mistral', 'ollama', 'groq',
+  'voice-ai', 'ai-agent', 'ai-coding', 'agentic', 'retrieval',
 ])
 
 /** Check if text/topics suggest AI relevance */
@@ -228,7 +234,7 @@ async function fetchGitHubTrending(): Promise<NewsCandidate[]> {
   return candidates
 }
 
-// ─── Source 3: Hacker News ──────────────────────────────────────────
+// ─── Source 3: Hacker News (Show HN) ────────────────────────────────
 
 interface HNItem {
   id: number
@@ -239,19 +245,20 @@ interface HNItem {
 }
 
 /**
- * Fetch recent Hacker News top stories and filter for AI launches.
- * HN is where most AI tools get announced first.
+ * Fetch recent Show HN stories and filter for AI launches.
+ * Uses /showstories endpoint to get only Show HN posts — eliminates
+ * junk name extractions from regular top stories.
  */
 async function fetchHackerNews(): Promise<NewsCandidate[]> {
   const candidates: NewsCandidate[] = []
 
   try {
-    // Fetch top 100 story IDs
-    const topRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json')
-    if (!topRes.ok) return candidates
+    // Fetch Show HN story IDs (only "Show HN:" posts)
+    const showRes = await fetch('https://hacker-news.firebaseio.com/v0/showstories.json')
+    if (!showRes.ok) return candidates
 
-    const topIds: number[] = await topRes.json()
-    const batch = topIds.slice(0, 60) // Check top 60
+    const showIds: number[] = await showRes.json()
+    const batch = showIds.slice(0, 60) // Check top 60
 
     // Fetch story details in parallel (batches of 10)
     for (let i = 0; i < batch.length; i += 10) {
@@ -267,14 +274,14 @@ async function fetchHackerNews(): Promise<NewsCandidate[]> {
       )
 
       for (const story of stories) {
-        if (!story || !story.url || story.score < 50) continue
+        if (!story || !story.url || story.score < 30) continue
 
-        // Check if the title/URL suggests an AI product launch
+        // Only parse titles starting with "Show HN:"
+        if (!/^show hn:/i.test(story.title)) continue
+
+        // Check if the title/URL suggests an AI product
         const titleLower = story.title.toLowerCase()
-        const isLaunch = /launch|release|announc|introduc|open.?source|new:|show hn/i.test(story.title)
-        const isAI = isAIRelevant(titleLower)
-
-        if (!isAI || !isLaunch) continue
+        if (!isAIRelevant(titleLower)) continue
 
         // Extract domain for homepage
         let domain = ''
@@ -284,14 +291,17 @@ async function fetchHackerNews(): Promise<NewsCandidate[]> {
         } catch { continue }
 
         // Skip known non-product domains
-        const skipDomains = ['arxiv.org', 'reddit.com', 'twitter.com', 'x.com', 'youtube.com', 'medium.com', 'substack.com']
+        const skipDomains = [
+          'arxiv.org', 'reddit.com', 'twitter.com', 'x.com',
+          'youtube.com', 'medium.com', 'substack.com',
+          'news.ycombinator.com',
+        ]
         if (skipDomains.some(d => domain.includes(d))) continue
 
-        // Try to extract a product name from the title
-        // "Show HN: MyTool – An AI thing" → "MyTool"
+        // Extract product name: "Show HN: MyTool – An AI thing" → "MyTool"
         let name = story.title
           .replace(/^show hn:\s*/i, '')
-          .replace(/\s*[-–—|]\s*.+$/, '')
+          .replace(/\s*[-–—|:]\s*.+$/, '')
           .replace(/\s*\(.+\)$/, '')
           .trim()
 
@@ -305,13 +315,189 @@ async function fetchHackerNews(): Promise<NewsCandidate[]> {
           homepage_url: story.url,
           logo_url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
           category: 'infra',
-          tags: ['hackernews', 'launch'],
+          tags: ['hackernews', 'show-hn'],
           source: 'hackernews',
         })
       }
     }
   } catch (err) {
     console.warn('Hacker News fetch failed:', err)
+  }
+
+  return candidates
+}
+
+// ─── Source 4: Product Hunt ─────────────────────────────────────────
+
+/** Product Hunt AI-related topic slugs */
+const PH_AI_TOPICS = new Set([
+  'artificial-intelligence', 'machine-learning', 'developer-tools',
+  'saas', 'productivity', 'no-code', 'api', 'open-source',
+  'tech', 'bots', 'chatgpt', 'ai', 'automation',
+  'data-science', 'natural-language-processing',
+])
+
+/**
+ * Fetch today's top Product Hunt launches and filter for AI products.
+ * Requires PRODUCT_HUNT_TOKEN env var (client credentials bearer token).
+ * Silently returns empty if token not set.
+ */
+async function fetchProductHunt(): Promise<NewsCandidate[]> {
+  const token = process.env.PRODUCT_HUNT_TOKEN
+  if (!token) return []
+
+  const candidates: NewsCandidate[] = []
+
+  try {
+    const query = `{
+      posts(order: VOTES, first: 50) {
+        edges {
+          node {
+            id
+            name
+            tagline
+            description
+            url
+            votesCount
+            website
+            thumbnail { url }
+            topics { edges { node { slug name } } }
+            makers { username }
+          }
+        }
+      }
+    }`
+
+    const res = await fetch('https://api.producthunt.com/v2/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'FabricTrustIndex/1.0',
+      },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!res.ok) {
+      console.warn(`Product Hunt API returned ${res.status}`)
+      return candidates
+    }
+
+    const json = await res.json()
+    const posts = json.data?.posts?.edges ?? []
+
+    for (const { node: post } of posts) {
+      if (!post || post.votesCount < 5) continue
+
+      const topicSlugs: string[] = (post.topics?.edges ?? []).map(
+        (e: { node: { slug: string } }) => e.node.slug
+      )
+      const hasTopic = topicSlugs.some(s => PH_AI_TOPICS.has(s))
+      const fullText = `${post.name} ${post.tagline ?? ''} ${post.description ?? ''}`
+      const hasKeyword = isAIRelevant(fullText, topicSlugs)
+
+      if (!hasTopic && !hasKeyword) continue
+
+      const homepage = post.website || post.url
+      let domain = ''
+      try {
+        domain = new URL(homepage).hostname.replace('www.', '')
+      } catch { /* use empty */ }
+
+      const publisher = post.makers?.[0]?.username ?? (domain || 'unknown')
+      const logoUrl = post.thumbnail?.url
+        || (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : '')
+
+      candidates.push({
+        name: post.name,
+        slug: toSlug(post.name),
+        description: post.tagline ?? post.description ?? '',
+        publisher,
+        homepage_url: homepage,
+        logo_url: logoUrl,
+        category: 'infra', // reclassified by pipeline
+        tags: [...topicSlugs.slice(0, 5), 'producthunt'],
+        source: 'producthunt',
+      })
+    }
+  } catch (err) {
+    console.warn('Product Hunt fetch failed:', err)
+  }
+
+  return candidates
+}
+
+// ─── Source 5: YC Launches (Launch HN) ──────────────────────────────
+
+/**
+ * Fetch recent "Launch HN" posts from the HN Algolia API.
+ * These are official YC company launches — high signal, no auth needed.
+ */
+async function fetchYCLaunches(): Promise<NewsCandidate[]> {
+  const candidates: NewsCandidate[] = []
+
+  try {
+    const sevenDaysAgo = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000)
+
+    const res = await fetch(
+      `https://hn.algolia.com/api/v1/search?query=%22Launch%20HN%22&tags=story&numericFilters=created_at_i>${sevenDaysAgo}&hitsPerPage=50`,
+      { signal: AbortSignal.timeout(10000) }
+    )
+
+    if (!res.ok) return candidates
+
+    const data = await res.json()
+    const hits: Array<{
+      title: string
+      url: string | null
+      points: number
+      author: string
+      objectID: string
+    }> = data.hits ?? []
+
+    for (const hit of hits) {
+      if (!hit.title || !hit.url) continue
+      if (!/^launch hn:/i.test(hit.title)) continue
+      if (!isAIRelevant(hit.title)) continue
+
+      // Extract domain
+      let domain = ''
+      try {
+        domain = new URL(hit.url).hostname.replace('www.', '')
+      } catch { continue }
+
+      // Skip non-product domains
+      const skipDomains = [
+        'arxiv.org', 'reddit.com', 'twitter.com', 'x.com',
+        'youtube.com', 'medium.com', 'substack.com',
+        'news.ycombinator.com',
+      ]
+      if (skipDomains.some(d => domain.includes(d))) continue
+
+      // Extract product name: "Launch HN: MyTool – description" → "MyTool"
+      let name = hit.title
+        .replace(/^launch hn:\s*/i, '')
+        .replace(/\s*[-–—|:]\s*.+$/, '')
+        .replace(/\s*\(.+\)$/, '')
+        .trim()
+
+      if (name.length > 40 || name.length < 2) continue
+
+      candidates.push({
+        name,
+        slug: toSlug(name),
+        description: hit.title,
+        publisher: hit.author,
+        homepage_url: hit.url,
+        logo_url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+        category: 'infra',
+        tags: ['yc', 'launch-hn'],
+        source: 'yc-launches',
+      })
+    }
+  } catch (err) {
+    console.warn('YC Launches fetch failed:', err)
   }
 
   return candidates
@@ -326,29 +512,43 @@ export async function discoverFromNews(
   const start = Date.now()
   const errors: string[] = []
 
-  // Fetch from all sources in parallel
-  const [watchlistCandidates, trendingCandidates, hnCandidates] = await Promise.allSettled([
+  // Fetch from all 5 sources in parallel
+  const [
+    watchlistResult,
+    trendingResult,
+    hnResult,
+    phResult,
+    ycResult,
+  ] = await Promise.allSettled([
     Promise.resolve(watchlistToCandidates()),
     fetchGitHubTrending(),
     fetchHackerNews(),
+    fetchProductHunt(),
+    fetchYCLaunches(),
   ])
 
-  const watchlist = watchlistCandidates.status === 'fulfilled' ? watchlistCandidates.value : []
-  const trending = trendingCandidates.status === 'fulfilled' ? trendingCandidates.value : []
-  const hn = hnCandidates.status === 'fulfilled' ? hnCandidates.value : []
+  const watchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : []
+  const trending = trendingResult.status === 'fulfilled' ? trendingResult.value : []
+  const hn = hnResult.status === 'fulfilled' ? hnResult.value : []
+  const ph = phResult.status === 'fulfilled' ? phResult.value : []
+  const yc = ycResult.status === 'fulfilled' ? ycResult.value : []
 
-  if (watchlistCandidates.status === 'rejected') errors.push(`watchlist: ${watchlistCandidates.reason}`)
-  if (trendingCandidates.status === 'rejected') errors.push(`trending: ${trendingCandidates.reason}`)
-  if (hnCandidates.status === 'rejected') errors.push(`hn: ${hnCandidates.reason}`)
+  if (watchlistResult.status === 'rejected') errors.push(`watchlist: ${watchlistResult.reason}`)
+  if (trendingResult.status === 'rejected') errors.push(`trending: ${trendingResult.reason}`)
+  if (hnResult.status === 'rejected') errors.push(`hn: ${hnResult.reason}`)
+  if (phResult.status === 'rejected') errors.push(`producthunt: ${phResult.reason}`)
+  if (ycResult.status === 'rejected') errors.push(`yc-launches: ${ycResult.reason}`)
 
   // Dedup all candidates against existing DB
-  const allCandidates = [...watchlist, ...trending, ...hn]
+  const allCandidates = [...watchlist, ...trending, ...hn, ...ph, ...yc]
   const newCandidates: NewsCandidate[] = []
   const seenSlugs = new Set<string>()
 
   let watchlistSkipped = 0
   let trendingSkipped = 0
   let hnSkipped = 0
+  let phSkipped = 0
+  let ycSkipped = 0
 
   for (const c of allCandidates) {
     const isDuplicate =
@@ -359,7 +559,9 @@ export async function discoverFromNews(
     if (isDuplicate) {
       if (c.source === 'watchlist') watchlistSkipped++
       else if (c.source === 'github-trending') trendingSkipped++
-      else hnSkipped++
+      else if (c.source === 'hackernews') hnSkipped++
+      else if (c.source === 'producthunt') phSkipped++
+      else if (c.source === 'yc-launches') ycSkipped++
       continue
     }
 
@@ -372,6 +574,10 @@ export async function discoverFromNews(
   const trendingAdded = newCandidates.filter(c => c.source === 'github-trending').length
   const hnRelevant = hn.length
   const hnAdded = newCandidates.filter(c => c.source === 'hackernews').length
+  const phRelevant = ph.length
+  const phAdded = newCandidates.filter(c => c.source === 'producthunt').length
+  const ycRelevant = yc.length
+  const ycAdded = newCandidates.filter(c => c.source === 'yc-launches').length
 
   return {
     candidates: newCandidates,
@@ -380,9 +586,11 @@ export async function discoverFromNews(
         watchlist: { checked: watchlist.length, added: watchlistAdded, skipped: watchlistSkipped },
         githubTrending: { fetched: trending.length, relevant: trendingRelevant, added: trendingAdded, skipped: trendingSkipped },
         hackerNews: { fetched: hn.length, relevant: hnRelevant, added: hnAdded, skipped: hnSkipped },
+        productHunt: { fetched: ph.length, relevant: phRelevant, added: phAdded, skipped: phSkipped },
+        ycLaunches: { fetched: yc.length, relevant: ycRelevant, added: ycAdded, skipped: ycSkipped },
       },
       totalAdded: newCandidates.length,
-      totalSkipped: watchlistSkipped + trendingSkipped + hnSkipped,
+      totalSkipped: watchlistSkipped + trendingSkipped + hnSkipped + phSkipped + ycSkipped,
       errors,
       durationMs: Date.now() - start,
     },
