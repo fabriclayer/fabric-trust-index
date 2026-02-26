@@ -247,19 +247,29 @@ export async function getLatestSignalMeta(serviceId: string, signalName: string)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAllSignalMetas(serviceId: string): Promise<Record<string, Record<string, any>>> {
   const supabase = createAnonClient()
-  // Fetch both skill and standard signal metadata
   const signals = [
-    // Skill signals
     'virustotal_scan', 'content_safety', 'publisher_reputation', 'adoption', 'freshness', 'transparency',
-    // Standard signals
     'vulnerability', 'operational', 'maintenance', 'publisher_trust',
   ]
-  const results = await Promise.all(
-    signals.map(s => getLatestSignalMeta(serviceId, s).then(meta => [s, meta] as const))
-  )
+
+  // Single query fetching recent rows for all signals, ordered newest-first
+  const { data } = await supabase
+    .from('signal_history')
+    .select('signal_name, metadata, recorded_at')
+    .eq('service_id', serviceId)
+    .in('signal_name', signals)
+    .order('recorded_at', { ascending: false })
+    .limit(signals.length * 3) // headroom for multiple rows per signal
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const out: Record<string, Record<string, any>> = {}
-  for (const [name, meta] of results) {
-    if (meta) out[name] = meta
+  if (data) {
+    // Keep only the first (most recent) row per signal_name
+    for (const row of data) {
+      if (!out[row.signal_name] && row.metadata) {
+        out[row.signal_name] = row.metadata as Record<string, any>
+      }
+    }
   }
   return out
 }
