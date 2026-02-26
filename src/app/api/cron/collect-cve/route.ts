@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { runCollectors } from '@/lib/collectors/runner'
+import { runCollectors, runAllCollectors } from '@/lib/collectors/runner'
 
 export const maxDuration = 300
 
@@ -23,10 +23,26 @@ export async function GET(request: NextRequest) {
     }
 
     let processed = 0
+    let rescored = 0
     for (const service of services) {
       try {
+        const oldVulnScore = service.signal_vulnerability
         await runCollectors(service, ['vulnerability'])
         processed++
+
+        // If vulnerability score dropped significantly, check for critical/high CVEs and full-rescore
+        const { data: updated } = await supabase
+          .from('services')
+          .select('signal_vulnerability')
+          .eq('id', service.id)
+          .single()
+
+        const newVulnScore = updated?.signal_vulnerability ?? oldVulnScore
+        if (newVulnScore < oldVulnScore - 0.5) {
+          console.log(`[collect-cve] Significant vuln score drop for ${service.name} (${oldVulnScore} → ${newVulnScore}), triggering full rescore`)
+          await runAllCollectors(service, { skipSupplyChain: true })
+          rescored++
+        }
       } catch (err) {
         console.error(`CVE collection failed for ${service.name}:`, err)
       }
@@ -35,6 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       processed,
+      rescored,
       total: services.length,
       timestamp: new Date().toISOString(),
     })
