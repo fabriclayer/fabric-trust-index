@@ -189,10 +189,15 @@ export async function runClawHubScoring(service: DbService): Promise<{
 
   let status = getStatus(compositeScore)
 
-  // Hard override: virustotal_scan ≤ 1.0 → blocked
+  // Hard override: virustotal_scan ≤ 1.0 → blocked (malware detected)
   if (signals.virustotal_scan <= 1.0) {
     status = 'blocked'
     modifiers.push('vt_scan_override')
+  }
+  // Soft override: virustotal_scan ≤ 2.0 → caution (suspicious flag)
+  else if (signals.virustotal_scan <= 2.0) {
+    if (status === 'trusted') status = 'caution'
+    modifiers.push('vt_suspicious_override')
   }
 
   // Hard override: content_safety ≤ 1.0 → blocked
@@ -200,10 +205,17 @@ export async function runClawHubScoring(service: DbService): Promise<{
     status = 'blocked'
     modifiers.push('content_safety_override')
   }
+  // Soft override: content_safety ≤ 2.0 → caution
+  else if (signals.content_safety <= 2.0) {
+    if (status === 'trusted') status = 'caution'
+    modifiers.push('content_safety_caution_override')
+  }
 
   let finalScore = compositeScore
   if (modifiers.includes('vt_scan_override') || modifiers.includes('content_safety_override')) {
     finalScore = Math.min(finalScore, 0.99)
+  } else if (modifiers.includes('vt_suspicious_override') || modifiers.includes('content_safety_caution_override')) {
+    finalScore = Math.min(finalScore, 3.24)
   }
 
   // Store owner handle for publisher link on product page
@@ -318,27 +330,75 @@ async function detectClawHubIncidents(
     })
   }
 
-  // VT malware detection
+  // VT malware detection (deduplicated)
   if (signals.virustotal_scan <= 1.0) {
-    await supabase.from('incidents').insert({
-      service_id: service.id,
-      type: 'cve_found',
-      severity: 'critical',
-      title: 'VirusTotal malware detection',
-      description: 'Skill flagged by VirusTotal or ClawHub moderation — malware blocked or multiple malicious detections',
-      score_at_time: newComposite,
-    })
+    const { data: existing } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'cve_found')
+      .eq('severity', 'critical')
+      .is('resolved_at', null)
+      .ilike('title', '%VirusTotal malware%')
+      .limit(1)
+      .single()
+
+    if (!existing) {
+      await supabase.from('incidents').insert({
+        service_id: service.id,
+        type: 'cve_found',
+        severity: 'critical',
+        title: 'VirusTotal malware detection',
+        description: 'Skill flagged by VirusTotal or ClawHub moderation — malware blocked or multiple malicious detections',
+        score_at_time: newComposite,
+      })
+    }
+  }
+  // VT suspicious detection (deduplicated)
+  else if (signals.virustotal_scan <= 2.0) {
+    const { data: existing } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'cve_found')
+      .is('resolved_at', null)
+      .ilike('title', '%VirusTotal suspicious%')
+      .limit(1)
+      .single()
+
+    if (!existing) {
+      await supabase.from('incidents').insert({
+        service_id: service.id,
+        type: 'cve_found',
+        severity: 'warning',
+        title: 'VirusTotal suspicious detection',
+        description: 'Skill flagged as suspicious by VirusTotal — manual review recommended',
+        score_at_time: newComposite,
+      })
+    }
   }
 
-  // Content safety issues
+  // Content safety issues (deduplicated)
   if (signals.content_safety <= 1.0) {
-    await supabase.from('incidents').insert({
-      service_id: service.id,
-      type: 'cve_found',
-      severity: 'critical',
-      title: 'Content safety issues detected',
-      description: 'SKILL.md contains suspicious patterns (potential secrets, dangerous commands, credential leaks, or config tampering)',
-      score_at_time: newComposite,
-    })
+    const { data: existing } = await supabase
+      .from('incidents')
+      .select('id')
+      .eq('service_id', service.id)
+      .eq('type', 'cve_found')
+      .is('resolved_at', null)
+      .ilike('title', '%Content safety%')
+      .limit(1)
+      .single()
+
+    if (!existing) {
+      await supabase.from('incidents').insert({
+        service_id: service.id,
+        type: 'cve_found',
+        severity: 'critical',
+        title: 'Content safety issues detected',
+        description: 'SKILL.md contains suspicious patterns (potential secrets, dangerous commands, credential leaks, or config tampering)',
+        score_at_time: newComposite,
+      })
+    }
   }
 }
