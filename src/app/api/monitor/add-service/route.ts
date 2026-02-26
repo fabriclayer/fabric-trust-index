@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase/server'
 import { addDiscoveredService, classifyCategory, deriveCapabilities } from '@/lib/discovery/pipeline'
 import { resolveServiceMetadata } from '@/lib/discovery/enrich'
+import { runAllCollectors } from '@/lib/collectors/runner'
+
+export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
   const auth = request.cookies.get('fabric_monitor_auth')?.value
@@ -33,11 +37,9 @@ export async function POST(request: NextRequest) {
     github_repo: github_repo || undefined,
   })
 
-  const finalSlug = slug
-
-  const result = await addDiscoveredService({
+  const insertResult = await addDiscoveredService({
     name,
-    slug: finalSlug,
+    slug,
     publisher,
     description: '',
     category,
@@ -51,9 +53,38 @@ export async function POST(request: NextRequest) {
     homepage_url: homepage_url || undefined,
   })
 
-  if (result === true) {
-    return NextResponse.json({ ok: true, slug: finalSlug })
+  if (insertResult !== true) {
+    return NextResponse.json({ error: `Failed to add service: ${insertResult}` }, { status: 500 })
   }
 
-  return NextResponse.json({ error: `Failed to add service: ${result}` }, { status: 500 })
+  // Fetch the newly created service and score it immediately
+  const supabase = createServerClient()
+  const { data: service } = await supabase
+    .from('services')
+    .select('*')
+    .eq('slug', slug)
+    .single()
+
+  let scoring = { success: [] as string[], failed: [] as string[] }
+  if (service) {
+    try {
+      scoring = await runAllCollectors(service)
+    } catch (err) {
+      console.error(`Scoring failed for ${slug}:`, err)
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    slug,
+    enriched: {
+      github_repo: enriched.github_repo || undefined,
+      npm_package: enriched.npm_package || undefined,
+      pypi_package: enriched.pypi_package || undefined,
+    },
+    scoring: {
+      success: scoring.success,
+      failed: scoring.failed,
+    },
+  })
 }
