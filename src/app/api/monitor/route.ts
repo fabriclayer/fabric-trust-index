@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { githubHeaders } from '@/lib/collectors/github'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 export async function GET(request: NextRequest) {
   const auth = request.cookies.get('fabric_monitor_auth')?.value
@@ -13,114 +14,130 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient()
   const today = new Date().toISOString().slice(0, 10) + 'T00:00:00Z'
 
-  // Run all queries in parallel
+  // ── ESSENTIAL QUERIES (counts only — fast) ────────────────────
   const [
-    // Service counts by status
     trustedCount, cautionCount, blockedCount, pendingCount, totalCount,
-    // Table row counts
     signalHistoryCount, incidentsCount, cveRecordsCount, discoveryQueueCount,
-    // Today's activity
     todayDiscovered, todaySignals,
-    // Confidence distribution
     highConfidence, medConfidence, lowConfidence, minimalConfidence,
-    // Stale scores
     staleCount,
-    // AI assessments
     assessmentsTotal, assessmentsPending,
-    // CVE summary
     cveCritical, cveHigh, cveMedium, cveLow, cveUnpatched,
-    // Unresolved incidents
     unresolvedCritical, unresolvedWarning, unresolvedInfo,
-    // Active overrides (can't easily do unnest in PostgREST, so fetch services with modifiers)
-    servicesWithModifiers,
-    // Fallback rates - count services at default values
     vulnFallback, opFallback, maintFallback, adoptFallback, transFallback, pubFallback,
-    // Non-pending total for fallback % calculation
     nonPendingCount,
-    // Discovery queue pending review
-    discoveryPending,
-    // GitHub rate limit
-    githubRate,
-    // Timeline: recent scoring activity (last 15 composites)
-    recentScored,
-    // Timeline: recent discoveries (last 15 services created)
-    recentDiscovered,
-    // Timeline: recent incidents (last 15)
-    recentIncidents,
-    // Schedule timestamps
-    lastComposite, lastCreated, lastIncident, todayUpdated,
+    todayUpdated,
   ] = await Promise.all([
-    // Status counts
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'trusted'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'caution'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'blocked'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }),
-    // Table row counts
     supabase.from('signal_history').select('id', { count: 'exact', head: true }),
     supabase.from('incidents').select('id', { count: 'exact', head: true }),
     supabase.from('cve_records').select('id', { count: 'exact', head: true }),
     supabase.from('discovery_queue').select('id', { count: 'exact', head: true }),
-    // Today's activity
     supabase.from('services').select('id', { count: 'exact', head: true }).gte('created_at', today),
     supabase.from('signal_history').select('id', { count: 'exact', head: true }).gte('recorded_at', today).eq('signal_name', 'composite'),
-    // Confidence distribution
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signals_with_data', 6).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).gte('signals_with_data', 4).lt('signals_with_data', 6).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).gte('signals_with_data', 1).lt('signals_with_data', 4).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).or('signals_with_data.is.null,signals_with_data.eq.0').neq('status', 'pending'),
-    // Stale scores (>7 days)
     supabase.from('services').select('id', { count: 'exact', head: true }).lt('updated_at', new Date(Date.now() - 7 * 86400000).toISOString()).neq('status', 'pending'),
-    // AI assessments
     supabase.from('services').select('id', { count: 'exact', head: true }).not('ai_assessment', 'is', null),
     supabase.from('services').select('id', { count: 'exact', head: true }).is('ai_assessment', null).neq('status', 'pending'),
-    // CVE severity counts
     supabase.from('cve_records').select('id', { count: 'exact', head: true }).eq('severity', 'critical'),
     supabase.from('cve_records').select('id', { count: 'exact', head: true }).eq('severity', 'high'),
     supabase.from('cve_records').select('id', { count: 'exact', head: true }).eq('severity', 'medium'),
     supabase.from('cve_records').select('id', { count: 'exact', head: true }).eq('severity', 'low'),
     supabase.from('cve_records').select('id', { count: 'exact', head: true }).eq('is_patched', false),
-    // Unresolved incidents by severity
     supabase.from('incidents').select('id', { count: 'exact', head: true }).is('resolved_at', null).eq('severity', 'critical'),
     supabase.from('incidents').select('id', { count: 'exact', head: true }).is('resolved_at', null).eq('severity', 'warning'),
     supabase.from('incidents').select('id', { count: 'exact', head: true }).is('resolved_at', null).eq('severity', 'info'),
-    // Services with active_modifiers for override counting
-    supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
-    // Fallback rate counts (services at default signal values, excluding pending)
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_vulnerability', 3.0).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_operational', 2.5).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_maintenance', 3.0).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_adoption', 3.0).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_transparency', 2.0).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_publisher_trust', 2.5).neq('status', 'pending'),
-    // Non-pending total for percentage calculation
     supabase.from('services').select('id', { count: 'exact', head: true }).neq('status', 'pending'),
-    // Discovery queue - pending review items (limit 100)
-    supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
-    // GitHub rate limit
-    fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
-    // Timeline: recent composites scored
-    supabase.from('signal_history').select('service_id, score, recorded_at, services!inner(name, slug)').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(15),
-    // Timeline: recent services discovered
-    supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(15),
-    // Timeline: recent incidents
-    supabase.from('incidents').select('type, severity, title, score_at_time, created_at, services!inner(name, slug)').order('created_at', { ascending: false }).limit(15),
-    // Schedule: last composite recorded timestamp
-    supabase.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1),
-    // Schedule: last service created timestamp
-    supabase.from('services').select('created_at').order('created_at', { ascending: false }).limit(1),
-    // Schedule: last incident created timestamp
-    supabase.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1),
-    // Schedule: services updated today (scored today)
     supabase.from('services').select('id', { count: 'exact', head: true }).gte('updated_at', today).neq('status', 'pending'),
   ])
 
-  // Count overrides from services with modifiers
-  const overrideCounts: Record<string, number> = {}
-  for (const svc of servicesWithModifiers.data ?? []) {
-    for (const mod of (svc.active_modifiers as string[]) ?? []) {
-      overrideCounts[mod] = (overrideCounts[mod] ?? 0) + 1
+  // ── SECONDARY QUERIES (data fetches — may be slower) ──────────
+  let overrideCounts: Record<string, number> = {}
+  let discoveryQueue: Record<string, unknown>[] = []
+  let timeline: { type: string; name: string; slug: string; detail: string; severity?: string; timestamp: string }[] = []
+  let githubRate: { rate?: { remaining: number; limit: number; reset: number } } | null = null
+  let lastScoredAt: string | null = null
+  let lastDiscoveredAt: string | null = null
+  let lastIncidentAt: string | null = null
+
+  try {
+    const [
+      servicesWithModifiers,
+      discoveryPending,
+      ghRate,
+      recentDiscovered,
+      recentIncidents,
+      lastComposite,
+      lastCreated,
+      lastIncidentRow,
+    ] = await Promise.all([
+      supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
+      supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
+      fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+      // Lightweight timeline queries (no JOINs on signal_history)
+      supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(15),
+      supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id').order('created_at', { ascending: false }).limit(15),
+      supabase.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1),
+      supabase.from('services').select('created_at').order('created_at', { ascending: false }).limit(1),
+      supabase.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1),
+    ])
+
+    // Override counts
+    for (const svc of servicesWithModifiers.data ?? []) {
+      for (const mod of (svc.active_modifiers as string[]) ?? []) {
+        overrideCounts[mod] = (overrideCounts[mod] ?? 0) + 1
+      }
     }
+
+    // Discovery queue
+    discoveryQueue = (discoveryPending.data ?? []).map((d: Record<string, unknown>) => ({
+      id: d.id,
+      source: typeof d.source === 'string' ? d.source.replace('ai-news:', '') : d.source,
+      created_at: d.created_at,
+      ...(d.result as Record<string, unknown> ?? {}),
+    }))
+
+    githubRate = ghRate
+
+    // Timeline (no expensive JOINs)
+    const discoveredEvents = (recentDiscovered.data ?? []).map((r: Record<string, unknown>) => ({
+      type: 'discovered' as const,
+      name: r.name as string,
+      slug: r.slug as string,
+      detail: `${r.discovered_from ?? 'manual'} · ${r.status}${r.composite_score ? ` · ${(r.composite_score as number).toFixed(2)}` : ''}`,
+      timestamp: r.created_at as string,
+    }))
+    const incidentEvents = (recentIncidents.data ?? []).map((r: Record<string, unknown>) => ({
+      type: 'incident' as const,
+      name: '',
+      slug: '',
+      detail: r.title as string,
+      severity: r.severity as string,
+      timestamp: r.created_at as string,
+    }))
+    timeline = [...discoveredEvents, ...incidentEvents]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 30)
+
+    // Schedule timestamps
+    lastScoredAt = (lastComposite.data as Record<string, unknown>[])?.[0]?.recorded_at as string | null ?? null
+    lastDiscoveredAt = (lastCreated.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null
+    lastIncidentAt = (lastIncidentRow.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null
+  } catch (err) {
+    console.error('Secondary monitor queries failed:', err)
   }
 
   const np = nonPendingCount.count ?? 1
@@ -184,46 +201,12 @@ export async function GET(request: NextRequest) {
       warning: unresolvedWarning.count ?? 0,
       info: unresolvedInfo.count ?? 0,
     },
-    discoveryQueue: (discoveryPending.data ?? []).map((d: Record<string, unknown>) => ({
-      id: d.id,
-      source: typeof d.source === 'string' ? d.source.replace('ai-news:', '') : d.source,
-      created_at: d.created_at,
-      ...(d.result as Record<string, unknown> ?? {}),
-    })),
-    timeline: [
-      ...(recentScored.data ?? []).map((r: Record<string, unknown>) => {
-        const svc = r.services as Record<string, unknown> | null
-        return {
-          type: 'scored' as const,
-          name: svc?.name ?? 'Unknown',
-          slug: svc?.slug ?? '',
-          detail: `Composite: ${(r.score as number)?.toFixed(2)}`,
-          timestamp: r.recorded_at as string,
-        }
-      }),
-      ...(recentDiscovered.data ?? []).map((r: Record<string, unknown>) => ({
-        type: 'discovered' as const,
-        name: r.name as string,
-        slug: r.slug as string,
-        detail: `${r.discovered_from ?? 'manual'} · ${r.status}${r.composite_score ? ` · ${(r.composite_score as number).toFixed(2)}` : ''}`,
-        timestamp: r.created_at as string,
-      })),
-      ...(recentIncidents.data ?? []).map((r: Record<string, unknown>) => {
-        const svc = r.services as Record<string, unknown> | null
-        return {
-          type: 'incident' as const,
-          name: svc?.name ?? 'Unknown',
-          slug: svc?.slug ?? '',
-          detail: r.title as string,
-          severity: r.severity as string,
-          timestamp: r.created_at as string,
-        }
-      }),
-    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 30),
+    discoveryQueue,
+    timeline,
     schedule: {
-      lastScoredAt: (lastComposite.data as Record<string, unknown>[])?.[0]?.recorded_at as string | null ?? null,
-      lastDiscoveredAt: (lastCreated.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null,
-      lastIncidentAt: (lastIncident.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null,
+      lastScoredAt,
+      lastDiscoveredAt,
+      lastIncidentAt,
       todayUpdated: todayUpdated.count ?? 0,
       totalNonPending: nonPendingCount.count ?? 0,
     },
