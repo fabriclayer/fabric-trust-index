@@ -395,6 +395,19 @@ export const WATCHLIST: WatchlistEntry[] = [
     tags: ['video-generation', 'openai'],
   },
 
+  // ── Design & Creative AI ───────────────────────────────────────
+  {
+    name: 'QuiverAI',
+    slug: 'quiverai',
+    category: 'image-generation',
+    publisher: 'QuiverAI',
+    homepage_url: 'https://quiver.ai',
+    github_org: 'quiverai',
+    logo_url: 'https://github.com/quiverai.png?size=80',
+    description: 'Frontier AI models for generating, editing, and animating vector graphics (SVG)',
+    tags: ['image-generation', 'svg', 'vector', 'design', 'api'],
+  },
+
   // ── Security ───────────────────────────────────────────────────
   {
     name: 'Dify',
