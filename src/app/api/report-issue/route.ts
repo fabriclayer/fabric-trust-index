@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { rateLimit } from '@/lib/rate-limit'
 
 const VALID_ISSUE_TYPES = ['incorrect_score', 'incorrect_info', 'security_concern', 'other']
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'report-issue', 5, 60_000)
+  if (limited) return limited
+
   try {
     const body = await request.json()
     const { service_slug, service_name, issue_type, description, contact_email } = body

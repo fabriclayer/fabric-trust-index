@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'submit-service', 5, 60_000)
+  if (limited) return limited
+
   try {
     const body = await request.json()
     const { service_name, url, email } = body
