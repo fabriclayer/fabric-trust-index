@@ -4,14 +4,10 @@ import { TAG_CLASSES } from '@/lib/utils'
 
 // Format relative time from ISO timestamp
 function formatUpdatedAt(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime()
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return 'just now'
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  const weeks = Math.floor(days / 7)
-  return `${weeks}w ago`
+  const d = new Date(isoDate)
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${date} at ${time}`
 }
 
 function extractDomain(url?: string | null): string | undefined {
