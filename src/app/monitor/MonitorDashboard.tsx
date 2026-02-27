@@ -26,6 +26,7 @@ interface MonitorData {
   health: {
     supabase: { rowsServices: number; rowsSignalHistory: number; rowsIncidents: number; rowsCveRecords: number; rowsDiscoveryQueue: number }
     github: { rateRemaining: number; rateLimit: number; resetsAt: string | null }
+    vercel: { functionsInvoked: number; errors: number; avgLatency: number; p99Latency: number } | null
     scoring: {
       confidenceHigh: number; confidenceMed: number; confidenceLow: number; confidenceMinimal: number
       fallbackRates: Record<string, number>; staleCount: number; overrideCounts: Record<string, number>
@@ -172,7 +173,7 @@ function HealthTab({ data }: { data: MonitorData }) {
   const np = h.scoring.confidenceHigh + h.scoring.confidenceMed + h.scoring.confidenceLow + h.scoring.confidenceMinimal || 1
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Infrastructure */}
+      {/* Infrastructure — row 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <Card title="Supabase">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -196,6 +197,45 @@ function HealthTab({ data }: { data: MonitorData }) {
               <Mono style={{ fontSize: 12, color: C.t2 }}>Resets at</Mono>
               <Mono style={{ fontSize: 12, color: C.t3 }}>{h.github.resetsAt ? new Date(h.github.resetsAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}</Mono>
             </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Infrastructure — row 2 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <Card title="Vercel">
+          {h.vercel ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>Functions invoked today</Mono><Mono style={{ fontSize: 12, color: C.text }}>{h.vercel.functionsInvoked.toLocaleString()}</Mono></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>Errors today</Mono><Mono style={{ fontSize: 12, color: h.vercel.errors > 0 ? C.red : C.green }}>{h.vercel.errors.toLocaleString()}</Mono></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>Avg latency</Mono><Mono style={{ fontSize: 12, color: h.vercel.avgLatency > 5000 ? C.orange : C.text }}>{h.vercel.avgLatency > 0 ? `${h.vercel.avgLatency.toLocaleString()}ms` : '—'}</Mono></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>p99 latency</Mono><Mono style={{ fontSize: 12, color: h.vercel.p99Latency > 10000 ? C.red : h.vercel.p99Latency > 5000 ? C.orange : C.text }}>{h.vercel.p99Latency > 0 ? `${h.vercel.p99Latency.toLocaleString()}ms` : '—'}</Mono></div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 0' }}>
+              <Mono style={{ fontSize: 12, color: C.t3 }}>Configure VERCEL_TOKEN to enable</Mono>
+            </div>
+          )}
+        </Card>
+        <Card title="External APIs" right={<Mono style={{ fontSize: 10, color: C.t3 }}>8 data sources</Mono>}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { name: 'OSV.dev', desc: 'Vulnerability database' },
+              { name: 'npm Registry', desc: 'Package metadata' },
+              { name: 'PyPI', desc: 'Python packages' },
+              { name: 'GitHub API', desc: 'Repos, orgs, trending' },
+              { name: 'VirusTotal', desc: 'Malware scanning' },
+              { name: 'ClawHub', desc: 'MCP tool registry' },
+              { name: 'Product Hunt', desc: 'AI tool discovery' },
+              { name: 'HN Algolia', desc: 'News discovery' },
+            ].map(api => (
+              <div key={api.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Dot color={C.green} />
+                <Mono style={{ fontSize: 12, color: C.text, width: 100 }}>{api.name}</Mono>
+                <Mono style={{ fontSize: 11, color: C.t3, flex: 1 }}>{api.desc}</Mono>
+                <Mono style={{ fontSize: 11, color: C.t4 }}>—</Mono>
+              </div>
+            ))}
           </div>
         </Card>
       </div>

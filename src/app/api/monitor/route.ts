@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
   let timeline: { type: string; name: string; slug: string; detail: string; severity?: string; timestamp: string }[] = []
   let events: { type: string; name: string; slug: string; detail: string; severity?: string; timestamp: string }[] = []
   let githubRate: { rate?: { remaining: number; limit: number; reset: number } } | null = null
+  let vercelData: { functionsInvoked: number; errors: number; avgLatency: number; p99Latency: number } | null = null
   let lastScoredAt: string | null = null
   let lastDiscoveredAt: string | null = null
   let lastIncidentAt: string | null = null
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
       servicesWithModifiers,
       discoveryPending,
       ghRate,
+      vercelRaw,
       recentDiscovered,
       recentIncidents,
       lastComposite,
@@ -90,6 +92,14 @@ export async function GET(request: NextRequest) {
       supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
       supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
       fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+      // Vercel analytics (only if token configured)
+      (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID
+        ? fetch(`https://api.vercel.com/v1/web/insights/stats?projectId=${process.env.VERCEL_PROJECT_ID}&from=${today}&to=${new Date().toISOString()}`, {
+            headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
+            signal: AbortSignal.timeout(5000),
+          }).then(r => r.ok ? r.json() : null).catch(() => null)
+        : Promise.resolve(null)
+      ),
       // Lightweight event queries (no JOINs on signal_history)
       supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id').order('created_at', { ascending: false }).limit(50),
@@ -117,6 +127,19 @@ export async function GET(request: NextRequest) {
     }))
 
     githubRate = ghRate
+
+    // Vercel analytics
+    if (vercelRaw) {
+      try {
+        const d = vercelRaw.data ?? vercelRaw
+        vercelData = {
+          functionsInvoked: d.totalInvocations ?? d.functions?.invocations ?? 0,
+          errors: d.totalErrors ?? d.functions?.errors ?? 0,
+          avgLatency: d.avgDuration ?? d.functions?.avgDuration ?? 0,
+          p99Latency: d.p99Duration ?? d.functions?.p99Duration ?? 0,
+        }
+      } catch { /* ignore parse errors */ }
+    }
 
     // Timeline (no expensive JOINs)
     const discoveredEvents = (recentDiscovered.data ?? []).map((r: Record<string, unknown>) => ({
@@ -191,6 +214,7 @@ export async function GET(request: NextRequest) {
         rateLimit: githubRate.rate?.limit ?? 5000,
         resetsAt: githubRate.rate?.reset ? new Date(githubRate.rate.reset * 1000).toISOString() : null,
       } : { rateRemaining: 0, rateLimit: 5000, resetsAt: null },
+      vercel: vercelData,
       scoring: {
         confidenceHigh: highConfidence.count ?? 0,
         confidenceMed: medConfidence.count ?? 0,
