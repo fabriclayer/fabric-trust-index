@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { logApiUsage } from '@/lib/api-usage'
 
 export const maxDuration = 120
 
@@ -124,6 +125,9 @@ export async function GET(request: NextRequest) {
       cost_estimate: ((data.usage?.input_tokens ?? 0) * 15 / 1_000_000) + ((data.usage?.output_tokens ?? 0) * 75 / 1_000_000),
     }
     const durationMs = Date.now() - startTime
+
+    // Track API costs
+    logApiUsage({ caller: 'review-dashboard', model: 'claude-opus-4-6', input_tokens: tokenUsage.input_tokens, output_tokens: tokenUsage.output_tokens, duration_ms: durationMs }).catch(() => {})
 
     // Update review with results
     await supabase

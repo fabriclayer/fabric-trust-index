@@ -27,6 +27,10 @@ interface MonitorData {
     supabase: { rowsServices: number; rowsSignalHistory: number; rowsIncidents: number; rowsCveRecords: number; rowsDiscoveryQueue: number }
     github: { rateRemaining: number; rateLimit: number; resetsAt: string | null }
     vercel: { functionsInvoked: number; errors: number; avgLatency: number; p99Latency: number } | null
+    endpoints?: EndpointHealth[]
+    cronHealth?: CronHealthItem[]
+    costs?: { today: UsageBucket; month: UsageBucket }
+    systemStatus?: 'nominal' | 'degraded' | 'outage'
     scoring: {
       confidenceHigh: number; confidenceMed: number; confidenceLow: number; confidenceMinimal: number
       fallbackRates: Record<string, number>; staleCount: number; overrideCounts: Record<string, number>
@@ -65,6 +69,21 @@ interface ActivityEvent {
   type: 'scored' | 'discovered' | 'incident' | 'cve'
   name: string; slug: string; detail: string
   severity?: string; timestamp: string
+}
+
+interface EndpointHealth {
+  endpoint: string; label: string; status: 'up' | 'degraded' | 'down'
+  response_ms: number | null; status_code: number | null; last_checked: string; uptime_24h: number
+}
+
+interface CronHealthItem {
+  cronId: string; name: string; schedule: string; expectedIntervalMs: number
+  lastRunAt: string | null; status: 'on_schedule' | 'overdue' | 'missed'; nextExpectedAt: string
+}
+
+interface UsageBucket {
+  calls: number; input_tokens: number; output_tokens: number; cost_usd: number
+  by_caller: Record<string, { calls: number; cost_usd: number }>
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────
@@ -173,8 +192,140 @@ function Bar({ pct, color, h = 5 }: { pct: number; color: string; h?: number }) 
 function HealthTab({ data }: { data: MonitorData }) {
   const h = data.health
   const np = h.scoring.confidenceHigh + h.scoring.confidenceMed + h.scoring.confidenceLow + h.scoring.confidenceMinimal || 1
+  const endpoints = h.endpoints ?? []
+  const cronHealth = h.cronHealth ?? []
+  const costs = h.costs
+  const epStatusColor = (s: string) => s === 'up' ? C.green : s === 'degraded' ? C.orange : C.red
+  const cronStatusColor = (s: string) => s === 'on_schedule' ? C.green : s === 'overdue' ? C.orange : C.red
+  const cronStatusBg = (s: string) => s === 'on_schedule' ? C.greenDim : s === 'overdue' ? C.orangeDim : C.redDim
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Infrastructure Endpoints */}
+      {endpoints.length > 0 && (
+        <Card title="Infrastructure Endpoints" right={
+          <Mono style={{ fontSize: 10, color: C.t3 }}>{endpoints.filter(e => e.status === 'up').length}/{endpoints.length} up</Mono>
+        }>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(endpoints.length, 4)}, 1fr)`, gap: 12 }}>
+            {endpoints.map(ep => (
+              <div key={ep.endpoint} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: `1px solid ${ep.status !== 'up' ? epStatusColor(ep.status) + '33' : C.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Dot color={epStatusColor(ep.status)} pulse={ep.status !== 'up'} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{ep.label}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Mono style={{ fontSize: 10, color: C.t3 }}>Response</Mono>
+                  <Mono style={{ fontSize: 10, color: ep.response_ms && ep.response_ms > 2000 ? C.orange : C.t2 }}>
+                    {ep.response_ms ? `${ep.response_ms}ms` : '—'}
+                  </Mono>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Mono style={{ fontSize: 10, color: C.t3 }}>24h uptime</Mono>
+                  <Mono style={{ fontSize: 10, color: ep.uptime_24h >= 99 ? C.green : ep.uptime_24h >= 95 ? C.orange : C.red }}>
+                    {ep.uptime_24h}%
+                  </Mono>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Mono style={{ fontSize: 10, color: C.t3 }}>Checked</Mono>
+                  <Mono style={{ fontSize: 10, color: C.t4 }}>{timeAgo(ep.last_checked)}</Mono>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Cron Schedule Health */}
+      {cronHealth.length > 0 && (
+        <Card title="Cron Schedule Health" right={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Badge text={`${cronHealth.filter(c => c.status === 'on_schedule').length} on schedule`} color={C.green} bg={C.greenDim} />
+            {cronHealth.filter(c => c.status === 'overdue').length > 0 && (
+              <Badge text={`${cronHealth.filter(c => c.status === 'overdue').length} overdue`} color={C.orange} bg={C.orangeDim} />
+            )}
+            {cronHealth.filter(c => c.status === 'missed').length > 0 && (
+              <Badge text={`${cronHealth.filter(c => c.status === 'missed').length} missed`} color={C.red} bg={C.redDim} />
+            )}
+          </div>
+        } pad={false}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {cronHealth.map((cron, i) => (
+              <div key={cron.cronId} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px',
+                borderBottom: i < cronHealth.length - 1 ? `1px solid ${C.border}` : 'none',
+                background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+              }}>
+                <Dot color={cronStatusColor(cron.status)} pulse={cron.status !== 'on_schedule'} />
+                <span style={{ fontSize: 13, fontWeight: 500, color: C.text, width: 160 }}>{cron.name}</span>
+                <Mono style={{ fontSize: 11, color: C.t3, width: 120 }}>{cron.schedule}</Mono>
+                <div style={{ flex: 1 }}>
+                  <Mono style={{ fontSize: 11, color: C.t2 }}>Last run: {cron.lastRunAt ? timeAgo(cron.lastRunAt) : 'never'}</Mono>
+                </div>
+                <Badge text={cron.status.replace('_', ' ')} color={cronStatusColor(cron.status)} bg={cronStatusBg(cron.status)} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* API Costs */}
+      {costs && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <Card title="API Costs — Today">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>Total cost</Mono>
+                <Mono style={{ fontSize: 14, fontWeight: 700, color: costs.today.cost_usd > 5 ? C.orange : C.text }}>${costs.today.cost_usd.toFixed(4)}</Mono>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>API calls</Mono>
+                <Mono style={{ fontSize: 12, color: C.text }}>{costs.today.calls.toLocaleString()}</Mono>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>Tokens</Mono>
+                <Mono style={{ fontSize: 11, color: C.t3 }}>{costs.today.input_tokens.toLocaleString()} in · {costs.today.output_tokens.toLocaleString()} out</Mono>
+              </div>
+              {Object.entries(costs.today.by_caller).length > 0 && (
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
+                  {Object.entries(costs.today.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
+                    <div key={caller} style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>{caller}</Mono>
+                      <Mono style={{ fontSize: 11, color: C.t2 }}>{stats.calls} calls · ${stats.cost_usd.toFixed(4)}</Mono>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+          <Card title="API Costs — This Month">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>Total cost</Mono>
+                <Mono style={{ fontSize: 14, fontWeight: 700, color: costs.month.cost_usd > 50 ? C.red : costs.month.cost_usd > 20 ? C.orange : C.text }}>${costs.month.cost_usd.toFixed(4)}</Mono>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>API calls</Mono>
+                <Mono style={{ fontSize: 12, color: C.text }}>{costs.month.calls.toLocaleString()}</Mono>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Mono style={{ fontSize: 12, color: C.t2 }}>Tokens</Mono>
+                <Mono style={{ fontSize: 11, color: C.t3 }}>{costs.month.input_tokens.toLocaleString()} in · {costs.month.output_tokens.toLocaleString()} out</Mono>
+              </div>
+              {Object.entries(costs.month.by_caller).length > 0 && (
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
+                  {Object.entries(costs.month.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
+                    <div key={caller} style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>{caller}</Mono>
+                      <Mono style={{ fontSize: 11, color: C.t2 }}>{stats.calls} calls · ${stats.cost_usd.toFixed(4)}</Mono>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Infrastructure — row 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <Card title="Supabase">
@@ -1393,8 +1544,16 @@ export default function MonitorDashboard() {
             <Mono style={{ fontSize: 11, color: C.pink }}>{d.todayScored.toLocaleString()} scored</Mono>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Dot color={error ? C.red : C.green} pulse />
-            <Mono style={{ fontSize: 12, color: error ? C.red : C.green }}>{error ? 'error' : 'nominal'}</Mono>
+            {(() => {
+              const status = error ? 'error' : (data?.health?.systemStatus ?? 'nominal')
+              const statusColor = status === 'nominal' ? C.green : status === 'degraded' ? C.orange : C.red
+              return (
+                <>
+                  <Dot color={statusColor} pulse />
+                  <Mono style={{ fontSize: 12, color: statusColor }}>{status}</Mono>
+                </>
+              )
+            })()}
           </div>
           <button onClick={handleCopyJson} style={{
             fontFamily: F.mono, fontSize: 10, color: copied ? C.green : C.t3,

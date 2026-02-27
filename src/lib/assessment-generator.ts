@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { enrichService } from '@/lib/enrichment'
+import { logApiUsage } from '@/lib/api-usage'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-4-5-20250929'
@@ -167,6 +168,9 @@ export async function generateAssessment(serviceId: string): Promise<void> {
     const inputTokens = result.usage?.input_tokens ?? 0
     const outputTokens = result.usage?.output_tokens ?? 0
     console.log(`[assessment] ${service.slug}: ${inputTokens} in / ${outputTokens} out (${MODEL})`)
+
+    // Track API costs
+    logApiUsage({ caller: 'assessment-generator', model: MODEL, input_tokens: inputTokens, output_tokens: outputTokens, service_slug: service.slug }).catch(() => {})
 
   } catch (err) {
     console.error(`Assessment generation failed for ${service.slug}:`, err)

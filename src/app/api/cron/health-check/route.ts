@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { runCollectors } from '@/lib/collectors/runner'
+import { pingAllEndpoints, storeResults } from '@/lib/infra-health'
 
 export const maxDuration = 120
 
@@ -13,7 +14,17 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient()
 
-    // Only check services that have an endpoint URL
+    // 1. Ping infrastructure endpoints and store results
+    let infraResults
+    try {
+      infraResults = await pingAllEndpoints()
+      await storeResults(infraResults)
+    } catch (err) {
+      console.error('Infra health ping failed:', err)
+      infraResults = []
+    }
+
+    // 2. Run operational health checks on services with endpoints
     const { data: services } = await supabase
       .from('services')
       .select('*')
@@ -21,7 +32,7 @@ export async function GET(request: NextRequest) {
       .order('composite_score', { ascending: false })
 
     if (!services) {
-      return NextResponse.json({ ok: true, processed: 0 })
+      return NextResponse.json({ ok: true, processed: 0, infra: infraResults.length })
     }
 
     let processed = 0
@@ -38,6 +49,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       processed,
       total: services.length,
+      infra: infraResults.length,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {

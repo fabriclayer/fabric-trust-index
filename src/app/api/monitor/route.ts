@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { githubHeaders } from '@/lib/collectors/github'
+import { getLatestResults } from '@/lib/infra-health'
+import { checkCronHealth, deriveSystemStatus } from '@/lib/cron-health'
+import { getUsageSummary } from '@/lib/api-usage'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -76,6 +79,9 @@ export async function GET(request: NextRequest) {
   let lastScoredAt: string | null = null
   let lastDiscoveredAt: string | null = null
   let lastIncidentAt: string | null = null
+  let infraEndpoints: Awaited<ReturnType<typeof getLatestResults>> = []
+  let cronHealth: Awaited<ReturnType<typeof checkCronHealth>> = []
+  let costs: Awaited<ReturnType<typeof getUsageSummary>> = { today: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, month: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} } }
 
   try {
     const [
@@ -190,6 +196,16 @@ export async function GET(request: NextRequest) {
     lastScoredAt = (lastComposite.data as Record<string, unknown>[])?.[0]?.recorded_at as string | null ?? null
     lastDiscoveredAt = (lastCreated.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null
     lastIncidentAt = (lastIncidentRow.data as Record<string, unknown>[])?.[0]?.created_at as string | null ?? null
+
+    // Infrastructure health, cron health, and costs (all lightweight)
+    const [infraRes, cronRes, costsRes] = await Promise.all([
+      getLatestResults(supabase).catch(() => []),
+      checkCronHealth(supabase).catch(() => []),
+      getUsageSummary(supabase).catch(() => costs),
+    ])
+    infraEndpoints = infraRes
+    cronHealth = cronRes
+    costs = costsRes
   } catch (err) {
     console.error('Secondary monitor queries failed:', err)
   }
@@ -221,6 +237,14 @@ export async function GET(request: NextRequest) {
         resetsAt: githubRate.rate?.reset ? new Date(githubRate.rate.reset * 1000).toISOString() : null,
       } : { rateRemaining: 0, rateLimit: 5000, resetsAt: null },
       vercel: vercelData,
+      endpoints: infraEndpoints,
+      cronHealth,
+      costs,
+      systemStatus: deriveSystemStatus(
+        infraEndpoints.map(e => ({ status: e.status, endpoint: e.endpoint })),
+        cronHealth,
+        githubRate?.rate?.remaining ?? 5000,
+      ),
       scoring: {
         confidenceHigh: highConfidence.count ?? 0,
         confidenceMed: medConfidence.count ?? 0,
