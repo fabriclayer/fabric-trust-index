@@ -453,6 +453,42 @@ const SCHEDULED_CRONS: CronDef[] = [
 
 function ScheduleTab({ data }: { data: MonitorData }) {
   const now = new Date()
+  const [running, setRunning] = useState<Record<string, 'confirm' | 'running' | null>>({})
+  const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({})
+
+  const handleRun = async (cronId: string, cronName: string) => {
+    const state = running[cronId]
+    if (!state) {
+      // First click — show confirmation
+      setRunning(r => ({ ...r, [cronId]: 'confirm' }))
+      setResults(r => { const n = { ...r }; delete n[cronId]; return n })
+      return
+    }
+    if (state === 'confirm') {
+      // Second click — trigger the cron
+      setRunning(r => ({ ...r, [cronId]: 'running' }))
+      try {
+        const res = await fetch('/api/monitor/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: cronId }),
+        })
+        const body = await res.json()
+        if (res.ok) {
+          setResults(r => ({ ...r, [cronId]: { ok: true, message: body.status === 'triggered' ? `${cronName} triggered — still running` : `${cronName} completed` } }))
+        } else {
+          setResults(r => ({ ...r, [cronId]: { ok: false, message: body.error || `Failed (${res.status})` } }))
+        }
+      } catch {
+        setResults(r => ({ ...r, [cronId]: { ok: false, message: 'Network error' } }))
+      }
+      setRunning(r => ({ ...r, [cronId]: null }))
+    }
+  }
+
+  const cancelConfirm = (cronId: string) => {
+    setRunning(r => ({ ...r, [cronId]: null }))
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -465,6 +501,8 @@ function ScheduleTab({ data }: { data: MonitorData }) {
         const hoursUntil = Math.max(0, Math.floor(msUntil / 3600000))
         const minsUntil = Math.max(0, Math.floor((msUntil % 3600000) / 60000))
         const countdownLabel = hoursUntil > 0 ? `in ${hoursUntil}h ${minsUntil}m` : minsUntil > 0 ? `in ${minsUntil}m` : 'now'
+        const cronState = running[cron.id]
+        const result = results[cron.id]
 
         return (
           <div key={cron.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
@@ -475,6 +513,34 @@ function ScheduleTab({ data }: { data: MonitorData }) {
               <Mono style={{ fontSize: 11, color: C.t3, minWidth: 110 }}>{cron.schedule}</Mono>
               <div style={{ flex: 1 }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {/* Run button / confirmation / spinner */}
+                {cronState === 'running' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{
+                      width: 12, height: 12, border: `2px solid ${C.t4}`, borderTopColor: cron.color,
+                      borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                    }} />
+                    <Mono style={{ fontSize: 10, color: cron.color }}>Running...</Mono>
+                  </div>
+                ) : cronState === 'confirm' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Mono style={{ fontSize: 10, color: C.orange }}>Run {cron.name}?</Mono>
+                    <button onClick={() => handleRun(cron.id, cron.name)} style={{
+                      fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.green, background: C.greenDim,
+                      border: `1px solid ${C.green}22`, borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+                    }}>Yes</button>
+                    <button onClick={() => cancelConfirm(cron.id)} style={{
+                      fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent',
+                      border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+                    }}>No</button>
+                  </div>
+                ) : (
+                  <button onClick={() => handleRun(cron.id, cron.name)} style={{
+                    fontFamily: F.mono, fontSize: 10, fontWeight: 500, color: C.t2, background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 12px', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}>Run</button>
+                )}
                 {lastRun && (
                   <div style={{ textAlign: 'right' }}>
                     <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Last run</Mono>
@@ -499,10 +565,15 @@ function ScheduleTab({ data }: { data: MonitorData }) {
                 {progress.pct}%
               </Mono>
               <Mono style={{ fontSize: 11, color: C.t2 }}>{progress.label}</Mono>
+              {result && (
+                <Mono style={{ fontSize: 10, color: result.ok ? C.green : C.red, marginLeft: 8 }}>{result.message}</Mono>
+              )}
             </div>
           </div>
         )
       })}
+      {/* Spin keyframe — inject once */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }
