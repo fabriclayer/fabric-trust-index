@@ -41,6 +41,7 @@ interface MonitorData {
   cves: { total: number; critical: number; high: number; medium: number; low: number; unpatched: number }
   incidents: { total: number; unresolved: number; critical: number; warning: number; info: number }
   discoveryQueue: DiscoveryItem[]
+  approvedDiscoveries: ApprovedDiscovery[]
   timeline: TimelineEvent[]
   events: ActivityEvent[]
   schedule: {
@@ -58,6 +59,11 @@ interface DiscoveryItem {
   name?: string; slug?: string; description?: string; publisher?: string
   homepage_url?: string; github_repo?: string; stars?: number; votes?: number
   tags?: string[]
+}
+
+interface ApprovedDiscovery {
+  id: string; name: string; slug: string; source: string
+  approved_at: string; score: number | null; status: string; scored: boolean
 }
 
 interface TimelineEvent {
@@ -507,7 +513,8 @@ const ACTIVITY_TYPES: Record<string, { color: string; dimColor: string; label: s
 
 function ActivityTab({ data }: { data: MonitorData }) {
   const [filter, setFilter] = useState('all')
-  const events = data.events ?? []
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000
+  const events = (data.events ?? []).filter(e => new Date(e.timestamp).getTime() >= cutoff)
   const filtered = filter === 'all' ? events : events.filter(e => e.type === filter)
 
   // Group events by date
@@ -526,16 +533,6 @@ function ActivityTab({ data }: { data: MonitorData }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Summary row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: C.border, borderRadius: 16, overflow: 'hidden' }}>
-        {Object.entries(ACTIVITY_TYPES).map(([type, cfg]) => (
-          <div key={type} style={{ background: C.surface, padding: '16px 20px', textAlign: 'center' }}>
-            <div style={{ fontFamily: F.sans, fontSize: 24, fontWeight: 700, color: cfg.color, letterSpacing: -1 }}>{(counts[type] ?? 0).toLocaleString()}</div>
-            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{cfg.label}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
@@ -917,11 +914,13 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
 
 // ─── DISCOVERY TAB ────────────────────────────────────────────────
 function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => void; onRefresh: () => void }) {
+  const [subTab, setSubTab] = useState<'pending' | 'approved'>('pending')
   const [filter, setFilter] = useState('all')
   const [acting, setActing] = useState<string | null>(null)
 
   const items = data.discoveryQueue
   const filtered = filter === 'all' ? items : items.filter(i => i.source === filter)
+  const approved = data.approvedDiscoveries ?? []
 
   const handleAction = async (id: string, action: 'approve' | 'dismiss') => {
     setActing(id)
@@ -929,54 +928,106 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
     setActing(null)
   }
 
+  const statusColor = (s: string) => s === 'trusted' ? C.green : s === 'caution' ? C.orange : s === 'blocked' ? C.red : C.t3
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Manual Entry */}
-      <ManualEntryForm onAdded={() => onRefresh()} />
-
-      {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
-        {['all', 'producthunt', 'github-trending', 'hackernews', 'yc-launches'].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            fontFamily: F.mono, fontSize: 10, color: filter === f ? C.pink : C.t3, background: filter === f ? 'rgba(254,131,224,0.08)' : 'transparent',
-            border: `1px solid ${filter === f ? C.pink + '33' : C.border}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
-          }}>{f === 'all' ? 'All' : srcLabel(f)}</button>
+      {/* Sub-tab toggle */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}` }}>
+        {([['pending', `Pending (${items.length})`], ['approved', `Approved (${approved.length})`]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setSubTab(id)} style={{
+            fontFamily: F.mono, fontSize: 11, color: subTab === id ? C.pink : C.t3,
+            background: 'none', border: 'none', cursor: 'pointer', padding: '10px 18px',
+            borderBottom: subTab === id ? `2px solid ${C.pink}` : '2px solid transparent',
+            transition: 'all 0.15s', letterSpacing: 0.3,
+          }}>{label}</button>
         ))}
-        <div style={{ marginLeft: 'auto' }}><Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} /></div>
       </div>
 
-      {/* Review table */}
-      <Card pad={false}>
-        <div style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
-          {['', 'Service', 'Description', 'Source', 'Stars', 'Actions'].map(h => (
-            <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
-          ))}
-        </div>
-        {filtered.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No pending discoveries{filter !== 'all' ? ` from ${srcLabel(filter)}` : ''}</Mono></div>
-        ) : filtered.map(item => (
-          <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', opacity: acting === item.id ? 0.5 : 1 }}>
-            <span style={{ fontSize: 14 }}>{srcIcon(item.source)}</span>
-            <div>
-              {item.homepage_url ? (
-                <a href={item.homepage_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>{item.name || item.slug}</a>
-              ) : (
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name || item.slug}</span>
-              )}
-              <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3 }}>{item.publisher || '—'}</div>
-            </div>
-            <span style={{ fontSize: 12, color: C.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{item.description || '—'}</span>
-            <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
-            <Mono style={{ fontSize: 11, color: item.stars ? C.text : C.t4 }}>{item.stars ? item.stars.toLocaleString() : '—'}</Mono>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => handleAction(item.id, 'approve')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim, border: `1px solid ${C.green}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Approve</button>
-              <button onClick={() => handleAction(item.id, 'dismiss')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Dismiss</button>
-              {item.github_repo && <a href={`https://github.com/${item.github_repo}`} target="_blank" rel="noreferrer" style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', textDecoration: 'none' }}>GH</a>}
-            </div>
+      {subTab === 'pending' && (
+        <>
+          {/* Manual Entry */}
+          <ManualEntryForm onAdded={() => onRefresh()} />
+
+          {/* Filter bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
+            {['all', 'producthunt', 'github-trending', 'hackernews', 'yc-launches'].map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{
+                fontFamily: F.mono, fontSize: 10, color: filter === f ? C.pink : C.t3, background: filter === f ? 'rgba(254,131,224,0.08)' : 'transparent',
+                border: `1px solid ${filter === f ? C.pink + '33' : C.border}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
+              }}>{f === 'all' ? 'All' : srcLabel(f)}</button>
+            ))}
+            <div style={{ marginLeft: 'auto' }}><Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} /></div>
           </div>
-        ))}
-      </Card>
+
+          {/* Pending review table */}
+          <Card pad={false}>
+            <div style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+              {['', 'Service', 'Description', 'Source', 'Stars', 'Actions'].map(h => (
+                <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
+              ))}
+            </div>
+            {filtered.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No pending discoveries{filter !== 'all' ? ` from ${srcLabel(filter)}` : ''}</Mono></div>
+            ) : filtered.map(item => (
+              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', opacity: acting === item.id ? 0.5 : 1 }}>
+                <span style={{ fontSize: 14 }}>{srcIcon(item.source)}</span>
+                <div>
+                  {item.homepage_url ? (
+                    <a href={item.homepage_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>{item.name || item.slug}</a>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name || item.slug}</span>
+                  )}
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3 }}>{item.publisher || '—'}</div>
+                </div>
+                <span style={{ fontSize: 12, color: C.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{item.description || '—'}</span>
+                <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
+                <Mono style={{ fontSize: 11, color: item.stars ? C.text : C.t4 }}>{item.stars ? item.stars.toLocaleString() : '—'}</Mono>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => handleAction(item.id, 'approve')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim, border: `1px solid ${C.green}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Approve</button>
+                  <button onClick={() => handleAction(item.id, 'dismiss')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Dismiss</button>
+                  {item.github_repo && <a href={`https://github.com/${item.github_repo}`} target="_blank" rel="noreferrer" style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', textDecoration: 'none' }}>GH</a>}
+                </div>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+
+      {subTab === 'approved' && (
+        <Card pad={false}>
+          <div style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px 70px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+            {['Service', 'Source', 'Approved', 'Score', 'Status', 'Scored'].map(h => (
+              <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
+            ))}
+          </div>
+          {approved.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No approved discoveries yet</Mono></div>
+          ) : approved.map(item => (
+            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px 70px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
+              <a href={`https://trust.fabriclayer.ai/${item.slug}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</a>
+              <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
+              <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(item.approved_at)}</Mono>
+              <Mono style={{ fontSize: 13, fontWeight: 600, color: item.score != null ? statusColor(item.status) : C.t4 }}>
+                {item.score != null ? item.score.toFixed(2) : '—'}
+              </Mono>
+              {item.status !== 'pending' ? (
+                <Badge text={item.status} color={statusColor(item.status)} bg={item.status === 'trusted' ? C.greenDim : item.status === 'caution' ? C.orangeDim : item.status === 'blocked' ? C.redDim : C.surface} />
+              ) : (
+                <Badge text="pending" color={C.t3} bg={C.surface} />
+              )}
+              <span style={{ fontSize: 14, textAlign: 'center' }}>
+                {item.scored ? (
+                  <span style={{ color: C.green }}>&#10003;</span>
+                ) : (
+                  <span style={{ color: C.orange }}>&#9679;</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </Card>
+      )}
     </div>
   )
 }
@@ -1460,7 +1511,13 @@ function ReviewTab() {
     return d.toLocaleString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, day: 'numeric', month: 'short', timeZone: 'Australia/Sydney' }) + ' AEST'
   }
 
-  const costPerMonth = 0.15 * 2 * 30
+  const now2 = new Date()
+  const monthReviews = reviews.filter(r => {
+    const d = new Date(r.created_at)
+    return d.getMonth() === now2.getMonth() && d.getFullYear() === now2.getFullYear() && r.status === 'completed'
+  })
+  const totalCostMonth = monthReviews.reduce((s, r) => s + (r.token_usage?.cost_estimate ?? 0), 0)
+  const avgCostReview = monthReviews.length > 0 ? totalCostMonth / monthReviews.length : 0
 
   if (loading) {
     return (
@@ -1519,14 +1576,14 @@ function ReviewTab() {
         </div>
       </div>
 
-      {/* Cost estimate */}
+      {/* Cost stats — scoped to current calendar month */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: C.border, borderRadius: 16, overflow: 'hidden' }}>
-        <StatBox label="Reviews Run" value={reviews.filter(r => r.status === 'completed').length} color={C.purple} />
-        <StatBox label="Avg Duration" value={reviews.filter(r => r.duration_ms).length > 0
-          ? `${Math.round(reviews.filter(r => r.duration_ms).reduce((s, r) => s + (r.duration_ms ?? 0), 0) / reviews.filter(r => r.duration_ms).length / 1000)}s`
+        <StatBox label="Reviews This Month" value={monthReviews.length} color={C.purple} />
+        <StatBox label="Avg Duration" value={monthReviews.filter(r => r.duration_ms).length > 0
+          ? `${Math.round(monthReviews.filter(r => r.duration_ms).reduce((s, r) => s + (r.duration_ms ?? 0), 0) / monthReviews.filter(r => r.duration_ms).length / 1000)}s`
           : '—'} color={C.text} />
-        <StatBox label="Est. Cost/Review" value="~$0.15" color={C.text} sub="Opus 4.6" />
-        <StatBox label="Est. Cost/Month" value={`~$${costPerMonth.toFixed(0)}`} color={C.text} sub="2x daily" />
+        <StatBox label="Avg Cost/Review" value={monthReviews.length > 0 ? `$${avgCostReview.toFixed(3)}` : '—'} color={C.text} sub="Opus 4.6" />
+        <StatBox label="Cost This Month" value={`$${totalCostMonth.toFixed(2)}`} color={totalCostMonth > 15 ? C.orange : C.text} />
       </div>
 
       {/* Latest review */}

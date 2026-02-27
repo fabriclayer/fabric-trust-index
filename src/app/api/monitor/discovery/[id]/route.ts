@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { addDiscoveredService, classifyCategory, deriveCapabilities } from '@/lib/discovery/pipeline'
+import { runAllCollectors } from '@/lib/collectors/runner'
+
+export const maxDuration = 300
 
 export async function POST(
   request: NextRequest,
@@ -56,7 +59,18 @@ export async function POST(
         await supabase.from('services').update({ logo_url: r.logo_url }).eq('slug', r.slug)
       }
 
-      return NextResponse.json({ ok: true, action: 'approved', slug: r.slug })
+      // Score immediately after adding
+      let scoring = { success: [] as string[], failed: [] as string[] }
+      const { data: service } = await supabase.from('services').select('*').eq('slug', r.slug).single()
+      if (service) {
+        try {
+          scoring = await runAllCollectors(service)
+        } catch (err) {
+          console.error(`Scoring failed for ${r.slug}:`, err)
+        }
+      }
+
+      return NextResponse.json({ ok: true, action: 'approved', slug: r.slug, scoring })
     } else {
       return NextResponse.json({ error: `Failed to add service: ${result}` }, { status: 500 })
     }

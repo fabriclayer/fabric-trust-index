@@ -95,11 +95,13 @@ export async function GET(request: NextRequest) {
   let infraEndpoints: Awaited<ReturnType<typeof getLatestResults>> = []
   let cronHealth: Awaited<ReturnType<typeof checkCronHealth>> = []
   let costs: Awaited<ReturnType<typeof getUsageSummary>> = { today: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, month: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, daily7: [] }
+  let approvedDiscoveries: { id: string; name: string; slug: string; source: string; approved_at: string; score: number | null; status: string; scored: boolean }[] = []
 
   try {
     const [
       servicesWithModifiers,
       discoveryPending,
+      discoveryCompleted,
       ghRate,
       vercelRaw,
       recentDiscovered,
@@ -112,6 +114,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
       supabase.from('discovery_queue').select('id, source, created_at, result, status').eq('status', 'pending').order('created_at', { ascending: false }).limit(100),
+      supabase.from('discovery_queue').select('id, source, result, processed_at').eq('status', 'completed').order('processed_at', { ascending: false }).limit(50),
       fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
       // Vercel analytics (only if token configured)
       (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID
@@ -149,6 +152,29 @@ export async function GET(request: NextRequest) {
       created_at: d.created_at,
       ...(d.result as Record<string, unknown> ?? {}),
     }))
+
+    // Approved discoveries — join with services to get score/status
+    const completedItems = discoveryCompleted.data ?? []
+    if (completedItems.length > 0) {
+      const slugs = completedItems.map((d: Record<string, unknown>) => (d.result as Record<string, unknown>)?.slug).filter(Boolean) as string[]
+      const { data: scoredServices } = await supabase.from('services').select('slug, composite_score, status').in('slug', slugs)
+      const serviceMap = new Map((scoredServices ?? []).map(s => [s.slug, s]))
+      approvedDiscoveries = completedItems.map((d: Record<string, unknown>) => {
+        const r = (d.result as Record<string, unknown>) ?? {}
+        const slug = r.slug as string
+        const svc = serviceMap.get(slug)
+        return {
+          id: d.id as string,
+          name: (r.name as string) ?? slug,
+          slug,
+          source: typeof d.source === 'string' ? (d.source as string).replace('ai-news:', '') : (d.source as string),
+          approved_at: (d.processed_at as string) ?? '',
+          score: svc?.composite_score ?? null,
+          status: svc?.status ?? 'pending',
+          scored: svc?.composite_score != null && svc.composite_score > 0,
+        }
+      })
+    }
 
     githubRate = ghRate
 
@@ -295,6 +321,7 @@ export async function GET(request: NextRequest) {
       info: unresolvedInfo.count ?? 0,
     },
     discoveryQueue,
+    approvedDiscoveries,
     timeline,
     events,
     schedule: {
