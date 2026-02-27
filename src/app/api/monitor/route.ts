@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
       ),
       // Lightweight event queries (no JOINs on signal_history)
       supabase.from('services').select('name, slug, status, composite_score, discovered_from, created_at').order('created_at', { ascending: false }).limit(50),
-      supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id').order('created_at', { ascending: false }).limit(50),
+      supabase.from('incidents').select('type, severity, title, score_at_time, created_at, service_id, service:services(name, slug)').order('created_at', { ascending: false }).limit(50),
       supabase.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1),
       supabase.from('services').select('created_at').order('created_at', { ascending: false }).limit(1),
       supabase.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1),
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       } catch { /* ignore parse errors */ }
     }
 
-    // Timeline (no expensive JOINs)
+    // Timeline
     const discoveredEvents = (recentDiscovered.data ?? []).map((r: Record<string, unknown>) => ({
       type: 'discovered' as const,
       name: r.name as string,
@@ -204,14 +204,17 @@ export async function GET(request: NextRequest) {
       detail: `${r.discovered_from ?? 'manual'} · ${r.status}${r.composite_score ? ` · ${(r.composite_score as number).toFixed(2)}` : ''}`,
       timestamp: r.created_at as string,
     }))
-    const incidentEvents = (recentIncidents.data ?? []).map((r: Record<string, unknown>) => ({
-      type: 'incident' as const,
-      name: '',
-      slug: '',
-      detail: r.title as string,
-      severity: r.severity as string,
-      timestamp: r.created_at as string,
-    }))
+    const incidentEvents = (recentIncidents.data ?? []).map((r: Record<string, unknown>) => {
+      const svc = r.service as Record<string, unknown> | null
+      return {
+        type: 'incident' as const,
+        name: (svc?.name as string) ?? '',
+        slug: (svc?.slug as string) ?? '',
+        detail: r.title as string,
+        severity: r.severity as string,
+        timestamp: r.created_at as string,
+      }
+    })
     timeline = [...discoveredEvents, ...incidentEvents]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 30)
