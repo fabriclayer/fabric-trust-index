@@ -43,6 +43,7 @@ interface MonitorData {
   incidents: { total: number; unresolved: number; critical: number; warning: number; info: number }
   discoveryQueue: DiscoveryItem[]
   approvedDiscoveries: ApprovedDiscovery[]
+  unscoredSlugs: string[]
   timeline: TimelineEvent[]
   events: ActivityEvent[]
   schedule: {
@@ -112,13 +113,13 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 
 const TABS = [
   { id: 'health', label: 'System Health' },
-  { id: 'costs', label: 'Costs' },
   { id: 'activity', label: 'Activity' },
   { id: 'pipeline', label: 'Schedule' },
   { id: 'discovery', label: 'Discovery' },
   { id: 'review', label: 'Dev Review' },
   { id: 'marketing', label: 'Marketing' },
   { id: 'overrides', label: 'Overrides & CVEs' },
+  { id: 'costs', label: 'Costs' },
   { id: 'crons', label: 'All Crons' },
 ]
 
@@ -820,15 +821,52 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
   const [subTab, setSubTab] = useState<'pending' | 'approved'>('pending')
   const [filter, setFilter] = useState('all')
   const [acting, setActing] = useState<string | null>(null)
+  const [scoring, setScoring] = useState(false)
+  const [scoreResult, setScoreResult] = useState<{ scored: number; failed: number } | null>(null)
 
   const items = data.discoveryQueue
   const filtered = filter === 'all' ? items : items.filter(i => i.source === filter)
   const approved = data.approvedDiscoveries ?? []
+  const allUnscoredSlugs = data.unscoredSlugs ?? []
+  const unscoredCount = allUnscoredSlugs.length
 
   const handleAction = async (id: string, action: 'approve' | 'dismiss') => {
     setActing(id)
     await onAction(id, action)
     setActing(null)
+  }
+
+  const handleBatchScore = async () => {
+    if (allUnscoredSlugs.length === 0) return
+    setScoring(true)
+    setScoreResult(null)
+    try {
+      // collect-sample endpoint handles max 50 at a time
+      let scored = 0
+      let failed = 0
+      for (let i = 0; i < allUnscoredSlugs.length; i += 50) {
+        const batch = allUnscoredSlugs.slice(i, i + 50)
+        const authCookie = document.cookie.split('fabric_monitor_auth=')[1]?.split(';')[0] ?? ''
+        const res = await fetch('/api/cron/collect-sample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authCookie}` },
+          body: JSON.stringify({ slugs: batch }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          scored += (data.results ?? []).filter((r: { composite_score: number }) => r.composite_score > 0).length
+          failed += (data.results ?? []).filter((r: { composite_score: number }) => r.composite_score === 0).length
+        } else {
+          failed += batch.length
+        }
+      }
+      setScoreResult({ scored, failed })
+      onRefresh()
+    } catch {
+      setScoreResult({ scored: 0, failed: allUnscoredSlugs.length })
+    } finally {
+      setScoring(false)
+    }
   }
 
   const statusColor = (s: string) => s === 'trusted' ? C.green : s === 'caution' ? C.orange : s === 'blocked' ? C.red : C.t3
@@ -899,6 +937,22 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
       )}
 
       {subTab === 'approved' && (
+        <>
+        {unscoredCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={handleBatchScore} disabled={scoring} style={{
+              fontFamily: F.mono, fontSize: 11, color: scoring ? C.t3 : C.blue,
+              background: scoring ? C.surface : 'rgba(6,140,255,0.08)',
+              border: `1px solid ${scoring ? C.border : C.blue + '33'}`, borderRadius: 8,
+              padding: '6px 16px', cursor: scoring ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+            }}>{scoring ? 'Scoring...' : `Score ${unscoredCount} Unscored Services`}</button>
+            {scoreResult && (
+              <Mono style={{ fontSize: 11, color: scoreResult.failed > 0 ? C.orange : C.green }}>
+                {scoreResult.scored} scored{scoreResult.failed > 0 ? `, ${scoreResult.failed} failed` : ''}
+              </Mono>
+            )}
+          </div>
+        )}
         <Card pad={false}>
           <div style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px 70px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
             {['Service', 'Source', 'Approved', 'Score', 'Status', 'Scored'].map(h => (
@@ -930,6 +984,7 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
             </div>
           ))}
         </Card>
+        </>
       )}
     </div>
   )

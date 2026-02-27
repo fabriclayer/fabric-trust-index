@@ -180,16 +180,15 @@ export async function runDiscoveryPipeline(): Promise<{
   let added = 0
   let skipped = 0
 
-  // Process npm candidates
+  // Process npm candidates — queue for manual review
   for (const pkg of npmCandidates) {
     discovered++
     const slug = toSlug(pkg.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
-    // Resolve GitHub repo from npm registry metadata
     const githubRepo = await resolveGitHubFromNpm(pkg.name)
 
-    await addDiscoveredService({
+    const result = await queueForReview({
       name: pkg.name,
       slug,
       publisher: pkg.publisher,
@@ -202,17 +201,17 @@ export async function runDiscoveryPipeline(): Promise<{
       pricing: { model: 'open-source' },
       tags: pkg.keywords,
     })
-    existingSlugs.add(slug)
-    added++
+    if (result === 'queued') added++
+    else skipped++
   }
 
-  // Process PyPI candidates
+  // Process PyPI candidates — queue for manual review
   for (const pkg of pypiCandidates) {
     discovered++
     const slug = toSlug(pkg.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
-    await addDiscoveredService({
+    const result = await queueForReview({
       name: pkg.name,
       slug,
       publisher: pkg.publisher,
@@ -226,17 +225,17 @@ export async function runDiscoveryPipeline(): Promise<{
       tags: pkg.keywords,
       homepage_url: pkg.projectUrl !== `https://pypi.org/project/${pkg.name}` ? pkg.projectUrl : undefined,
     })
-    existingSlugs.add(slug)
-    added++
+    if (result === 'queued') added++
+    else skipped++
   }
 
-  // Process GitHub candidates
+  // Process GitHub candidates — queue for manual review
   for (const repo of githubCandidates) {
     discovered++
     const slug = toSlug(repo.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
-    await addDiscoveredService({
+    const result = await queueForReview({
       name: repo.name,
       slug,
       publisher: repo.owner,
@@ -249,8 +248,8 @@ export async function runDiscoveryPipeline(): Promise<{
       language: repo.language ?? undefined,
       homepage_url: repo.homepage ?? undefined,
     })
-    existingSlugs.add(slug)
-    added++
+    if (result === 'queued') added++
+    else skipped++
   }
 
   return { discovered, added, skipped }
@@ -393,16 +392,6 @@ export async function addDiscoveredService(params: {
     return `insert: ${insertError.message}`
   }
 
-  // Log the discovery
-  await supabase.from('discovery_queue').insert({
-    source: params.source,
-    query: params.name,
-    package_name: params.name,
-    status: 'completed',
-    result: { slug: params.slug, category: params.category },
-    processed_at: new Date().toISOString(),
-  })
-
   // Post-insert enrichment: resolve missing github_repo, npm/pypi packages
   if (!params.github_repo || !params.npm_package || !params.pypi_package) {
     try {
@@ -426,4 +415,69 @@ export async function addDiscoveredService(params: {
   }
 
   return true
+}
+
+/**
+ * Queue a discovered service for manual review instead of auto-inserting.
+ * Inserts into discovery_queue with status='pending'. Dedupes against
+ * existing pending/completed entries by package_name.
+ */
+export async function queueForReview(params: {
+  name: string
+  slug: string
+  publisher: string
+  description: string
+  category: string
+  npm_package?: string
+  pypi_package?: string
+  github_repo?: string
+  github_org?: string
+  source: string
+  capabilities?: string[]
+  pricing?: { model: string; tiers?: { label: string; value: string }[] } | null
+  tags?: string[]
+  language?: string
+  homepage_url?: string
+  logo_url?: string
+}): Promise<'queued' | 'duplicate' | string> {
+  const supabase = createServerClient()
+
+  // Check for existing queue entry with same slug (pending or completed)
+  const { data: existing } = await supabase
+    .from('discovery_queue')
+    .select('id')
+    .eq('package_name', params.slug)
+    .in('status', ['pending', 'completed'])
+    .limit(1)
+
+  if (existing && existing.length > 0) {
+    return 'duplicate'
+  }
+
+  const { error } = await supabase.from('discovery_queue').insert({
+    source: params.source,
+    query: params.name,
+    package_name: params.slug,
+    status: 'pending',
+    result: {
+      name: params.name,
+      slug: params.slug,
+      description: params.description,
+      publisher: params.publisher,
+      homepage_url: params.homepage_url,
+      github_org: params.github_org,
+      github_repo: params.github_repo,
+      logo_url: params.logo_url,
+      category: params.category,
+      tags: params.tags ?? [],
+      npm_package: params.npm_package,
+      pypi_package: params.pypi_package,
+      language: params.language,
+      capabilities: params.capabilities,
+      pricing: params.pricing,
+    },
+  })
+
+  if (error) return `queue insert: ${error.message}`
+  return 'queued'
 }

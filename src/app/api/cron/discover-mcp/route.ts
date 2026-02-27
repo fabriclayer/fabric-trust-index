@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { discoverSmitheryServers, type SmitheryDebug } from '@/lib/discovery/smithery'
 import { discoverMcpSoServers } from '@/lib/discovery/mcpso'
 import {
-  addDiscoveredService,
+  queueForReview,
   classifyCategory,
   deriveCapabilities,
   toSlug,
@@ -81,7 +81,7 @@ async function processSource(
 
     const category = classifyCategory(classifyWords, slug)
 
-    const result = await addDiscoveredService({
+    const result = await queueForReview({
       name: c.name,
       slug,
       publisher: c.publisher,
@@ -94,13 +94,13 @@ async function processSource(
       homepage_url: c.homepage,
     })
 
-    if (result === true) {
+    if (result === 'queued') {
       added++
       existingSlugs.add(slug)
       seenGithubRepos.add(c.githubRepo)
     } else {
       skipped++
-      if (errors.length < 10) errors.push(`${sourceName}/${c.githubRepo}: ${result}`)
+      if (result !== 'duplicate' && errors.length < 10) errors.push(`${sourceName}/${c.githubRepo}: ${result}`)
     }
   }
 

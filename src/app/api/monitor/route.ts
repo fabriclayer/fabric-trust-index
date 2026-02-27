@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
   let cronHealth: Awaited<ReturnType<typeof checkCronHealth>> = []
   let costs: Awaited<ReturnType<typeof getUsageSummary>> = { today: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, month: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, daily7: [] }
   let approvedDiscoveries: { id: string; name: string; slug: string; source: string; approved_at: string; score: number | null; status: string; scored: boolean }[] = []
+  let unscoredSlugs: string[] = []
 
   try {
     const [
@@ -134,6 +135,10 @@ export async function GET(request: NextRequest) {
       supabase.from('services').select('name, slug, composite_score, status, updated_at').neq('status', 'pending').order('updated_at', { ascending: false }).limit(50),
       supabase.from('cve_records').select('cve_id, severity, is_patched, package_name, created_at').order('created_at', { ascending: false }).limit(30),
     ])
+
+    // Fetch unscored services (composite_score = 0, non-pending status check not needed — we want all 0-score)
+    const { data: unscoredData } = await supabase.from('services').select('slug').eq('composite_score', 0).limit(500)
+    unscoredSlugs = (unscoredData ?? []).map(s => s.slug)
 
     // Override counts
     for (const svc of servicesWithModifiers.data ?? []) {
@@ -322,6 +327,7 @@ export async function GET(request: NextRequest) {
     },
     discoveryQueue,
     approvedDiscoveries,
+    unscoredSlugs,
     timeline,
     events,
     schedule: {
