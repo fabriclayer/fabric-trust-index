@@ -29,7 +29,7 @@ interface MonitorData {
     vercel: { functionsInvoked: number; errors: number; avgLatency: number; p99Latency: number } | null
     endpoints?: EndpointHealth[]
     cronHealth?: CronHealthItem[]
-    costs?: { today: UsageBucket; month: UsageBucket }
+    costs?: { today: UsageBucket; month: UsageBucket; daily7?: DailySpend[] }
     systemStatus?: 'nominal' | 'degraded' | 'outage'
     scoring: {
       confidenceHigh: number; confidenceMed: number; confidenceLow: number; confidenceMinimal: number
@@ -84,6 +84,10 @@ interface CronHealthItem {
 interface UsageBucket {
   calls: number; input_tokens: number; output_tokens: number; cost_usd: number
   by_caller: Record<string, { calls: number; cost_usd: number }>
+}
+
+interface DailySpend {
+  date: string; cost_usd: number; calls: number
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────
@@ -269,62 +273,109 @@ function HealthTab({ data }: { data: MonitorData }) {
       )}
 
       {/* API Costs */}
-      {costs && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          <Card title="API Costs — Today">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>Total cost</Mono>
-                <Mono style={{ fontSize: 14, fontWeight: 700, color: costs.today.cost_usd > 5 ? C.orange : C.text }}>${costs.today.cost_usd.toFixed(4)}</Mono>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>API calls</Mono>
-                <Mono style={{ fontSize: 12, color: C.text }}>{costs.today.calls.toLocaleString()}</Mono>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>Tokens</Mono>
-                <Mono style={{ fontSize: 11, color: C.t3 }}>{costs.today.input_tokens.toLocaleString()} in · {costs.today.output_tokens.toLocaleString()} out</Mono>
-              </div>
-              {Object.entries(costs.today.by_caller).length > 0 && (
-                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
-                  {Object.entries(costs.today.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
-                    <div key={caller} style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>{caller}</Mono>
-                      <Mono style={{ fontSize: 11, color: C.t2 }}>{stats.calls} calls · ${stats.cost_usd.toFixed(4)}</Mono>
+      {costs && (() => {
+        const fmtTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : n.toString()
+        const avgCostToday = costs.today.calls > 0 ? costs.today.cost_usd / costs.today.calls : 0
+        const dayOfMonth = new Date().getDate()
+        const monthlyRunRate = dayOfMonth > 0 ? (costs.month.cost_usd / dayOfMonth) * 30 : 0
+        const daily7 = costs.daily7 ?? []
+        const maxDailySpend = Math.max(...daily7.map(d => d.cost_usd), 0.001)
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <Card title="API Costs — Today">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Mono style={{ fontSize: 12, color: C.t2 }}>Total</Mono>
+                    <Mono style={{ fontSize: 16, fontWeight: 700, color: costs.today.cost_usd > 5 ? C.orange : C.text }}>${costs.today.cost_usd.toFixed(2)}</Mono>
+                  </div>
+                  {/* Breakdown by caller */}
+                  {Object.entries(costs.today.by_caller).length > 0 && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2 }}>
+                      {Object.entries(costs.today.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
+                        <div key={caller} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                          <Mono style={{ fontSize: 11, color: C.t2, flex: 1 }}>{caller.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}</Mono>
+                          <Mono style={{ fontSize: 11, color: C.t3, width: 70, textAlign: 'right' }}>{stats.calls.toLocaleString()} {stats.calls === 1 ? 'call' : 'calls'}</Mono>
+                          <Mono style={{ fontSize: 11, color: C.text, width: 60, textAlign: 'right' }}>${stats.cost_usd.toFixed(2)}</Mono>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Card>
-          <Card title="API Costs — This Month">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>Total cost</Mono>
-                <Mono style={{ fontSize: 14, fontWeight: 700, color: costs.month.cost_usd > 50 ? C.red : costs.month.cost_usd > 20 ? C.orange : C.text }}>${costs.month.cost_usd.toFixed(4)}</Mono>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>API calls</Mono>
-                <Mono style={{ fontSize: 12, color: C.text }}>{costs.month.calls.toLocaleString()}</Mono>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Mono style={{ fontSize: 12, color: C.t2 }}>Tokens</Mono>
-                <Mono style={{ fontSize: 11, color: C.t3 }}>{costs.month.input_tokens.toLocaleString()} in · {costs.month.output_tokens.toLocaleString()} out</Mono>
-              </div>
-              {Object.entries(costs.month.by_caller).length > 0 && (
-                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
-                  {Object.entries(costs.month.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
-                    <div key={caller} style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>{caller}</Mono>
-                      <Mono style={{ fontSize: 11, color: C.t2 }}>{stats.calls} calls · ${stats.cost_usd.toFixed(4)}</Mono>
+                  )}
+                  {/* Tokens + avg cost */}
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>Tokens</Mono>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>{fmtTokens(costs.today.input_tokens)} in · {fmtTokens(costs.today.output_tokens)} out</Mono>
                     </div>
-                  ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>Avg cost/call</Mono>
+                      <Mono style={{ fontSize: 11, color: C.t2 }}>${avgCostToday.toFixed(3)}</Mono>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </Card>
+              <Card title="API Costs — This Month">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Mono style={{ fontSize: 12, color: C.t2 }}>Total</Mono>
+                    <Mono style={{ fontSize: 16, fontWeight: 700, color: costs.month.cost_usd > 50 ? C.red : costs.month.cost_usd > 20 ? C.orange : C.text }}>${costs.month.cost_usd.toFixed(2)}</Mono>
+                  </div>
+                  {/* Breakdown by caller */}
+                  {Object.entries(costs.month.by_caller).length > 0 && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2 }}>
+                      {Object.entries(costs.month.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
+                        <div key={caller} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                          <Mono style={{ fontSize: 11, color: C.t2, flex: 1 }}>{caller.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}</Mono>
+                          <Mono style={{ fontSize: 11, color: C.t3, width: 80, textAlign: 'right' }}>{stats.calls.toLocaleString()} calls</Mono>
+                          <Mono style={{ fontSize: 11, color: C.text, width: 60, textAlign: 'right' }}>${stats.cost_usd.toFixed(2)}</Mono>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Tokens + run rate */}
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>Tokens</Mono>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>{fmtTokens(costs.month.input_tokens)} in · {fmtTokens(costs.month.output_tokens)} out</Mono>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Mono style={{ fontSize: 11, color: C.t3 }}>Monthly run rate</Mono>
+                      <Mono style={{ fontSize: 11, color: monthlyRunRate > 50 ? C.orange : C.t2 }}>${monthlyRunRate.toFixed(2)}</Mono>
+                    </div>
+                  </div>
+                </div>
+              </Card>
             </div>
-          </Card>
-        </div>
-      )}
+            {/* 7-day daily spend sparkline */}
+            {daily7.length >= 2 && daily7.some(d => d.cost_usd > 0) && (
+              <Card title="Daily Spend — Last 7 Days" right={
+                <Mono style={{ fontSize: 10, color: C.t3 }}>{daily7.reduce((s, d) => s + d.calls, 0)} calls total</Mono>
+              }>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 60 }}>
+                  {daily7.map(day => {
+                    const pct = Math.max(2, (day.cost_usd / maxDailySpend) * 100)
+                    const isToday = day.date === new Date().toISOString().slice(0, 10)
+                    return (
+                      <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <Mono style={{ fontSize: 9, color: C.t3 }}>{day.cost_usd > 0 ? `$${day.cost_usd.toFixed(2)}` : ''}</Mono>
+                        <div style={{
+                          width: '100%', maxWidth: 40, height: `${pct}%`, minHeight: 2,
+                          background: isToday ? C.blue : day.cost_usd > 0 ? 'rgba(6,140,255,0.4)' : 'rgba(255,255,255,0.06)',
+                          borderRadius: 3, transition: 'height 0.5s ease',
+                        }} />
+                        <Mono style={{ fontSize: 9, color: isToday ? C.text : C.t4 }}>
+                          {new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short' })}
+                        </Mono>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Infrastructure — row 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

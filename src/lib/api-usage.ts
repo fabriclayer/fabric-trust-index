@@ -38,9 +38,16 @@ interface UsageBucket {
   by_caller: Record<string, { calls: number; cost_usd: number }>
 }
 
+export interface DailySpend {
+  date: string // YYYY-MM-DD
+  cost_usd: number
+  calls: number
+}
+
 export interface UsageSummary {
   today: UsageBucket
   month: UsageBucket
+  daily7: DailySpend[]
 }
 
 function emptyBucket(): UsageBucket {
@@ -67,14 +74,34 @@ export async function getUsageSummary(supabase: ReturnType<typeof createServerCl
   const now = new Date()
   const todayStart = now.toISOString().slice(0, 10) + 'T00:00:00Z'
   const monthStart = now.toISOString().slice(0, 7) + '-01T00:00:00Z'
+  const weekStart = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10) + 'T00:00:00Z'
 
-  const [todayRes, monthRes] = await Promise.all([
+  const [todayRes, monthRes, weekRes] = await Promise.all([
     supabase.from('api_usage_log').select('*').gte('created_at', todayStart),
     supabase.from('api_usage_log').select('*').gte('created_at', monthStart),
+    supabase.from('api_usage_log').select('created_at, cost_usd, caller').gte('created_at', weekStart),
   ])
+
+  // Build daily breakdown for last 7 days
+  const daily7: DailySpend[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000)
+    const dateStr = d.toISOString().slice(0, 10)
+    const dayRows = (weekRes.data ?? []).filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (r: any) => (r.created_at as string).slice(0, 10) === dateStr
+    )
+    daily7.push({
+      date: dateStr,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      cost_usd: dayRows.reduce((s: number, r: any) => s + parseFloat(r.cost_usd ?? '0'), 0),
+      calls: dayRows.length,
+    })
+  }
 
   return {
     today: aggregate(todayRes.data ?? []),
     month: aggregate(monthRes.data ?? []),
+    daily7,
   }
 }

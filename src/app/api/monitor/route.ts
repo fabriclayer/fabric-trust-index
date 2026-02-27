@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
   let lastIncidentAt: string | null = null
   let infraEndpoints: Awaited<ReturnType<typeof getLatestResults>> = []
   let cronHealth: Awaited<ReturnType<typeof checkCronHealth>> = []
-  let costs: Awaited<ReturnType<typeof getUsageSummary>> = { today: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, month: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} } }
+  let costs: Awaited<ReturnType<typeof getUsageSummary>> = { today: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, month: { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, by_caller: {} }, daily7: [] }
 
   try {
     const [
