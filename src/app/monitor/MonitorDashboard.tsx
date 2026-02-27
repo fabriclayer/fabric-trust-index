@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import MarketingTab from './MarketingTab'
+import CostsTab from './CostsTab'
 
 // ─── FABRIC DESIGN TOKENS ──────────────────────────────────────────
 const F = {
@@ -111,6 +112,7 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 
 const TABS = [
   { id: 'health', label: 'System Health' },
+  { id: 'costs', label: 'Costs' },
   { id: 'activity', label: 'Activity' },
   { id: 'pipeline', label: 'Schedule' },
   { id: 'discovery', label: 'Discovery' },
@@ -206,7 +208,6 @@ function HealthTab({ data }: { data: MonitorData }) {
   const np = h.scoring.confidenceHigh + h.scoring.confidenceMed + h.scoring.confidenceLow + h.scoring.confidenceMinimal || 1
   const endpoints = h.endpoints ?? []
   const cronHealth = h.cronHealth ?? []
-  const costs = h.costs
   const epStatusColor = (s: string) => s === 'up' ? C.green : s === 'degraded' ? C.orange : C.red
   const cronStatusColor = (s: string) => s === 'on_schedule' ? C.green : s === 'overdue' ? C.orange : C.red
   const cronStatusBg = (s: string) => s === 'on_schedule' ? C.greenDim : s === 'overdue' ? C.orangeDim : C.redDim
@@ -279,111 +280,6 @@ function HealthTab({ data }: { data: MonitorData }) {
           </div>
         </Card>
       )}
-
-      {/* API Costs */}
-      {costs && (() => {
-        const fmtTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : n.toString()
-        const avgCostToday = costs.today.calls > 0 ? costs.today.cost_usd / costs.today.calls : 0
-        const dayOfMonth = new Date().getDate()
-        const monthlyRunRate = dayOfMonth > 0 ? (costs.month.cost_usd / dayOfMonth) * 30 : 0
-        const daily7 = costs.daily7 ?? []
-        const maxDailySpend = Math.max(...daily7.map(d => d.cost_usd), 0.001)
-
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <Card title="API Costs — Today">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Mono style={{ fontSize: 12, color: C.t2 }}>Total</Mono>
-                    <Mono style={{ fontSize: 16, fontWeight: 700, color: costs.today.cost_usd > 5 ? C.orange : C.text }}>${costs.today.cost_usd.toFixed(2)}</Mono>
-                  </div>
-                  {/* Breakdown by caller */}
-                  {Object.entries(costs.today.by_caller).length > 0 && (
-                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2 }}>
-                      {Object.entries(costs.today.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
-                        <div key={caller} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                          <Mono style={{ fontSize: 11, color: C.t2, flex: 1 }}>{caller.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}</Mono>
-                          <Mono style={{ fontSize: 11, color: C.t3, width: 70, textAlign: 'right' }}>{stats.calls.toLocaleString()} {stats.calls === 1 ? 'call' : 'calls'}</Mono>
-                          <Mono style={{ fontSize: 11, color: C.text, width: 60, textAlign: 'right' }}>${stats.cost_usd.toFixed(2)}</Mono>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Tokens + avg cost */}
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>Tokens</Mono>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>{fmtTokens(costs.today.input_tokens)} in · {fmtTokens(costs.today.output_tokens)} out</Mono>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>Avg cost/call</Mono>
-                      <Mono style={{ fontSize: 11, color: C.t2 }}>${avgCostToday.toFixed(3)}</Mono>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-              <Card title="API Costs — This Month">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Mono style={{ fontSize: 12, color: C.t2 }}>Total</Mono>
-                    <Mono style={{ fontSize: 16, fontWeight: 700, color: costs.month.cost_usd > 50 ? C.red : costs.month.cost_usd > 20 ? C.orange : C.text }}>${costs.month.cost_usd.toFixed(2)}</Mono>
-                  </div>
-                  {/* Breakdown by caller */}
-                  {Object.entries(costs.month.by_caller).length > 0 && (
-                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2 }}>
-                      {Object.entries(costs.month.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
-                        <div key={caller} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                          <Mono style={{ fontSize: 11, color: C.t2, flex: 1 }}>{caller.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}</Mono>
-                          <Mono style={{ fontSize: 11, color: C.t3, width: 80, textAlign: 'right' }}>{stats.calls.toLocaleString()} calls</Mono>
-                          <Mono style={{ fontSize: 11, color: C.text, width: 60, textAlign: 'right' }}>${stats.cost_usd.toFixed(2)}</Mono>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Tokens + run rate */}
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>Tokens</Mono>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>{fmtTokens(costs.month.input_tokens)} in · {fmtTokens(costs.month.output_tokens)} out</Mono>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Mono style={{ fontSize: 11, color: C.t3 }}>Monthly run rate</Mono>
-                      <Mono style={{ fontSize: 11, color: monthlyRunRate > 50 ? C.orange : C.t2 }}>${monthlyRunRate.toFixed(2)}</Mono>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </div>
-            {/* 7-day daily spend sparkline */}
-            {daily7.length >= 2 && daily7.some(d => d.cost_usd > 0) && (
-              <Card title="Daily Spend — Last 7 Days" right={
-                <Mono style={{ fontSize: 10, color: C.t3 }}>{daily7.reduce((s, d) => s + d.calls, 0)} calls total</Mono>
-              }>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 60 }}>
-                  {daily7.map(day => {
-                    const pct = Math.max(2, (day.cost_usd / maxDailySpend) * 100)
-                    const isToday = day.date === new Date().toISOString().slice(0, 10)
-                    return (
-                      <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <Mono style={{ fontSize: 9, color: C.t3 }}>{day.cost_usd > 0 ? `$${day.cost_usd.toFixed(2)}` : ''}</Mono>
-                        <div style={{
-                          width: '100%', maxWidth: 40, height: `${pct}%`, minHeight: 2,
-                          background: isToday ? C.blue : day.cost_usd > 0 ? 'rgba(6,140,255,0.4)' : 'rgba(255,255,255,0.06)',
-                          borderRadius: 3, transition: 'height 0.5s ease',
-                        }} />
-                        <Mono style={{ fontSize: 9, color: isToday ? C.text : C.t4 }}>
-                          {new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short' })}
-                        </Mono>
-                      </div>
-                    )
-                  })}
-                </div>
-              </Card>
-            )}
-          </div>
-        )
-      })()}
 
       {/* Infrastructure — row 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -754,7 +650,10 @@ function ScheduleTab({ data }: { data: MonitorData }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <Dot color={cron.color} pulse={progress.pct > 0 && progress.pct < 100} />
                 <div>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text, display: 'block' }}>{cron.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{cron.name}</span>
+                    <Mono style={{ fontSize: 11, color: C.t3 }}>{cron.schedule}</Mono>
+                  </div>
                   <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {cronState === 'running' ? (
                       <>
@@ -786,7 +685,6 @@ function ScheduleTab({ data }: { data: MonitorData }) {
                   </div>
                 </div>
               </div>
-              <Mono style={{ fontSize: 11, color: C.t3, minWidth: 110 }}>{cron.schedule}</Mono>
               <div style={{ flex: 1 }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 {lastRun && (
@@ -1949,6 +1847,7 @@ export default function MonitorDashboard() {
       {/* CONTENT */}
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
+        {tab === 'costs' && <CostsTab githubRate={data.health.github} vercelData={data.health.vercel} />}
         {tab === 'activity' && <ActivityTab data={data} />}
         {tab === 'pipeline' && <ScheduleTab data={data} />}
         {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}

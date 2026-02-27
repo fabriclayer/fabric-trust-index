@@ -155,11 +155,12 @@ const profileUrl = (handle: string, platform: string) => {
 
 // ─── POST HELPER ─────────────────────────────────────────────────
 async function postMarketing(body: Record<string, unknown>) {
-  await fetch('/api/monitor/marketing', {
+  const res = await fetch('/api/monitor/marketing', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  return res.json()
 }
 
 // ─── KPI SCOREBOARD ──────────────────────────────────────────────
@@ -386,13 +387,31 @@ function ContentSection({ content, onChange, onCreate, onDelete }: {
 }
 
 // ─── CHECKLIST SECTION ───────────────────────────────────────────
-function ChecklistSection({ title, tasks, onToggle }: { title: string; tasks: MTask[]; onToggle: (task: MTask) => void }) {
+function ChecklistSection({ title, section, tasks, onToggle, onCreate }: {
+  title: string
+  section: string
+  tasks: MTask[]
+  onToggle: (task: MTask) => void
+  onCreate: (item: { section: string; title: string; priority: string; subtitle?: string }) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newPriority, setNewPriority] = useState('P1')
+
   const done = tasks.filter(t => t.status === 'done').length
   const total = tasks.length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   const groups = ['P0', 'P1', 'P2', 'DIR']
   const grouped = groups.map(p => ({ priority: p, items: tasks.filter(t => t.priority === p) })).filter(g => g.items.length > 0)
+
+  const handleAdd = () => {
+    if (!newTitle.trim()) return
+    onCreate({ section, title: newTitle.trim(), priority: newPriority })
+    setNewTitle('')
+    setNewPriority('P1')
+    setAdding(false)
+  }
 
   return (
     <Card title={title} right={
@@ -435,6 +454,52 @@ function ChecklistSection({ title, tasks, onToggle }: { title: string; tasks: MT
           </div>
         )
       })}
+      {adding ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            placeholder="Task title..."
+            autoFocus
+            style={{
+              flex: 1, fontFamily: F.sans, fontSize: 13, color: C.text, background: 'rgba(255,255,255,0.06)',
+              border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', outline: 'none',
+            }}
+          />
+          <select
+            value={newPriority}
+            onChange={e => setNewPriority(e.target.value)}
+            style={{
+              fontFamily: F.mono, fontSize: 11, color: C.text, background: 'rgba(255,255,255,0.06)',
+              border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 8px', outline: 'none',
+            }}
+          >
+            <option value="P0">P0</option>
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="DIR">DIR</option>
+          </select>
+          <button onClick={handleAdd} style={{
+            fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: C.green, background: C.greenDim,
+            border: `1px solid ${C.green}22`, borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+          }}>Add</button>
+          <button onClick={() => { setAdding(false); setNewTitle('') }} style={{
+            fontFamily: F.mono, fontSize: 11, color: C.t3, background: 'transparent',
+            border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer',
+          }}>Cancel</button>
+        </div>
+      ) : (
+        <span
+          onClick={() => setAdding(true)}
+          style={{
+            fontFamily: F.mono, fontSize: 11, color: C.t3, cursor: 'pointer', display: 'inline-block', marginTop: 8,
+            padding: '4px 0', transition: 'color 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
+          onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
+        >+ Add task</span>
+      )}
     </Card>
   )
 }
@@ -702,6 +767,18 @@ export default function MarketingTab() {
     postMarketing({ action: 'toggle_task', id: task.id, status: newStatus })
   }
 
+  const handleCreateTask = async (item: { section: string; title: string; priority: string; subtitle?: string }) => {
+    const tempId = `temp-${Date.now()}`
+    const newTask: MTask = { id: tempId, section: item.section, title: item.title, subtitle: item.subtitle || null, note: null, priority: item.priority, status: 'todo', sort_order: 999 }
+    setData(prev => prev ? { ...prev, tasks: [...prev.tasks, newTask] } : prev)
+    try {
+      const res = await postMarketing({ action: 'create_task', ...item })
+      if (res?.id) {
+        setData(prev => prev ? { ...prev, tasks: prev.tasks.map(t => t.id === tempId ? { ...t, id: res.id } : t) } : prev)
+      }
+    } catch { /* ignore */ }
+  }
+
   const handleUpdateContent = (id: string, updates: Partial<MContent>) => {
     setData(prev => prev ? { ...prev, content: prev.content.map(c => c.id === id ? { ...c, ...updates } : c) } : prev)
     postMarketing({ action: 'update_content', id, updates })
@@ -800,8 +877,8 @@ export default function MarketingTab() {
       <KolSection kols={data.kols} onUpdate={handleUpdateKol} onEngage={handleEngageKol} onCreate={handleCreateKol} />
       <NetworkingSection networking={data.networking ?? []} onUpdate={handleUpdateNetworking} onEngage={handleEngageNetworking} onCreate={handleCreateNetworking} onDelete={handleDeleteNetworking} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        <ChecklistSection title="Platform Setup" tasks={platformTasks} onToggle={handleToggleTask} />
-        <ChecklistSection title="SEO Checklist" tasks={seoTasks} onToggle={handleToggleTask} />
+        <ChecklistSection title="Platform Setup" section="platform" tasks={platformTasks} onToggle={handleToggleTask} onCreate={handleCreateTask} />
+        <ChecklistSection title="SEO Checklist" section="seo" tasks={seoTasks} onToggle={handleToggleTask} onCreate={handleCreateTask} />
       </div>
     </div>
   )

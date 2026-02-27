@@ -49,6 +49,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    case 'create_task': {
+      const { section, title, subtitle, note, priority } = body
+      const { data, error } = await supabase
+        .from('marketing_tasks')
+        .insert({ section, title, subtitle: subtitle || null, note: note || null, priority: priority || 'P1', status: 'todo' })
+        .select('id')
+        .single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, id: data.id })
+    }
+
     case 'update_content': {
       const { id, updates } = body
       const { error } = await supabase
