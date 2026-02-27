@@ -122,7 +122,7 @@ const TABS = [
   { id: 'networking', label: 'Networking' },
   { id: 'costs', label: 'Costs' },
   { id: 'crons', label: 'Crons' },
-  { id: 'overrides', label: 'Overrides & CVEs' },
+  { id: 'alerts', label: 'Alerts' },
   { id: 'submissions', label: 'Submissions' },
 ]
 
@@ -1025,8 +1025,8 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
   )
 }
 
-// ─── OVERRIDES & CVEs TAB ─────────────────────────────────────────
-function OverridesTab({ data }: { data: MonitorData }) {
+// ─── ALERTS TAB ──────────────────────────────────────────────────
+function AlertsTab({ data }: { data: MonitorData }) {
   const overrides = Object.entries(data.health.scoring.overrideCounts)
     .map(([name, count]) => ({
       name,
@@ -1039,10 +1039,10 @@ function OverridesTab({ data }: { data: MonitorData }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Card title="Active Overrides" right={<Mono style={{ fontSize: 10, color: C.t3 }}>{totalOverrides} total active</Mono>} pad={false}>
+      <Card title="Active Alerts" right={<Mono style={{ fontSize: 10, color: C.t3 }}>{totalOverrides} total active</Mono>} pad={false}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border }}>
           {overrides.length === 0 ? (
-            <Row><Mono style={{ fontSize: 12, color: C.t3 }}>No active overrides</Mono></Row>
+            <Row><Mono style={{ fontSize: 12, color: C.t3 }}>No active alerts</Mono></Row>
           ) : overrides.map((o) => (
             <Row key={o.name}>
               <Dot color={sevC(o.sev)} />
@@ -1055,7 +1055,7 @@ function OverridesTab({ data }: { data: MonitorData }) {
         </div>
       </Card>
 
-      <Card title="CVE Summary">
+      <Card title="CVE Overview">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 20 }}>
           {[
             { l: 'Total', v: data.cves.total, c: C.text },
@@ -1950,7 +1950,7 @@ export default function MonitorDashboard() {
         {tab === 'networking' && <NetworkingTab />}
         {tab === 'costs' && <CostsTab githubRate={data.health.github} vercelData={data.health.vercel} />}
         {tab === 'crons' && <CombinedCronsTab data={data} />}
-        {tab === 'overrides' && <OverridesTab data={data} />}
+        {tab === 'alerts' && <AlertsTab data={data} />}
         {tab === 'submissions' && <SubmissionsTab />}
       </div>
 
