@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
           id: d.id as string,
           name: (r.name as string) ?? slug,
           slug,
-          source: typeof d.source === 'string' ? (d.source as string).replace('ai-news:', '') : (d.source as string),
+          source: typeof d.source === 'string' ? (d.source as string).replace('ai-news:', '').replace('monitor:', '') : (d.source as string),
           approved_at: (d.processed_at as string) ?? '',
           score: svc?.composite_score ?? null,
           status: svc?.status ?? 'pending',

@@ -109,7 +109,7 @@ const timeAgo = (iso: string | null) => {
   return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`
 }
 const srcIcon = (s: string) => s === 'producthunt' ? '🟠' : s === 'github-trending' ? '⭐' : s === 'hackernews' ? '🟧' : s === 'yc-launches' ? '🚀' : s === 'watchlist' ? '📋' : '📦'
-const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'github-trending' ? 'GitHub Trending' : s === 'hackernews' ? 'Hacker News' : s === 'yc-launches' ? 'YC Launches' : s === 'watchlist' ? 'Watchlist' : s
+const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'github-trending' ? 'GitHub Trending' : s === 'hackernews' ? 'Hacker News' : s === 'yc-launches' ? 'YC Launches' : s === 'watchlist' ? 'Watchlist' : s === 'monitor:approved' || s === 'approved' ? 'Manual' : s === 'monitor:manual' || s === 'manual' ? 'Manual' : s
 
 const TABS = [
   { id: 'health', label: 'System Health' },
