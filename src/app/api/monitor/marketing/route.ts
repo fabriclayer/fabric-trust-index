@@ -106,14 +106,21 @@ export async function POST(request: NextRequest) {
     }
 
     case 'create_kol': {
-      const { name, handle, platform, tier, followers, notes } = body
+      const { name, handle, platform, tier, followers, notes, project } = body
       const { data, error } = await supabase
         .from('marketing_kol_tracker')
-        .insert({ name, handle, platform: platform || 'x', tier: tier || 2, followers: followers || null, stage: 'follow', engagement_count: 0, notes: notes || null })
+        .insert({ name, handle, platform: platform || 'x', tier: tier || 2, followers: followers || null, stage: 'follow', engagement_count: 0, notes: notes || null, project: project || null })
         .select('id')
         .single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ ok: true, id: data.id })
+    }
+
+    case 'delete_kol': {
+      const { id } = body
+      const { error } = await supabase.from('marketing_kol_tracker').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
     }
 
     case 'update_kpi': {
