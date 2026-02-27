@@ -816,6 +816,9 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
   const [acting, setActing] = useState<string | null>(null)
   const [scoring, setScoring] = useState(false)
   const [scoreResult, setScoreResult] = useState<{ scored: number; failed: number } | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkApproving, setBulkApproving] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
 
   const items = data.discoveryQueue
   const filtered = filter === 'all' ? items : items.filter(i => i.source === filter)
@@ -862,6 +865,33 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
     }
   }
 
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set())
+    else setSelected(new Set(filtered.map(i => i.id)))
+  }
+
+  const handleBulkApprove = async () => {
+    if (selected.size === 0) return
+    setBulkApproving(true)
+    const ids = Array.from(selected)
+    setBulkProgress({ done: 0, total: ids.length })
+    for (let i = 0; i < ids.length; i++) {
+      await onAction(ids[i], 'approve')
+      setBulkProgress({ done: i + 1, total: ids.length })
+    }
+    setSelected(new Set())
+    setBulkApproving(false)
+    setBulkProgress(null)
+  }
+
   const statusColor = (s: string) => s === 'trusted' ? C.green : s === 'caution' ? C.orange : s === 'blocked' ? C.red : C.t3
 
   return (
@@ -892,12 +922,23 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
                 border: `1px solid ${filter === f ? C.pink + '33' : C.border}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
               }}>{f === 'all' ? 'All' : srcLabel(f)}</button>
             ))}
-            <div style={{ marginLeft: 'auto' }}><Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} /></div>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+              {selected.size > 0 && (
+                <button onClick={handleBulkApprove} disabled={bulkApproving} style={{
+                  fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: bulkApproving ? C.t3 : C.green,
+                  background: bulkApproving ? C.surface : C.greenDim,
+                  border: `1px solid ${bulkApproving ? C.border : C.green + '33'}`, borderRadius: 6,
+                  padding: '5px 14px', cursor: bulkApproving ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+                }}>{bulkApproving && bulkProgress ? `Approving ${bulkProgress.done}/${bulkProgress.total}...` : `Approve ${selected.size} Selected`}</button>
+              )}
+              <Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} />
+            </div>
           </div>
 
           {/* Pending review table */}
           <Card pad={false}>
-            <div style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '28px 24px 180px 1fr 90px 70px 120px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
+              <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleSelectAll} style={{ width: 14, height: 14, cursor: 'pointer', accentColor: C.pink }} />
               {['', 'Service', 'Description', 'Source', 'Stars', 'Actions'].map(h => (
                 <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
               ))}
@@ -905,7 +946,8 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
             {filtered.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No pending discoveries{filter !== 'all' ? ` from ${srcLabel(filter)}` : ''}</Mono></div>
             ) : filtered.map(item => (
-              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '24px 180px 1fr 90px 70px 120px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', opacity: acting === item.id ? 0.5 : 1 }}>
+              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '28px 24px 180px 1fr 90px 70px 120px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', opacity: acting === item.id ? 0.5 : 1 }}>
+                <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelect(item.id)} disabled={bulkApproving} style={{ width: 14, height: 14, cursor: bulkApproving ? 'not-allowed' : 'pointer', accentColor: C.pink }} />
                 <span style={{ fontSize: 14 }}>{srcIcon(item.source)}</span>
                 <div>
                   {item.homepage_url ? (
