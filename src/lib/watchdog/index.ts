@@ -191,11 +191,12 @@ async function detectPublisherGaps(supabase: ReturnType<typeof createServerClien
 }
 
 async function detectOrphanOverrides(supabase: ReturnType<typeof createServerClient>): Promise<WatchdogIssue[]> {
-  // Services with vulnerability_zero_override where all CVEs are actually patched
+  // Services with vulnerability overrides where all CVEs are actually patched
+  // Checks both vulnerability_zero_override and vulnerability_patch_available
   const { data } = await supabase
     .from('services')
     .select('id, slug, name, signal_vulnerability, active_modifiers, composite_score')
-    .contains('active_modifiers', ['vulnerability_zero_override'])
+    .or('active_modifiers.cs.{vulnerability_zero_override},active_modifiers.cs.{vulnerability_patch_available}')
     .limit(50)
 
   const issues: WatchdogIssue[] = []
@@ -204,19 +205,38 @@ async function detectOrphanOverrides(supabase: ReturnType<typeof createServerCli
     // Check if all CVEs for this service are patched
     const { data: cves } = await supabase
       .from('cve_records')
-      .select('cve_id, is_patched')
+      .select('cve_id, is_patched, patched_version, severity')
       .eq('service_id', s.id)
 
     if (!cves || cves.length === 0) continue
 
+    const activeModifiers = s.active_modifiers as string[]
     const allPatched = cves.every(c => c.is_patched)
+    const hasUnpatchedCriticalOrHigh = cves.some(c =>
+      !c.is_patched && !c.patched_version && (c.severity === 'critical' || c.severity === 'high')
+    )
+
     if (allPatched) {
+      const overrideName = activeModifiers.includes('vulnerability_zero_override')
+        ? 'vulnerability_zero_override'
+        : 'vulnerability_patch_available'
       issues.push({
         detector: 'orphan_override',
         severity: 'high',
         service_slug: s.slug,
         service_name: s.name,
-        description: `vulnerability_zero_override active but all ${cves.length} CVEs are patched — override should clear on rescore`,
+        description: `${overrideName} active but all ${cves.length} CVEs are patched — override should clear on rescore`,
+        auto_fixable: true,
+      })
+    } else if (activeModifiers.includes('vulnerability_zero_override') && !hasUnpatchedCriticalOrHigh) {
+      // Has vulnerability_zero_override but no truly unpatched critical/high CVEs
+      // (they may be patch_available) — should downgrade to vulnerability_patch_available on rescore
+      issues.push({
+        detector: 'orphan_override',
+        severity: 'high',
+        service_slug: s.slug,
+        service_name: s.name,
+        description: `vulnerability_zero_override active but no unpatched critical/high CVEs remain — should downgrade to vulnerability_patch_available on rescore`,
         auto_fixable: true,
       })
     }

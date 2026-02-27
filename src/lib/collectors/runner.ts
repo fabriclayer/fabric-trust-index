@@ -440,10 +440,31 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     }
   }
 
-  // Recompute composite score
-  const compositeScore = computeComposite(signals)
+  // ── Vulnerability signal overrides (apply BEFORE composite) ──
+  // Three tiers based on CVE patch status for payment safety:
+  //   Tier 1 (no_patch): critical/high unpatched → signal=0, blocked
+  //   Tier 2 (patch_available): critical/high with fix available → signal=1.5, caution cap
+  //   Tier 3 (all patched): no override, normal scoring
   const modifiers: string[] = []
   const oldComposite = service.composite_score
+  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+
+  if (vulnResult?.result.metadata.has_critical_or_high_unpatched) {
+    // Tier 1: No patch exists for critical/high CVE → force signal to 0
+    signals[0] = 0
+    updates.signal_vulnerability = 0
+    modifiers.push('vulnerability_zero_override')
+  } else if (vulnResult?.result.metadata.has_critical_or_high_patch_available) {
+    // Tier 2: Patch available but not applied → cap signal at 1.5
+    if (signals[0] > 1.5) {
+      signals[0] = 1.5
+      updates.signal_vulnerability = 1.5
+    }
+    modifiers.push('vulnerability_patch_available')
+  }
+
+  // Recompute composite score (uses overridden signal values)
+  const compositeScore = computeComposite(signals)
 
   // Override rules
   let status = getStatus(compositeScore)
@@ -455,18 +476,11 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('zero_signal_override')
   }
 
-  // 2. Vulnerability overrides
-  const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
-
-  if (vulnResult?.result.metadata.has_critical_unpatched) {
-    // Critical unpatched CVE caps at caution — the vuln signal deduction handles severity
-    if (status === 'trusted') status = 'caution'
-    modifiers.push('critical_cve_override')
-  }
-
-  if (isGenuineZero(vulnResult ?? null)) {
+  // 2. Vulnerability status overrides (from tiered system above)
+  if (modifiers.includes('vulnerability_zero_override')) {
     status = 'blocked'
-    modifiers.push('vulnerability_zero_override')
+  } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
+    status = 'caution'
   }
 
   // 3. Repo archived override — archived repos should never score trusted
@@ -506,7 +520,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   let finalScore = compositeScore
   if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
-  } else if (modifiers.includes('critical_cve_override')) {
+  } else if (modifiers.includes('vulnerability_patch_available')) {
     finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
@@ -665,9 +679,6 @@ export async function runCollectors(
     key => (freshService[`signal_${key}` as keyof typeof freshService] as number) ?? 0
   )
 
-  // Recompute composite
-  const compositeScore = computeComposite(signals)
-  const oldComposite = freshService.composite_score // M3: use fresh DB value
   const existingModifiers: string[] = freshService.active_modifiers ?? []
   const modifiers: string[] = []
   const ranVulnerability = updatedKeys.includes('vulnerability')
@@ -677,8 +688,8 @@ export async function runCollectors(
   const ranMaintenance = updatedKeys.includes('maintenance')
   const ranPublisherTrust = updatedKeys.includes('publisher_trust')
   if (!ranVulnerability) {
-    if (existingModifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
     if (existingModifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
+    if (existingModifiers.includes('vulnerability_patch_available')) modifiers.push('vulnerability_patch_available')
   }
   if (!ranAll && existingModifiers.includes('zero_signal_override')) {
     modifiers.push('zero_signal_override')
@@ -693,6 +704,29 @@ export async function runCollectors(
     if (existingModifiers.includes('npm_deprecated')) modifiers.push('npm_deprecated')
   }
 
+  // ── Vulnerability signal overrides (apply BEFORE composite) ──
+  // Three tiers: no_patch → signal=0, patch_available → signal≤1.5, all patched → normal
+  if (ranVulnerability) {
+    const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
+    if (vulnResult?.result.metadata.has_critical_or_high_unpatched) {
+      signals[0] = 0
+      if (!modifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
+    } else if (vulnResult?.result.metadata.has_critical_or_high_patch_available) {
+      if (signals[0] > 1.5) signals[0] = 1.5
+      if (!modifiers.includes('vulnerability_patch_available')) modifiers.push('vulnerability_patch_available')
+    }
+  } else if (modifiers.includes('vulnerability_zero_override')) {
+    // Carry forward: force signal to 0 for composite calculation
+    signals[0] = 0
+  } else if (modifiers.includes('vulnerability_patch_available')) {
+    // Carry forward: cap signal at 1.5 for composite calculation
+    if (signals[0] > 1.5) signals[0] = 1.5
+  }
+
+  // Recompute composite with overridden signal values
+  const compositeScore = computeComposite(signals)
+  const oldComposite = freshService.composite_score
+
   // Override rules
   let status = getStatus(compositeScore)
 
@@ -704,15 +738,11 @@ export async function runCollectors(
     }
   }
 
-  // 2. Vulnerability overrides — only re-evaluate if vulnerability was re-run
-  if (ranVulnerability) {
-    const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
-    if (vulnResult?.result.metadata.has_critical_unpatched && !modifiers.includes('critical_cve_override')) {
-      modifiers.push('critical_cve_override')
-    }
-    if (isGenuineZero(vulnResult ?? null) && !modifiers.includes('vulnerability_zero_override')) {
-      modifiers.push('vulnerability_zero_override')
-    }
+  // 2. Vulnerability status overrides (from tiered system)
+  if (modifiers.includes('vulnerability_zero_override')) {
+    status = 'blocked'
+  } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
+    status = 'caution'
   }
 
   // 3. Repo archived/transferred overrides — re-evaluate if maintenance was re-run
@@ -761,12 +791,11 @@ export async function runCollectors(
     }
   }
 
-  // Apply carried-forward + fresh overrides to status
-  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
+  // Apply remaining status overrides
+  if (modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     status = 'blocked'
-  } else if (modifiers.includes('critical_cve_override') && status === 'trusted') {
-    status = 'caution'
-  } else if (modifiers.includes('zero_signal_override') && status === 'trusted') {
+  }
+  if (modifiers.includes('zero_signal_override') && status === 'trusted') {
     status = 'caution'
   }
   if (modifiers.includes('repo_transferred') && status === 'trusted') {
@@ -780,7 +809,7 @@ export async function runCollectors(
   let finalScore = compositeScore
   if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
-  } else if (modifiers.includes('critical_cve_override')) {
+  } else if (modifiers.includes('vulnerability_patch_available')) {
     finalScore = Math.min(finalScore, 3.24)
   } else if (modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 3.24)
@@ -800,15 +829,23 @@ export async function runCollectors(
     finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
   }
 
-  // Update composite, status, and modifiers
+  // Update composite, status, modifiers, and overridden signal values
+  const partialUpdate: Record<string, unknown> = {
+    raw_composite_score: compositeScore,
+    composite_score: finalScore,
+    status,
+    active_modifiers: modifiers,
+  }
+  // Persist overridden vulnerability signal value
+  if (modifiers.includes('vulnerability_zero_override')) {
+    partialUpdate.signal_vulnerability = 0
+  } else if (modifiers.includes('vulnerability_patch_available') && signals[0] <= 1.5) {
+    partialUpdate.signal_vulnerability = signals[0]
+  }
+
   await supabase
     .from('services')
-    .update({
-      raw_composite_score: compositeScore,
-      composite_score: finalScore,
-      status,
-      active_modifiers: modifiers,
-    })
+    .update(partialUpdate)
     .eq('id', service.id)
 
   // Record composite history

@@ -90,10 +90,10 @@ const TABS = [
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
 const OVERRIDE_DEFS: Record<string, { effect: string; trigger: string; sev: string }> = {
-  vulnerability_zero_override: { effect: '→ 0.99 blocked', trigger: 'Vulnerability signal = 0.0', sev: 'critical' },
+  vulnerability_zero_override: { effect: '→ signal=0, blocked', trigger: 'Critical/high CVE with no patch available', sev: 'critical' },
+  vulnerability_patch_available: { effect: '→ signal≤1.5, caution', trigger: 'Critical/high CVE with patch available but not applied', sev: 'warning' },
   zero_signal_override: { effect: '→ capped 3.24', trigger: 'Any signal = 0.0 (with real data)', sev: 'warning' },
   repo_archived: { effect: '→ 0.99 blocked', trigger: 'GitHub repo is archived', sev: 'critical' },
-  critical_cve_override: { effect: '→ capped 3.24', trigger: 'Unpatched critical CVE (CVSS ≥ 9.0)', sev: 'warning' },
   npm_deprecated: { effect: '→ 0.99 blocked', trigger: 'npm deprecated flag set', sev: 'critical' },
   vt_suspicious_override: { effect: '→ capped 3.24', trigger: 'VirusTotal suspicious (score ≤ 2.0)', sev: 'warning' },
   vt_scan_override: { effect: '→ 0.99 blocked', trigger: 'VirusTotal confirms malware', sev: 'critical' },

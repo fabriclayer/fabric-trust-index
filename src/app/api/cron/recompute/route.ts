@@ -77,10 +77,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Pre-fetch critical CVE status from latest vulnerability signal_history
-  // Only check services with low vulnerability scores (optimization)
-  const criticalCveSet = new Set<string>()
-  const lowVulnServices = services.filter(s => (s.signal_vulnerability ?? 0) <= 1.0)
+  // Pre-fetch vulnerability CVE status from latest signal_history for tiered overrides
+  // Tier 1 (no_patch): critical/high unpatched → signal=0, blocked
+  // Tier 2 (patch_available): critical/high with fix → signal≤1.5, caution
+  const vulnUnpatchedSet = new Set<string>()   // Tier 1
+  const vulnPatchAvailSet = new Set<string>()   // Tier 2
+  const lowVulnServices = services.filter(s => (s.signal_vulnerability ?? 0) <= 2.0)
   for (let i = 0; i < lowVulnServices.length; i += 50) {
     const batch = lowVulnServices.slice(i, i + 50)
     for (const svc of batch) {
@@ -92,8 +94,10 @@ export async function POST(request: NextRequest) {
         .order('recorded_at', { ascending: false })
         .limit(1)
         .single()
-      if (latest?.metadata?.has_critical_unpatched) {
-        criticalCveSet.add(svc.id)
+      if (latest?.metadata?.has_critical_or_high_unpatched) {
+        vulnUnpatchedSet.add(svc.id)
+      } else if (latest?.metadata?.has_critical_or_high_patch_available) {
+        vulnPatchAvailSet.add(svc.id)
       }
     }
   }
@@ -218,7 +222,32 @@ export async function POST(request: NextRequest) {
       signals.push(value)
     }
 
-    // Recompute composite
+    // Store pre-override composite for raw_composite_score
+    const rawComposite = computeComposite(signals)
+
+    // Vulnerability tiered overrides — modify signals BEFORE final composite
+    if (!fallbackSignals.has('vulnerability')) {
+      const hasUnpatched = vulnUnpatchedSet.has(service.id) ||
+        (service.active_modifiers ?? []).includes('vulnerability_zero_override')
+      const hasPatchAvail = vulnPatchAvailSet.has(service.id) ||
+        (service.active_modifiers ?? []).includes('vulnerability_patch_available')
+
+      if (hasUnpatched) {
+        // Tier 1: force signal to 0
+        signals[0] = 0
+        signalUpdates.signal_vulnerability = 0
+        modifiers.push('vulnerability_zero_override')
+      } else if (hasPatchAvail) {
+        // Tier 2: cap signal at 1.5
+        if (signals[0] > 1.5) {
+          signals[0] = 1.5
+          signalUpdates.signal_vulnerability = 1.5
+        }
+        modifiers.push('vulnerability_patch_available')
+      }
+    }
+
+    // Recompute composite with any signal overrides applied
     const compositeScore = computeComposite(signals)
     let status = getStatus(compositeScore)
 
@@ -229,32 +258,23 @@ export async function POST(request: NextRequest) {
         genuineZeros.push(SIGNAL_ORDER[i])
       }
     }
-
     if (status === 'trusted' && genuineZeros.length > 0) {
       status = 'caution'
       modifiers.push('zero_signal_override')
     }
 
-    // Vulnerability overrides
-    const vulnIdx = SIGNAL_ORDER.indexOf('vulnerability')
-    if (signals[vulnIdx] === 0 && !fallbackSignals.has('vulnerability')) {
+    // Apply vulnerability status overrides
+    if (modifiers.includes('vulnerability_zero_override')) {
       status = 'blocked'
-      modifiers.push('vulnerability_zero_override')
-    }
-
-    // Critical CVE override — from signal_history metadata or preserved from DB
-    const hasCriticalCve = criticalCveSet.has(service.id) ||
-      (service.active_modifiers ?? []).includes('critical_cve_override')
-    if (hasCriticalCve && !fallbackSignals.has('vulnerability')) {
-      if (status === 'trusted') status = 'caution'
-      if (!modifiers.includes('critical_cve_override')) modifiers.push('critical_cve_override')
+    } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
+      status = 'caution'
     }
 
     // Cap composite_score to match forced status range
     let finalScore = compositeScore
     if (modifiers.includes('vulnerability_zero_override')) {
       finalScore = Math.min(finalScore, 0.99)
-    } else if (modifiers.includes('critical_cve_override')) {
+    } else if (modifiers.includes('vulnerability_patch_available')) {
       finalScore = Math.min(finalScore, 3.24)
     } else if (modifiers.includes('zero_signal_override')) {
       finalScore = Math.min(finalScore, 3.24)
@@ -265,7 +285,7 @@ export async function POST(request: NextRequest) {
       .from('services')
       .update({
         ...signalUpdates,
-        raw_composite_score: compositeScore,
+        raw_composite_score: rawComposite,
         composite_score: finalScore,
         status,
         active_modifiers: modifiers,

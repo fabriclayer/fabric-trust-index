@@ -97,8 +97,8 @@ const ITEMS_INITIAL = 6
 const LOAD_MORE_BATCH = 10
 
 const MODIFIER_LABELS: Record<string, string> = {
-  critical_cve_override: 'Critical CVE detected — score capped',
-  vulnerability_zero_override: 'Vulnerability failure — score capped',
+  vulnerability_zero_override: 'Unpatched critical/high CVE — blocked',
+  vulnerability_patch_available: 'Critical/high CVE with available patch — capped at caution',
   zero_signal_override: 'Missing signal — held at caution',
   pending_evaluation: 'Awaiting first evaluation',
   stale_publisher_trust: 'Publisher data stale',
@@ -725,7 +725,7 @@ export default function ProductPageClient({
           </div>
 
           {/* Override explanation */}
-          {service.active_modifiers && service.active_modifiers.some(m => m === 'critical_cve_override' || m === 'vulnerability_zero_override' || m === 'zero_signal_override') && (
+          {service.active_modifiers && service.active_modifiers.some(m => m === 'vulnerability_zero_override' || m === 'vulnerability_patch_available' || m === 'zero_signal_override') && (
             <div className="flex items-start gap-2.5 mt-4 p-3 bg-[rgba(208,58,61,0.06)] border border-[rgba(208,58,61,0.15)] rounded-lg">
               <svg className="w-4 h-4 text-[#d03a3d] flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -736,19 +736,12 @@ export default function ProductPageClient({
                 {(() => {
                   const scorePart = `Score capped to ${service.score.toFixed(2)}${service.raw_composite_score ? ` (raw score: ${service.raw_composite_score.toFixed(2)})` : ''}`
                   if (service.active_modifiers!.includes('vulnerability_zero_override')) {
-                    return `${scorePart} due to critical vulnerability failures. The composite is overridden until vulnerabilities are resolved.`
+                    return `${scorePart} — critical/high CVE detected with no known fix. Status blocked until the vulnerability is patched.`
                   }
-                  if (service.active_modifiers!.includes('critical_cve_override')) {
+                  if (service.active_modifiers!.includes('vulnerability_patch_available')) {
                     const vulnMeta = signalMetas.vulnerability
-                    const patchStatus = vulnMeta?.critical_patch_status as string | undefined
                     const fixedVersion = vulnMeta?.critical_fixed_version as string | undefined
-                    if (patchStatus === 'patched') {
-                      return `${scorePart} — critical CVE detected but patched${fixedVersion ? ` in v${fixedVersion}` : ''}. The composite is held at caution until historical CVE record clears.`
-                    }
-                    if (patchStatus === 'patch_available') {
-                      return `${scorePart} — critical CVE with patch available${fixedVersion ? ` (v${fixedVersion})` : ''} but not yet applied to the latest release. Update recommended.`
-                    }
-                    return `${scorePart} — critical unpatched CVE detected with no known fix. The composite is overridden until the vulnerability is resolved.`
+                    return `${scorePart} — critical/high CVE with patch available${fixedVersion ? ` (v${fixedVersion})` : ''} but not yet applied to the latest release. Status held at caution until update is applied.`
                   }
                   return `${scorePart} due to insufficient data in one or more signals. The composite is held at caution level until all signals can be fully evaluated.`
                 })()}
