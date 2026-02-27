@@ -121,6 +121,8 @@ export const maintenanceCollector: Collector = {
           metadata.median_issue_response_hours = Math.round(median)
           if (median < 24) score += 0.5
           else if (median < 72) score += 0.25
+          else if (median >= 720) score -= 0.5  // 30+ days
+          else if (median >= 168) score -= 0.25 // 7+ days
         }
       }
     }
@@ -158,13 +160,55 @@ export const maintenanceCollector: Collector = {
       }
     }
 
-    // Insert version records from GitHub releases
+    // Insert version records from GitHub releases with historical scores
     if (releases && releases.length > 0) {
       const supabase = createServerClient()
       const validReleases = releases.filter(
         r => r.tag_name && r.published_at && !r.draft
       )
-      for (const release of validReleases.slice(0, 10)) {
+      const top10 = validReleases.slice(0, 10)
+
+      // Fetch composite signal_history to match scores to release dates
+      const { data: compositeHistory } = await supabase
+        .from('signal_history')
+        .select('score, recorded_at')
+        .eq('service_id', service.id)
+        .eq('signal_name', 'composite')
+        .order('recorded_at', { ascending: true })
+
+      const history = compositeHistory ?? []
+
+      // Find the closest composite score on or before a given date
+      function scoreAtDate(dateStr: string): number | null {
+        if (history.length === 0) return null
+        const target = new Date(dateStr).getTime()
+        let best: { score: number; diff: number } | null = null
+        for (const h of history) {
+          const t = new Date(h.recorded_at).getTime()
+          const diff = target - t
+          // Prefer scores recorded on or before the release date (diff >= 0)
+          // but accept up to 1 day after if nothing else
+          if (diff >= -86400000) {
+            if (!best || (diff >= 0 && best.diff < 0) || Math.abs(diff) < Math.abs(best.diff)) {
+              best = { score: h.score, diff }
+            }
+          }
+        }
+        return best?.score ?? null
+      }
+
+      // Sort releases oldest-first for delta calculation
+      const sorted = [...top10].sort((a, b) =>
+        new Date(a.published_at!).getTime() - new Date(b.published_at!).getTime()
+      )
+
+      let prevScore: number | null = null
+      for (const release of sorted) {
+        const scoreAtRel = scoreAtDate(release.published_at!)
+        const delta = scoreAtRel !== null && prevScore !== null
+          ? Math.round((scoreAtRel - prevScore) * 100) / 100
+          : null
+
         await supabase
           .from('versions')
           .upsert(
@@ -172,12 +216,15 @@ export const maintenanceCollector: Collector = {
               service_id: service.id,
               tag: release.tag_name!,
               released_at: release.published_at!,
-              score_at_release: service.composite_score,
+              score_at_release: scoreAtRel,
+              score_delta: delta,
               source: 'github',
               metadata: { prerelease: release.prerelease ?? false },
             },
             { onConflict: 'service_id,tag' }
           )
+
+        if (scoreAtRel !== null) prevScore = scoreAtRel
       }
     }
 

@@ -119,25 +119,33 @@ export const transparencyCollector: Collector = {
     checklist.api_docs = hasOpenapi || hasOpenApiYaml || hasDocs
     if (checklist.api_docs) score += pointsPerItem
 
+    // Determine API docs URL for linking on the product page
+    let apiDocsUrl: string | null = null
+    if (hasOpenapi) apiDocsUrl = `https://github.com/${repo}/blob/main/openapi.json`
+    else if (hasOpenApiYaml) apiDocsUrl = `https://github.com/${repo}/blob/main/openapi.yaml`
+    else if (hasDocs) apiDocsUrl = `https://github.com/${repo}/tree/main/docs`
+
     // 6. Model card or system card (only for model-related categories)
     if (includeModelCard) {
       const hasModelCard = await githubExists(`/repos/${repo}/contents/MODEL_CARD.md`)
       const hasSystemCard = !hasModelCard && await githubExists(`/repos/${repo}/contents/SYSTEM_CARD.md`)
       checklist.model_card = hasModelCard || hasSystemCard
       if (checklist.model_card) score += pointsPerItem
-    } else {
-      checklist.model_card_skipped = true
     }
+
+    // Count only actual check results (boolean values in checklist), not flags
+    const itemsPassed = Object.values(checklist).filter(v => v === true).length
 
     return {
       signal_name: 'transparency',
       score: clampScore(score),
       metadata: {
         checklist,
-        items_passed: Object.values(checklist).filter(v => v === true).length,
+        items_passed: itemsPassed,
         items_total: totalItems,
         model_card_applicable: includeModelCard,
         license: licenseId ?? null,
+        api_docs_url: apiDocsUrl,
       },
       sources,
     }

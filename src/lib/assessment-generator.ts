@@ -4,20 +4,20 @@ import { logApiUsage } from '@/lib/api-usage'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-4-5-20250929'
-const MAX_TOKENS = 300
+const MAX_TOKENS = 150
 
-const SYSTEM_PROMPT = `You are the Fabric Trust Index scoring engine. Write a concise 2-paragraph trust assessment (80-100 words total) for the given service based on its signal data, metadata, and README.
+const SYSTEM_PROMPT = `Write a 2-3 sentence trust assessment (50-75 words max) for the given service.
 
-Paragraph 1: Summarize what the service does and its overall trust posture — mention the composite score context and key strengths or concerns.
-
-Paragraph 2: Highlight specific findings from the signal data — mention notable scores, any red flags, maintenance activity, adoption indicators, or transparency gaps.
+Sentence 1: What the service is — name, publisher, license, and primary function.
+Sentence 2: The key trust finding — what stands out positively or negatively.
+Sentence 3 (optional): The main risk or caveat worth noting.
 
 Rules:
-- Be factual and neutral. Never say "safe" or "dangerous" — use "low risk detected" or "not recommended".
-- Do not use marketing language. Write like infrastructure documentation.
-- Reference specific data points (scores, CVE counts, uptime, download counts) when available.
-- If data is limited, say so honestly.
-- Do not include headings, bullet points, or markdown formatting — just two plain paragraphs.`
+- Do NOT restate signal scores or the composite score.
+- Write like infrastructure documentation — factual, neutral, no marketing language.
+- Never say "safe" or "dangerous" — use "low risk detected" or "not recommended".
+- No headings, bullet points, or markdown. Just plain sentences.
+- Reference specific data (CVE counts, maintainer count, dependency count) only when noteworthy.`
 
 interface SignalScore {
   name: string

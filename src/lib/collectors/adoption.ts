@@ -175,7 +175,7 @@ export const adoptionCollector: Collector = {
         weekly_downloads: weeklyDownloads,
         prior_week_downloads: priorWeekDownloads,
         growth_rate: priorWeekDownloads > 0
-          ? Math.round(((weeklyDownloads - priorWeekDownloads) / priorWeekDownloads) * 10000) / 100
+          ? Math.min(999, Math.max(-999, Math.round(((weeklyDownloads - priorWeekDownloads) / priorWeekDownloads) * 10000) / 100))
           : null,
         tier_score: tierScore,
         velocity_adjustment: velocityAdj,

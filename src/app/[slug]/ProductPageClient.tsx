@@ -134,7 +134,7 @@ function getStandardSignalDetail(key: string, meta: Record<string, any>, service
   switch (key) {
     case 'vulnerability': {
       const total = meta.total_cves as number | undefined
-      if (total == null || total === 0) return 'No known CVEs found in the OSV.dev database. Full dependency tree scanned.'
+      if (total == null || total === 0) return 'No known CVEs found. Package checked against OSV.dev vulnerability database.'
       const cves = meta.cves as Array<{ severity: string; patch_status: string }> | undefined
       if (!cves) return `${total} CVE${total > 1 ? 's' : ''} found.`
       const bySev = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>
@@ -173,7 +173,11 @@ function getStandardSignalDetail(key: string, meta: Record<string, any>, service
         parts.push(relText)
       }
       if (meta.open_issues != null) parts.push(`${meta.open_issues} open issues`)
-      if (meta.median_issue_response_hours != null) parts.push(`Median issue response: ${Math.round(meta.median_issue_response_hours)}h`)
+      if (meta.median_issue_response_hours != null) {
+        const hrs = Math.round(meta.median_issue_response_hours as number)
+        if (hrs >= 48) parts.push(`Median issue response: ${Math.round(hrs / 24)}d`)
+        else parts.push(`Median issue response: ${hrs}h`)
+      }
       return parts.length > 0 ? parts.join('. ') + '.' : 'No maintenance data available.'
     }
     case 'adoption': {
@@ -182,7 +186,18 @@ function getStandardSignalDetail(key: string, meta: Record<string, any>, service
       if (meta.weekly_downloads != null) parts.push(`${formatCompact(meta.weekly_downloads)} weekly downloads`)
       if (meta.growth_rate != null) {
         const rate = Number(meta.growth_rate)
-        parts.push(rate > 0 ? `${rate.toFixed(0)}% week-over-week growth` : rate < 0 ? `${Math.abs(rate).toFixed(0)}% weekly decline` : 'Stable download volume')
+        const prior = Number(meta.prior_week_downloads ?? 0)
+        if (prior < 10 && rate > 100) {
+          parts.push('First weeks tracked — growth rate not yet meaningful')
+        } else if (rate > 999) {
+          parts.push('>999% week-over-week growth')
+        } else if (rate > 0) {
+          parts.push(`${rate.toFixed(0)}% week-over-week growth`)
+        } else if (rate < 0) {
+          parts.push(`${Math.abs(rate).toFixed(0)}% weekly decline`)
+        } else {
+          parts.push('Stable download volume')
+        }
       }
       if (meta.category_percentile != null && meta.category_peer_count != null) {
         const pct = Math.round(100 - Number(meta.category_percentile))
@@ -610,6 +625,7 @@ export default function ProductPageClient({
   const [versionsCount, setVersionsCount] = useState(ITEMS_INITIAL)
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [showThresholds, setShowThresholds] = useState(false)
 
   const tagClass = TAG_CLASSES[service.category] || ''
   const tagColor = TAG_COLORS[tagClass]
@@ -712,7 +728,42 @@ export default function ProductPageClient({
                 </span>
                 <span className="font-mono text-[0.62rem] text-fabric-400">/ 5.00</span>
               </div>
-              <ScoreStatus status={service.status} />
+              <div className="relative flex items-center gap-1.5">
+                <ScoreStatus status={service.status} />
+                <button
+                  onClick={() => setShowThresholds(!showThresholds)}
+                  className={`w-4 h-4 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.5rem] font-semibold cursor-pointer transition-all leading-none flex-shrink-0 ${showThresholds ? 'border-blue text-blue bg-[rgba(61,138,247,0.08)]' : 'border-fabric-200 bg-white hover:border-blue hover:text-blue'}`}
+                >
+                  i
+                </button>
+                {showThresholds && (
+                  <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-fabric-200 rounded-xl shadow-lg p-4 w-[280px]">
+                    <span className="font-mono text-[0.65rem] font-semibold text-fabric-600 uppercase tracking-wider">Score Thresholds</span>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {[
+                        { range: '3.25 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
+                        { range: '1.00 – 3.24', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
+                        { range: '0.00 – 0.99', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
+                      ].map(t => (
+                        <div key={t.range} className="flex justify-between items-center py-1 border-b border-fabric-100 last:border-b-0">
+                          <span className="font-mono text-[0.65rem] text-fabric-500">{t.range}</span>
+                          <span className={`font-mono text-[0.65rem] font-medium ${t.color}`}>{t.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-fabric-100">
+                      <span className="font-mono text-[0.65rem] text-fabric-500">Modifiers</span>
+                      {service.active_modifiers && service.active_modifiers.length > 0 ? (
+                        <span className="font-mono text-[0.65rem] font-medium text-[#f7931e] text-right max-w-[160px]">
+                          {service.active_modifiers.map(m => MODIFIER_LABELS[m] || m.replace(/_/g, ' ')).join(', ')}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[0.65rem] font-medium text-[#0dc956]">None</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -832,7 +883,7 @@ export default function ProductPageClient({
           <div className="p-7 max-md:p-5">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Assessment</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">auto-indexed</span>
+              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">AI Assessment</span>
             </div>
             {service.ai_assessment ? (
               <div>
@@ -846,53 +897,6 @@ export default function ProductPageClient({
             )}
 
             {/* Licence */}
-            {/* Capabilities */}
-            {service.capabilities && service.capabilities.length > 0 && (
-              <div className="mt-6 pt-5 border-t border-fabric-100">
-                <span className="font-mono text-[0.72rem] uppercase tracking-wider text-fabric-400 font-medium">Capabilities</span>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {service.capabilities.map(cap => (
-                    <span key={cap} className="inline-flex items-center gap-1.5 font-mono text-[0.68rem] py-1.5 px-3 bg-fabric-50 border border-fabric-100 rounded-lg text-fabric-700">
-                      <svg className="w-3 h-3 text-[#0dc956] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                      {cap}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Pricing & Specs */}
-            {service.pricing && (
-              <div className="mt-6 pt-5 border-t border-fabric-100">
-                <span className="font-mono text-[0.72rem] uppercase tracking-wider text-fabric-400 font-medium">Pricing & Specs</span>
-                <div className="mt-3 flex flex-wrap gap-3 items-start">
-                  <span className={`inline-flex items-center gap-1.5 font-mono text-[0.72rem] py-1.5 px-3 rounded-lg font-medium ${
-                    service.pricing.model === 'open-source' || service.pricing.model === 'open-weight'
-                      ? 'bg-[rgba(13,201,86,0.08)] text-[#0dc956] border border-[rgba(13,201,86,0.2)]'
-                      : 'bg-fabric-50 text-fabric-700 border border-fabric-100'
-                  }`}>
-                    {service.pricing.model === 'open-source' ? '◇ Open Source' :
-                     service.pricing.model === 'open-weight' ? '◇ Open Weight' :
-                     service.pricing.model}
-                  </span>
-                  {service.language && (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[0.68rem] py-1.5 px-3 bg-fabric-50 border border-fabric-100 rounded-lg text-fabric-600">
-                      Language: {service.language}
-                    </span>
-                  )}
-                  {service.pricing.tiers && service.pricing.tiers.length > 0 && (
-                    <div className="w-full mt-1">
-                      {service.pricing.tiers.map(tier => (
-                        <div key={tier.label} className="flex justify-between items-center py-2 border-b border-fabric-100 last:border-b-0">
-                          <span className="font-mono text-[0.72rem] text-fabric-600">{tier.label}</span>
-                          <span className="font-mono text-[0.72rem] font-medium text-black">{tier.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Request / Response Schema */}
             {(service.request_schema || service.response_schema) && (
@@ -1003,7 +1007,7 @@ export default function ProductPageClient({
                   { key: 'recognized_license', label: 'OSI License', metaTrue: `Licensed under ${(transparencyMeta?.license as string)?.toUpperCase() || 'OSI-approved'}`, metaFalse: 'No recognized open-source license', url: gh ? `${gh}/blob/main/LICENSE` : null },
                   { key: 'readme_with_examples', label: 'Documentation', metaTrue: 'README with examples/code blocks', metaFalse: 'README missing or lacks examples', url: gh ? `${gh}#readme` : null },
                   { key: 'security_md', label: 'SECURITY.md', metaTrue: 'Security policy published', metaFalse: 'No security policy found', url: gh ? `${gh}/security` : null },
-                  { key: 'api_docs', label: 'API Documentation', metaTrue: 'OpenAPI spec or docs directory found', metaFalse: 'No API documentation detected', url: service.docs_url || null },
+                  { key: 'api_docs', label: 'API Documentation', metaTrue: 'OpenAPI spec or docs directory found', metaFalse: 'No API documentation detected', url: (transparencyMeta?.api_docs_url as string) || service.docs_url || null },
                   { key: 'model_card', label: 'Model / System Card', metaTrue: 'Model card or system card published', metaFalse: 'No model card found', url: null as string | null },
                 ]
                 return items.filter(item => {
@@ -1232,87 +1236,56 @@ export default function ProductPageClient({
           </div>
         )}
 
-        {/* ═══ DATA SOURCES + SCORE THRESHOLDS (2-col) ═══ */}
-        <div className="grid grid-cols-2 gap-5 mb-5 max-md:grid-cols-1">
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
-            <div className="flex items-center justify-between mb-5">
-              <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{dataSources.length} indexed</span>
-            </div>
-            <div className="flex flex-col gap-2.5">
-              {dataSources.map(src => {
-                const inner = (
-                  <>
-                    <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
-                    <div className="flex flex-col gap-px flex-1 min-w-0">
-                      <span className="font-mono text-[0.7rem] font-medium text-fabric-800">{src.label}</span>
-                      <span className="font-mono text-[0.62rem] text-fabric-400">{src.meta}</span>
-                    </div>
-                    {src.url && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-fabric-300 flex-shrink-0">
-                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                      </svg>
-                    )}
-                  </>
-                )
-                return src.url ? (
-                  <a key={src.label} href={src.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg no-underline hover:border-blue hover:bg-[rgba(61,138,247,0.04)] transition-all cursor-pointer">
-                    {inner}
-                  </a>
-                ) : (
-                  <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
-                    {inner}
-                  </div>
-                )
-              })}
-            </div>
+        {/* ═══ DATA SOURCES ═══ */}
+        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="flex items-center justify-between mb-5">
+            <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
+            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{dataSources.length} indexed</span>
           </div>
-
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 max-md:p-5">
-            <div className="flex items-center justify-between mb-5">
-              <span className="text-[1.05rem] font-semibold text-black tracking-tight">Score Thresholds & Modifiers</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">from scoring engine</span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {[
-                { range: '3.25 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
-                { range: '1.00 – 3.24', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
-                { range: '0.00 – 0.99', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
-              ].map(t => (
-                <div key={t.range} className="flex justify-between items-center py-1.5 border-b border-fabric-100">
-                  <span className="font-mono text-[0.72rem] text-fabric-600">{t.range}</span>
-                  <span className={`font-mono text-[0.72rem] font-medium ${t.color}`}>{t.label}</span>
-                </div>
-              ))}
-              <div className="mt-2 flex flex-col gap-2">
-                <div className="flex justify-between items-center py-1.5 border-b border-fabric-100 last:border-b-0">
-                  <span className="font-mono text-[0.72rem] text-fabric-600">Active modifiers</span>
-                  {service.active_modifiers && service.active_modifiers.length > 0 ? (
-                    <span className="font-mono text-[0.72rem] font-medium text-[#f7931e]">
-                      {service.active_modifiers.map(m => MODIFIER_LABELS[m] || m.replace(/_/g, ' ')).join(', ')}
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[0.72rem] font-medium text-[#0dc956]">None</span>
+          <div className="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
+            {dataSources.map(src => {
+              const inner = (
+                <>
+                  <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">{src.icon}</div>
+                  <div className="flex flex-col gap-px flex-1 min-w-0">
+                    <span className="font-mono text-[0.7rem] font-medium text-fabric-800">{src.label}</span>
+                    <span className="font-mono text-[0.62rem] text-fabric-400">{src.meta}</span>
+                  </div>
+                  {src.url && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-fabric-300 flex-shrink-0">
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
                   )}
+                </>
+              )
+              return src.url ? (
+                <a key={src.label} href={src.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg no-underline hover:border-blue hover:bg-[rgba(61,138,247,0.04)] transition-all cursor-pointer">
+                  {inner}
+                </a>
+              ) : (
+                <div key={src.label} className="flex items-center gap-2.5 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
+                  {inner}
                 </div>
-              </div>
-            </div>
+              )
+            })}
           </div>
         </div>
 
         {/* ═══ VERSION HISTORY ═══ */}
-        {versions.length > 0 && (
+        {versions.length > 0 && (() => {
+          const hasScoreData = versions.some(v => v.score_at_release != null)
+          return (
           <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Version History</span>
-              <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">score per release</span>
+              {hasScoreData && <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">score per release</span>}
             </div>
             {/* Header */}
-            <div className="grid grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px] gap-4 max-md:gap-2 pb-2 mb-1 border-b border-fabric-200">
+            <div className={`grid ${hasScoreData ? 'grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px]' : 'grid-cols-[100px_1fr] max-md:grid-cols-[80px_1fr]'} gap-4 max-md:gap-2 pb-2 mb-1 border-b border-fabric-200`}>
               <span className="font-mono text-[0.65rem] text-fabric-400">VERSION</span>
               <span className="font-mono text-[0.65rem] text-fabric-400">RELEASED</span>
-              <span className="font-mono text-[0.65rem] text-fabric-400 text-right">SCORE</span>
-              <span className="font-mono text-[0.65rem] text-fabric-400 text-right">DELTA</span>
+              {hasScoreData && <span className="font-mono text-[0.65rem] text-fabric-400 text-right">SCORE</span>}
+              {hasScoreData && <span className="font-mono text-[0.65rem] text-fabric-400 text-right">DELTA</span>}
             </div>
             <div className="max-h-[400px] overflow-y-auto no-scrollbar">
               {versions.slice(0, versionsCount).map(v => {
@@ -1331,11 +1304,11 @@ export default function ProductPageClient({
                     ? 'text-[#f7931e]'
                     : 'text-fabric-400'
                 return (
-                  <div key={v.tag} className="grid grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px] gap-4 max-md:gap-2 py-2.5 border-b border-fabric-100 last:border-b-0">
+                  <div key={v.tag} className={`grid ${hasScoreData ? 'grid-cols-[100px_1fr_60px_80px] max-md:grid-cols-[80px_1fr_50px_65px]' : 'grid-cols-[100px_1fr] max-md:grid-cols-[80px_1fr]'} gap-4 max-md:gap-2 py-2.5 border-b border-fabric-100 last:border-b-0`}>
                     <span className="font-mono text-[0.72rem] text-fabric-700">{v.tag}</span>
                     <span className="font-mono text-[0.65rem] text-fabric-400">{formatFullDate(v.released_at)}</span>
-                    <span className={`font-mono text-[0.75rem] font-medium text-right ${scoreClass}`}>{scoreStr}</span>
-                    <span className={`font-mono text-[0.65rem] text-right ${deltaClass}`}>{deltaStr}</span>
+                    {hasScoreData && <span className={`font-mono text-[0.75rem] font-medium text-right ${scoreClass}`}>{scoreStr}</span>}
+                    {hasScoreData && <span className={`font-mono text-[0.65rem] text-right ${deltaClass}`}>{deltaStr}</span>}
                   </div>
                 )
               })}
@@ -1358,7 +1331,8 @@ export default function ProductPageClient({
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ═══ CTA — Are you the publisher? ═══ */}
         <div className="bg-black border border-fabric-700 rounded-xl p-8 flex flex-col gap-6 mt-4 relative overflow-hidden max-md:p-6">
