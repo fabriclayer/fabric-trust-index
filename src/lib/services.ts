@@ -25,6 +25,7 @@ function extractDomain(url?: string | null): string | undefined {
 
 function dbToService(db: any): Service {
   return {
+    id: db.id,
     name: db.name,
     slug: db.slug,
     publisher: db.publisher?.name ?? 'Unknown',

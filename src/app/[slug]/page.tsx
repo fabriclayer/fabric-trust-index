@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import ProductPageClient from './ProductPageClient'
@@ -11,39 +12,40 @@ export async function generateStaticParams() {
   return []
 }
 
-async function loadService(slug: string) {
+// cache() dedupes across generateMetadata + page render within the same request
+const loadService = cache(async (slug: string) => {
   const { getServiceBySlug } = await import('@/lib/services')
   return await getServiceBySlug(slug)
-}
+})
 
-async function loadDetailData(slug: string) {
-
+async function loadDetailData(serviceId: string) {
   try {
     const {
-      getServiceId,
       getServiceIncidents,
       getSignalHistory,
       getServiceVersions,
       getServiceSupplyChain,
-      getLatestSignalMeta,
       getAllSignalMetas,
     } = await import('@/lib/services')
 
-    const serviceId = await getServiceId(slug)
-    if (!serviceId) return null
-
-    const [incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta, signalMetas] = await Promise.all([
+    const [incidents, signalHistory, versions, supplyChain, signalMetas] = await Promise.all([
       getServiceIncidents(serviceId),
       getSignalHistory(serviceId, 'composite'),
       getServiceVersions(serviceId),
       getServiceSupplyChain(serviceId),
-      getLatestSignalMeta(serviceId, 'transparency'),
-      getLatestSignalMeta(serviceId, 'adoption'),
-      getLatestSignalMeta(serviceId, 'maintenance'),
       getAllSignalMetas(serviceId),
     ])
 
-    return { incidents, signalHistory, versions, supplyChain, transparencyMeta, adoptionMeta, maintenanceMeta, signalMetas }
+    return {
+      incidents,
+      signalHistory,
+      versions,
+      supplyChain,
+      transparencyMeta: signalMetas['transparency'] ?? null,
+      adoptionMeta: signalMetas['adoption'] ?? null,
+      maintenanceMeta: signalMetas['maintenance'] ?? null,
+      signalMetas,
+    }
   } catch (err) {
     console.error('Failed to load detail data:', err)
     return null
@@ -91,7 +93,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const service = await loadService(slug)
   if (!service) notFound()
 
-  const detailData = await loadDetailData(slug)
+  // Pass service.id directly — no extra getServiceId query needed
+  const detailData = service.id ? await loadDetailData(service.id) : null
 
   const statusLabel = service.status === 'trusted' ? 'Trusted' : service.status === 'caution' ? 'Caution' : 'Blocked'
   const jsonLd = {

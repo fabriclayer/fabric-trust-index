@@ -8,10 +8,23 @@ import { getUsageSummary } from '@/lib/api-usage'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
+// In-memory cache: avoid re-running 46+ queries on rapid refreshes
+let cachedResponse: string | null = null
+let cachedAt = 0
+const CACHE_TTL_MS = 60_000 // 60 seconds
+
 export async function GET(request: NextRequest) {
   const auth = request.cookies.get('fabric_monitor_auth')?.value
   if (auth !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Return cached response if fresh
+  const now = Date.now()
+  if (cachedResponse && now - cachedAt < CACHE_TTL_MS) {
+    return new NextResponse(cachedResponse, {
+      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+    })
   }
 
   const supabase = createServerClient()
@@ -212,7 +225,7 @@ export async function GET(request: NextRequest) {
 
   const np = nonPendingCount.count ?? 1
 
-  return NextResponse.json({
+  const responseBody = JSON.stringify({
     overview: {
       total: totalCount.count ?? 0,
       trusted: trustedCount.count ?? 0,
@@ -292,5 +305,13 @@ export async function GET(request: NextRequest) {
       totalNonPending: nonPendingCount.count ?? 0,
     },
     timestamp: new Date().toISOString(),
+  })
+
+  // Cache the response for subsequent requests
+  cachedResponse = responseBody
+  cachedAt = Date.now()
+
+  return new NextResponse(responseBody, {
+    headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },
   })
 }
