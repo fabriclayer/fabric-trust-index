@@ -1053,6 +1053,106 @@ interface ReviewData {
   analysis: string | null
   token_usage: { input_tokens: number; output_tokens: number; cost_estimate: number } | null
   duration_ms: number | null
+  action_total?: number
+  action_completed?: number
+}
+
+interface ReviewAction {
+  action_hash: string
+  action_text: string
+  completed: boolean
+  completed_at: string | null
+}
+
+// djb2 hash — stable, fast, no crypto needed
+function hashString(str: string): string {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i)
+    hash = hash & hash // Convert to 32-bit int
+  }
+  return Math.abs(hash).toString(36)
+}
+
+interface ExtractedAction {
+  hash: string
+  text: string
+  lineIndex: number
+  isCodeBlock: boolean
+}
+
+function extractActions(md: string): ExtractedAction[] {
+  const lines = md.split('\n')
+  const actions: ExtractedAction[] = []
+  let currentSection = ''
+  let inCode = false
+  let codeStart = -1
+  let codeBlock: string[] = []
+  const actionSections = ['critical', 'warning', 'fix prompt']
+
+  const isActionSection = (section: string) =>
+    actionSections.some(s => section.toLowerCase().includes(s))
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    if (line.startsWith('## ')) {
+      currentSection = line.slice(3)
+    }
+
+    // Track code blocks under Fix Prompts
+    if (line.startsWith('```')) {
+      if (inCode) {
+        // End of code block — if under an action section, this is an action
+        if (isActionSection(currentSection)) {
+          const text = codeBlock.join('\n').trim()
+          if (text) {
+            actions.push({ hash: hashString(text), text, lineIndex: codeStart, isCodeBlock: true })
+          }
+        }
+        codeBlock = []
+        inCode = false
+      } else {
+        inCode = true
+        codeStart = i
+      }
+      continue
+    }
+    if (inCode) { codeBlock.push(line); continue }
+
+    // Bullet points and numbered items under action sections
+    if (isActionSection(currentSection)) {
+      if (line.match(/^[-*] /) || line.match(/^\d+\. /)) {
+        const text = line.replace(/^[-*] /, '').replace(/^\d+\. /, '').trim()
+        if (text) {
+          actions.push({ hash: hashString(text), text, lineIndex: i, isCodeBlock: false })
+        }
+      }
+    }
+  }
+
+  return actions
+}
+
+function ActionCheckbox({ checked, onClick }: { checked: boolean; onClick: () => void }) {
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      style={{
+        width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+        border: `1.5px solid ${checked ? C.green : C.t3}`,
+        background: checked ? C.green : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'all 0.15s',
+      }}
+    >
+      {checked && (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 5L4 7L8 3" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </div>
+  )
 }
 
 function CodeBlock({ code, id }: { code: string; id: string }) {
@@ -1077,11 +1177,16 @@ function CodeBlock({ code, id }: { code: string; id: string }) {
   )
 }
 
-function renderMarkdown(md: string): React.ReactNode[] {
+function renderMarkdown(
+  md: string,
+  actionLineMap?: Map<number, { hash: string; completed: boolean }>,
+  onToggle?: (hash: string, text: string, completed: boolean) => void,
+): React.ReactNode[] {
   const lines = md.split('\n')
   const elements: React.ReactNode[] = []
   let inCode = false
   let codeBlock: string[] = []
+  let codeStart = -1
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -1090,11 +1195,26 @@ function renderMarkdown(md: string): React.ReactNode[] {
     if (line.startsWith('```')) {
       if (inCode) {
         const code = codeBlock.join('\n')
-        elements.push(<CodeBlock key={`code-${i}`} code={code} id={`code-${i}`} />)
+        const action = actionLineMap?.get(codeStart)
+        if (action && onToggle) {
+          elements.push(
+            <div key={`code-action-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, opacity: action.completed ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+              <div style={{ paddingTop: 12 }}>
+                <ActionCheckbox checked={action.completed} onClick={() => onToggle(action.hash, code, !action.completed)} />
+              </div>
+              <div style={{ flex: 1, textDecoration: action.completed ? 'line-through' : 'none' }}>
+                <CodeBlock key={`code-${i}`} code={code} id={`code-${i}`} />
+              </div>
+            </div>
+          )
+        } else {
+          elements.push(<CodeBlock key={`code-${i}`} code={code} id={`code-${i}`} />)
+        }
         codeBlock = []
         inCode = false
       } else {
         inCode = true
+        codeStart = i
       }
       continue
     }
@@ -1124,10 +1244,18 @@ function renderMarkdown(md: string): React.ReactNode[] {
 
     // Bullet points
     if (line.match(/^[-*] /)) {
+      const action = actionLineMap?.get(i)
+      const isCompleted = action?.completed ?? false
       elements.push(
-        <div key={`li-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3 }}>
-          <span style={{ color: C.t3, flexShrink: 0 }}>{'•'}</span>
-          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(line.slice(2))}</span>
+        <div key={`li-${i}`} style={{ display: 'flex', gap: 8, marginLeft: action ? 0 : 8, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+          {action && onToggle ? (
+            <div style={{ paddingTop: 2 }}>
+              <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, line.slice(2).trim(), !isCompleted)} />
+            </div>
+          ) : (
+            <span style={{ color: C.t3, flexShrink: 0 }}>{'•'}</span>
+          )}
+          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(line.slice(2))}</span>
         </div>
       )
       continue
@@ -1137,10 +1265,18 @@ function renderMarkdown(md: string): React.ReactNode[] {
     if (line.match(/^\d+\. /)) {
       const match = line.match(/^(\d+)\. (.*)/)
       if (match) {
+        const action = actionLineMap?.get(i)
+        const isCompleted = action?.completed ?? false
         elements.push(
-          <div key={`ol-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3 }}>
-            <span style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, flexShrink: 0, minWidth: 18 }}>{match[1]}.</span>
-            <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(match[2])}</span>
+          <div key={`ol-${i}`} style={{ display: 'flex', gap: 8, marginLeft: action ? 0 : 8, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+            {action && onToggle ? (
+              <div style={{ paddingTop: 2 }}>
+                <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, match[2].trim(), !isCompleted)} />
+              </div>
+            ) : (
+              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, flexShrink: 0, minWidth: 18 }}>{match[1]}.</span>
+            )}
+            <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(match[2])}</span>
           </div>
         )
         continue
@@ -1210,6 +1346,9 @@ function ReviewTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [running, setRunning] = useState<null | 'confirm' | 'running'>(null)
   const [runResult, setRunResult] = useState<{ ok: boolean; message: string } | null>(null)
+  // Action state: keyed by review_id → map of action_hash → completed
+  const [actionState, setActionState] = useState<Record<string, Record<string, boolean>>>({})
+  const [loadedActions, setLoadedActions] = useState<Set<string>>(new Set())
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -1221,7 +1360,80 @@ function ReviewTab() {
     setLoading(false)
   }, [])
 
+  const fetchActionsForReview = useCallback(async (reviewId: string) => {
+    if (loadedActions.has(reviewId)) return
+    try {
+      const res = await fetch(`/api/monitor/reviews/actions?review_id=${reviewId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const map: Record<string, boolean> = {}
+      for (const a of (data.actions ?? []) as ReviewAction[]) {
+        map[a.action_hash] = a.completed
+      }
+      setActionState(prev => ({ ...prev, [reviewId]: { ...(prev[reviewId] ?? {}), ...map } }))
+      setLoadedActions(prev => new Set(prev).add(reviewId))
+    } catch { /* ignore */ }
+  }, [loadedActions])
+
   useEffect(() => { fetchReviews() }, [fetchReviews])
+
+  // Load actions for latest review when reviews are fetched
+  useEffect(() => {
+    const latest = reviews.find(r => r.status === 'completed')
+    if (latest) fetchActionsForReview(latest.id)
+  }, [reviews, fetchActionsForReview])
+
+  const handleToggleAction = async (reviewId: string, hash: string, text: string, completed: boolean) => {
+    // Optimistic update
+    setActionState(prev => ({
+      ...prev,
+      [reviewId]: { ...(prev[reviewId] ?? {}), [hash]: completed },
+    }))
+    // Also update review counts optimistically
+    setReviews(prev => prev.map(r => {
+      if (r.id !== reviewId) return r
+      const prevCompleted = r.action_completed ?? 0
+      const delta = completed ? 1 : -1
+      const prevTotal = r.action_total ?? 0
+      return {
+        ...r,
+        action_completed: Math.max(0, prevCompleted + delta),
+        action_total: Math.max(prevTotal, (actionState[reviewId] ? Object.keys(actionState[reviewId]).length : 0)),
+      }
+    }))
+
+    try {
+      await fetch('/api/monitor/reviews/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: reviewId, action_hash: hash, action_text: text, completed }),
+      })
+    } catch {
+      // Revert on failure
+      setActionState(prev => ({
+        ...prev,
+        [reviewId]: { ...(prev[reviewId] ?? {}), [hash]: !completed },
+      }))
+    }
+  }
+
+  const buildActionLineMap = (reviewId: string, analysis: string): Map<number, { hash: string; completed: boolean }> => {
+    const extracted = extractActions(analysis)
+    const state = actionState[reviewId] ?? {}
+    const map = new Map<number, { hash: string; completed: boolean }>()
+    for (const action of extracted) {
+      map.set(action.lineIndex, { hash: action.hash, completed: state[action.hash] ?? false })
+    }
+    return map
+  }
+
+  const getActionProgress = (reviewId: string, analysis: string | null): { total: number; completed: number } => {
+    if (!analysis) return { total: 0, completed: 0 }
+    const extracted = extractActions(analysis)
+    const state = actionState[reviewId] ?? {}
+    const completed = extracted.filter(a => state[a.hash]).length
+    return { total: extracted.length, completed }
+  }
 
   const handleRunReview = async () => {
     if (!running) {
@@ -1240,7 +1452,6 @@ function ReviewTab() {
         const body = await res.json()
         if (res.ok) {
           setRunResult({ ok: true, message: body.status === 'triggered' ? 'Review triggered — running in background (~60s)' : 'Review completed' })
-          // Refresh reviews after a delay
           setTimeout(fetchReviews, 5000)
           setTimeout(fetchReviews, 30000)
           setTimeout(fetchReviews, 90000)
@@ -1262,7 +1473,7 @@ function ReviewTab() {
     return d.toLocaleString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, day: 'numeric', month: 'short', timeZone: 'Australia/Sydney' }) + ' AEST'
   }
 
-  const costPerMonth = 0.15 * 2 * 30 // ~$9/month at 2x/day
+  const costPerMonth = 0.15 * 2 * 30
 
   if (loading) {
     return (
@@ -1271,6 +1482,8 @@ function ReviewTab() {
       </div>
     )
   }
+
+  const latestProgress = latest ? getActionProgress(latest.id, latest.analysis) : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1333,6 +1546,16 @@ function ReviewTab() {
       {latest ? (
         <Card title="Latest Review" right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {latestProgress && latestProgress.total > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 60, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(latestProgress.completed / latestProgress.total) * 100}%`, background: latestProgress.completed === latestProgress.total ? C.green : C.purple, borderRadius: 2, transition: 'width 0.3s' }} />
+                </div>
+                <Mono style={{ fontSize: 10, color: latestProgress.completed === latestProgress.total ? C.green : C.purple }}>
+                  {latestProgress.completed}/{latestProgress.total} actions
+                </Mono>
+              </div>
+            )}
             {latest.token_usage && (
               <Mono style={{ fontSize: 10, color: C.t3 }}>
                 {latest.token_usage.input_tokens.toLocaleString()} in · {latest.token_usage.output_tokens.toLocaleString()} out · ${latest.token_usage.cost_estimate.toFixed(3)}
@@ -1343,7 +1566,11 @@ function ReviewTab() {
             )}
           </div>
         }>
-          <div>{latest.analysis ? renderMarkdown(latest.analysis) : <Mono style={{ fontSize: 12, color: C.t3 }}>No analysis available</Mono>}</div>
+          <div>{latest.analysis ? renderMarkdown(
+            latest.analysis,
+            buildActionLineMap(latest.id, latest.analysis),
+            (hash, text, completed) => handleToggleAction(latest.id, hash, text, completed),
+          ) : <Mono style={{ fontSize: 12, color: C.t3 }}>No analysis available</Mono>}</div>
         </Card>
       ) : (
         <Card>
@@ -1357,40 +1584,72 @@ function ReviewTab() {
       {previousReviews.length > 0 && (
         <Card title="Previous Reviews" pad={false}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {previousReviews.map((review, i) => (
-              <div key={review.id}>
-                <div
-                  onClick={() => setExpandedId(expandedId === review.id ? null : review.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px',
-                    borderBottom: `1px solid ${C.border}`, cursor: 'pointer',
-                    background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
-                    transition: 'background 0.15s',
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: C.t3, transform: expandedId === review.id ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>{'▶'}</span>
-                  <Mono style={{ fontSize: 11, color: C.t2, width: 160 }}>{formatReviewTime(review.created_at)}</Mono>
-                  <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(review.created_at)}</Mono>
-                  <div style={{ flex: 1 }} />
-                  <Badge
-                    text={review.status}
-                    color={review.status === 'completed' ? C.green : review.status === 'failed' ? C.red : C.orange}
-                    bg={review.status === 'completed' ? C.greenDim : review.status === 'failed' ? C.redDim : C.orangeDim}
-                  />
-                  {review.duration_ms && (
-                    <Mono style={{ fontSize: 10, color: C.t3 }}>{(review.duration_ms / 1000).toFixed(1)}s</Mono>
-                  )}
-                  {review.token_usage && (
-                    <Mono style={{ fontSize: 10, color: C.t3 }}>${review.token_usage.cost_estimate.toFixed(3)}</Mono>
+            {previousReviews.map((review, i) => {
+              const progress = review.action_total ? { total: review.action_total, completed: review.action_completed ?? 0 } : null
+              return (
+                <div key={review.id}>
+                  <div
+                    onClick={() => {
+                      const newId = expandedId === review.id ? null : review.id
+                      setExpandedId(newId)
+                      if (newId && review.analysis) fetchActionsForReview(review.id)
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px',
+                      borderBottom: `1px solid ${C.border}`, cursor: 'pointer',
+                      background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: C.t3, transform: expandedId === review.id ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>{'▶'}</span>
+                    <Mono style={{ fontSize: 11, color: C.t2, width: 160 }}>{formatReviewTime(review.created_at)}</Mono>
+                    <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(review.created_at)}</Mono>
+                    <div style={{ flex: 1 }} />
+                    {progress && progress.total > 0 && (
+                      <Mono style={{
+                        fontSize: 10,
+                        color: progress.completed === progress.total ? C.green : progress.completed > 0 ? C.orange : C.t3,
+                      }}>
+                        {progress.completed}/{progress.total}
+                      </Mono>
+                    )}
+                    <Badge
+                      text={review.status}
+                      color={review.status === 'completed' ? C.green : review.status === 'failed' ? C.red : C.orange}
+                      bg={review.status === 'completed' ? C.greenDim : review.status === 'failed' ? C.redDim : C.orangeDim}
+                    />
+                    {review.duration_ms && (
+                      <Mono style={{ fontSize: 10, color: C.t3 }}>{(review.duration_ms / 1000).toFixed(1)}s</Mono>
+                    )}
+                    {review.token_usage && (
+                      <Mono style={{ fontSize: 10, color: C.t3 }}>${review.token_usage.cost_estimate.toFixed(3)}</Mono>
+                    )}
+                  </div>
+                  {expandedId === review.id && review.analysis && (
+                    <div style={{ padding: '16px 24px 20px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.02)' }}>
+                      {(() => {
+                        const prog = getActionProgress(review.id, review.analysis)
+                        return prog.total > 0 ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+                            <div style={{ width: 80, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${(prog.completed / prog.total) * 100}%`, background: prog.completed === prog.total ? C.green : C.purple, borderRadius: 2, transition: 'width 0.3s' }} />
+                            </div>
+                            <Mono style={{ fontSize: 10, color: prog.completed === prog.total ? C.green : C.purple }}>
+                              {prog.completed} / {prog.total} actions completed
+                            </Mono>
+                          </div>
+                        ) : null
+                      })()}
+                      {renderMarkdown(
+                        review.analysis,
+                        buildActionLineMap(review.id, review.analysis),
+                        (hash, text, completed) => handleToggleAction(review.id, hash, text, completed),
+                      )}
+                    </div>
                   )}
                 </div>
-                {expandedId === review.id && review.analysis && (
-                  <div style={{ padding: '16px 24px 20px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.02)' }}>
-                    {renderMarkdown(review.analysis)}
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       )}

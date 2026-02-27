@@ -16,5 +16,31 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  return NextResponse.json({ reviews: reviews ?? [] })
+  const reviewList = reviews ?? []
+
+  // Fetch action counts for all reviews in a single query
+  const reviewIds = reviewList.map(r => r.id)
+  let actionCounts: Record<string, { total: number; completed: number }> = {}
+  if (reviewIds.length > 0) {
+    const { data: actions } = await supabase
+      .from('review_actions')
+      .select('review_id, completed')
+      .in('review_id', reviewIds)
+
+    if (actions) {
+      for (const a of actions) {
+        if (!actionCounts[a.review_id]) actionCounts[a.review_id] = { total: 0, completed: 0 }
+        actionCounts[a.review_id].total++
+        if (a.completed) actionCounts[a.review_id].completed++
+      }
+    }
+  }
+
+  const enriched = reviewList.map(r => ({
+    ...r,
+    action_total: actionCounts[r.id]?.total ?? 0,
+    action_completed: actionCounts[r.id]?.completed ?? 0,
+  }))
+
+  return NextResponse.json({ reviews: enriched })
 }
