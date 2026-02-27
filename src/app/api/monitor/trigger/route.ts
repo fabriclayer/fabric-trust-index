@@ -17,6 +17,7 @@ const ALLOWED_ENDPOINTS: Record<string, { method: 'GET' | 'POST'; defaultParams?
   'enrich-publishers':    { method: 'GET' },
   'recompute':            { method: 'GET' },
   'health-check':         { method: 'GET' },
+  'review-dashboard':     { method: 'GET' },
 }
 
 export async function POST(request: NextRequest) {

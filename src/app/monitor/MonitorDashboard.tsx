@@ -86,6 +86,7 @@ const TABS = [
   { id: 'discovery', label: 'Discovery' },
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'crons', label: 'All Crons' },
+  { id: 'review', label: 'Review' },
 ]
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
@@ -120,6 +121,7 @@ const PIPELINES = [
   { id: 'enrich-publishers', name: 'Publisher Enrichment', freq: 'on-demand', schedule: 'manual', step: 'enrichment' },
   { id: 'collect-clawhub', name: 'ClawHub Scoring', freq: 'on pending', schedule: '*/30 * * * *', step: 'collection' },
   { id: 'generate-assessments', name: 'AI Assessments', freq: 'daily 8am', schedule: '0 8 * * *', step: 'assessment' },
+  { id: 'review-dashboard', name: 'AI Dashboard Review', freq: '12h (10,22 UTC)', schedule: '0 10,22 * * *', step: 'assessment' },
   { id: 'recompute', name: 'Composite Recompute', freq: 'manual', schedule: 'manual', step: 'collection' },
 ]
 
@@ -841,6 +843,344 @@ function OverridesTab({ data }: { data: MonitorData }) {
   )
 }
 
+// ─── REVIEW TAB ──────────────────────────────────────────────────
+interface ReviewData {
+  id: string
+  created_at: string
+  status: 'pending' | 'completed' | 'failed'
+  analysis: string | null
+  token_usage: { input_tokens: number; output_tokens: number; cost_estimate: number } | null
+  duration_ms: number | null
+}
+
+function renderMarkdown(md: string): React.ReactNode[] {
+  const lines = md.split('\n')
+  const elements: React.ReactNode[] = []
+  let inCode = false
+  let codeBlock: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Code block toggle
+    if (line.startsWith('```')) {
+      if (inCode) {
+        elements.push(
+          <pre key={`code-${i}`} style={{
+            background: 'rgba(0,0,0,0.4)', border: `1px solid ${C.border}`, borderRadius: 8,
+            padding: '12px 16px', margin: '8px 0', overflowX: 'auto', fontFamily: F.mono, fontSize: 11,
+            color: C.t2, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+          }}>{codeBlock.join('\n')}</pre>
+        )
+        codeBlock = []
+        inCode = false
+      } else {
+        inCode = true
+      }
+      continue
+    }
+    if (inCode) { codeBlock.push(line); continue }
+
+    // ## Headers
+    if (line.startsWith('## ')) {
+      const text = line.slice(3)
+      const hColor = text.includes('Critical') ? C.red : text.includes('Warning') ? C.orange : text.includes('Healthy') ? C.green : text.includes('Trend') ? C.blue : text.includes('Recommend') ? C.purple : C.text
+      elements.push(
+        <div key={`h-${i}`} style={{ fontSize: 15, fontWeight: 700, color: hColor, marginTop: 20, marginBottom: 8, letterSpacing: -0.3 }}>
+          {text}
+        </div>
+      )
+      continue
+    }
+
+    // ### Subheaders
+    if (line.startsWith('### ')) {
+      elements.push(
+        <div key={`sh-${i}`} style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 14, marginBottom: 4 }}>
+          {line.slice(4)}
+        </div>
+      )
+      continue
+    }
+
+    // Bullet points
+    if (line.match(/^[-*] /)) {
+      elements.push(
+        <div key={`li-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3 }}>
+          <span style={{ color: C.t3, flexShrink: 0 }}>{'•'}</span>
+          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(line.slice(2))}</span>
+        </div>
+      )
+      continue
+    }
+
+    // Numbered list
+    if (line.match(/^\d+\. /)) {
+      const match = line.match(/^(\d+)\. (.*)/)
+      if (match) {
+        elements.push(
+          <div key={`ol-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3 }}>
+            <span style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, flexShrink: 0, minWidth: 18 }}>{match[1]}.</span>
+            <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(match[2])}</span>
+          </div>
+        )
+        continue
+      }
+    }
+
+    // Empty line
+    if (!line.trim()) {
+      elements.push(<div key={`br-${i}`} style={{ height: 6 }} />)
+      continue
+    }
+
+    // Normal paragraph
+    elements.push(
+      <div key={`p-${i}`} style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginTop: 2 }}>
+        {renderInline(line)}
+      </div>
+    )
+  }
+
+  return elements
+}
+
+function renderInline(text: string): React.ReactNode {
+  // Handle **bold**, `code`, and plain text
+  const parts: React.ReactNode[] = []
+  let remaining = text
+  let key = 0
+
+  while (remaining.length > 0) {
+    // Bold
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/)
+    // Inline code
+    const codeMatch = remaining.match(/`([^`]+)`/)
+
+    // Find the earliest match
+    const boldIdx = boldMatch ? remaining.indexOf(boldMatch[0]) : Infinity
+    const codeIdx = codeMatch ? remaining.indexOf(codeMatch[0]) : Infinity
+
+    if (boldIdx === Infinity && codeIdx === Infinity) {
+      parts.push(<span key={key++}>{remaining}</span>)
+      break
+    }
+
+    if (boldIdx <= codeIdx && boldMatch) {
+      if (boldIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, boldIdx)}</span>)
+      parts.push(<strong key={key++} style={{ color: C.text, fontWeight: 600 }}>{boldMatch[1]}</strong>)
+      remaining = remaining.slice(boldIdx + boldMatch[0].length)
+    } else if (codeMatch) {
+      if (codeIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, codeIdx)}</span>)
+      parts.push(
+        <code key={key++} style={{
+          fontFamily: F.mono, fontSize: 11, background: 'rgba(255,255,255,0.06)',
+          padding: '1px 5px', borderRadius: 3, color: C.pink,
+        }}>{codeMatch[1]}</code>
+      )
+      remaining = remaining.slice(codeIdx + codeMatch[0].length)
+    }
+  }
+
+  return <>{parts}</>
+}
+
+function ReviewTab() {
+  const [reviews, setReviews] = useState<ReviewData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [running, setRunning] = useState<null | 'confirm' | 'running'>(null)
+  const [runResult, setRunResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  const fetchReviews = useCallback(async () => {
+    try {
+      const res = await fetch('/api/monitor/reviews')
+      if (!res.ok) return
+      const data = await res.json()
+      setReviews(data.reviews ?? [])
+    } catch { /* ignore */ }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { fetchReviews() }, [fetchReviews])
+
+  const handleRunReview = async () => {
+    if (!running) {
+      setRunning('confirm')
+      setRunResult(null)
+      return
+    }
+    if (running === 'confirm') {
+      setRunning('running')
+      try {
+        const res = await fetch('/api/monitor/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: 'review-dashboard' }),
+        })
+        const body = await res.json()
+        if (res.ok) {
+          setRunResult({ ok: true, message: body.status === 'triggered' ? 'Review triggered — running in background (~60s)' : 'Review completed' })
+          // Refresh reviews after a delay
+          setTimeout(fetchReviews, 5000)
+          setTimeout(fetchReviews, 30000)
+          setTimeout(fetchReviews, 90000)
+        } else {
+          setRunResult({ ok: false, message: body.error || `Failed (${res.status})` })
+        }
+      } catch {
+        setRunResult({ ok: false, message: 'Network error' })
+      }
+      setRunning(null)
+    }
+  }
+
+  const latest = reviews.find(r => r.status === 'completed')
+  const previousReviews = reviews.filter(r => r !== latest)
+
+  const formatReviewTime = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, day: 'numeric', month: 'short', timeZone: 'Australia/Sydney' }) + ' AEST'
+  }
+
+  const costPerMonth = 0.15 * 2 * 30 // ~$9/month at 2x/day
+
+  if (loading) {
+    return (
+      <div style={{ padding: 60, textAlign: 'center' }}>
+        <Mono style={{ fontSize: 13, color: C.t3 }}>Loading reviews...</Mono>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>AI Dashboard Review</span>
+          <Mono style={{ fontSize: 10, color: C.t3 }}>Opus 4.6 · twice daily</Mono>
+          {latest && (
+            <Mono style={{ fontSize: 10, color: C.t3 }}>
+              Last review: {formatReviewTime(latest.created_at)} ({timeAgo(latest.created_at)})
+            </Mono>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {runResult && (
+            <Mono style={{ fontSize: 10, color: runResult.ok ? C.green : C.red }}>{runResult.message}</Mono>
+          )}
+          {running === 'confirm' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Mono style={{ fontSize: 10, color: C.orange }}>Run review now?</Mono>
+              <button onClick={handleRunReview} style={{
+                fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.green, background: C.greenDim,
+                border: `1px solid ${C.green}22`, borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+              }}>Yes</button>
+              <button onClick={() => setRunning(null)} style={{
+                fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent',
+                border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+              }}>No</button>
+            </div>
+          ) : running === 'running' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 12, height: 12, border: `2px solid ${C.t4}`, borderTopColor: C.purple,
+                borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+              }} />
+              <Mono style={{ fontSize: 10, color: C.purple }}>Running review...</Mono>
+            </div>
+          ) : (
+            <button onClick={handleRunReview} style={{
+              fontFamily: F.mono, fontSize: 10, fontWeight: 500, color: C.purple, background: C.purpleDim,
+              border: `1px solid ${C.purple}22`, borderRadius: 6, padding: '5px 14px', cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}>Run Review</button>
+          )}
+        </div>
+      </div>
+
+      {/* Cost estimate */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: C.border, borderRadius: 16, overflow: 'hidden' }}>
+        <StatBox label="Reviews Run" value={reviews.filter(r => r.status === 'completed').length} color={C.purple} />
+        <StatBox label="Avg Duration" value={reviews.filter(r => r.duration_ms).length > 0
+          ? `${Math.round(reviews.filter(r => r.duration_ms).reduce((s, r) => s + (r.duration_ms ?? 0), 0) / reviews.filter(r => r.duration_ms).length / 1000)}s`
+          : '—'} color={C.text} />
+        <StatBox label="Est. Cost/Review" value="~$0.15" color={C.text} sub="Opus 4.6" />
+        <StatBox label="Est. Cost/Month" value={`~$${costPerMonth.toFixed(0)}`} color={C.text} sub="2x daily" />
+      </div>
+
+      {/* Latest review */}
+      {latest ? (
+        <Card title="Latest Review" right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {latest.token_usage && (
+              <Mono style={{ fontSize: 10, color: C.t3 }}>
+                {latest.token_usage.input_tokens.toLocaleString()} in · {latest.token_usage.output_tokens.toLocaleString()} out · ${latest.token_usage.cost_estimate.toFixed(3)}
+              </Mono>
+            )}
+            {latest.duration_ms && (
+              <Mono style={{ fontSize: 10, color: C.t3 }}>{(latest.duration_ms / 1000).toFixed(1)}s</Mono>
+            )}
+          </div>
+        }>
+          <div>{latest.analysis ? renderMarkdown(latest.analysis) : <Mono style={{ fontSize: 12, color: C.t3 }}>No analysis available</Mono>}</div>
+        </Card>
+      ) : (
+        <Card>
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <Mono style={{ fontSize: 13, color: C.t3 }}>No reviews yet. Click "Run Review" to generate the first one.</Mono>
+          </div>
+        </Card>
+      )}
+
+      {/* Previous reviews */}
+      {previousReviews.length > 0 && (
+        <Card title="Previous Reviews" pad={false}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {previousReviews.map((review, i) => (
+              <div key={review.id}>
+                <div
+                  onClick={() => setExpandedId(expandedId === review.id ? null : review.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px',
+                    borderBottom: `1px solid ${C.border}`, cursor: 'pointer',
+                    background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: C.t3, transform: expandedId === review.id ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>{'▶'}</span>
+                  <Mono style={{ fontSize: 11, color: C.t2, width: 160 }}>{formatReviewTime(review.created_at)}</Mono>
+                  <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(review.created_at)}</Mono>
+                  <div style={{ flex: 1 }} />
+                  <Badge
+                    text={review.status}
+                    color={review.status === 'completed' ? C.green : review.status === 'failed' ? C.red : C.orange}
+                    bg={review.status === 'completed' ? C.greenDim : review.status === 'failed' ? C.redDim : C.orangeDim}
+                  />
+                  {review.duration_ms && (
+                    <Mono style={{ fontSize: 10, color: C.t3 }}>{(review.duration_ms / 1000).toFixed(1)}s</Mono>
+                  )}
+                  {review.token_usage && (
+                    <Mono style={{ fontSize: 10, color: C.t3 }}>${review.token_usage.cost_estimate.toFixed(3)}</Mono>
+                  )}
+                </div>
+                {expandedId === review.id && review.analysis && (
+                  <div style={{ padding: '16px 24px 20px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.02)' }}>
+                    {renderMarkdown(review.analysis)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
 // ─── ALL CRONS TAB ────────────────────────────────────────────────
 function CronsTab() {
   const headers = ['Pipeline', 'Frequency', 'Schedule', 'Step', '']
@@ -1079,6 +1419,7 @@ export default function MonitorDashboard() {
         {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'overrides' && <OverridesTab data={data} />}
         {tab === 'crons' && <CronsTab />}
+        {tab === 'review' && <ReviewTab />}
       </div>
 
       {/* FOOTER */}
