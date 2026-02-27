@@ -27,6 +27,14 @@ For every issue in Critical and Warnings above, provide a ready-to-paste Claude 
 [The exact prompt to paste into Claude Code. Be specific — reference file paths, function names, the exact bug, and what the fix should do. The prompt should give Claude Code enough context to find and fix the issue without further clarification.]
 \`\`\`
 
+If a fix also requires manual steps that Claude Code cannot do (running SQL in Supabase dashboard, changing Vercel env vars, updating DNS, deploying, triggering crons manually, approving discovery queue items, etc.), add a **Manual Steps** section immediately after the code block:
+
+**Manual Steps:**
+- [ ] Step 1 description
+- [ ] Step 2 description
+
+Only include Manual Steps when there are genuinely manual actions needed. Pure code fixes handled by Claude Code do not need this section.
+
 The codebase is at ~/Desktop/fabric-trust-index (Next.js 15, TypeScript, Supabase). The operator pastes these prompts directly into Claude Code which has full access to the repo. Write prompts that are self-contained — include the "why" and "what" so Claude Code can implement the fix autonomously.
 
 Be specific with numbers from the data. Reference service slugs, override names, signal values.`

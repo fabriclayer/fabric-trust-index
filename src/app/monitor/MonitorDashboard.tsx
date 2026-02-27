@@ -109,7 +109,7 @@ const TABS = [
   { id: 'discovery', label: 'Discovery' },
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'crons', label: 'All Crons' },
-  { id: 'review', label: 'Review' },
+  { id: 'review', label: 'Dev Review' },
 ]
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
@@ -1116,6 +1116,14 @@ function extractActions(md: string): ExtractedAction[] {
       continue
     }
     if (inCode) { codeBlock.push(line); continue }
+
+    // Detect manual step checkboxes: "- [ ] step" under Fix Prompts
+    if (isFixPrompts(currentSection) && line.match(/^- \[ \] /)) {
+      const text = line.slice(6).trim()
+      if (text) {
+        actions.push({ hash: hashString(text), text, lineIndex: i, isCodeBlock: false })
+      }
+    }
   }
 
   return actions
@@ -1229,20 +1237,32 @@ function renderMarkdown(
       continue
     }
 
-    // Bullet points
-    if (line.match(/^[-*] /)) {
+    // Manual step checkboxes: "- [ ] step"
+    if (line.match(/^- \[ \] /)) {
       const action = actionLineMap?.get(i)
       const isCompleted = action?.completed ?? false
+      const text = line.slice(6)
       elements.push(
-        <div key={`li-${i}`} style={{ display: 'flex', gap: 8, marginLeft: action ? 0 : 8, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+        <div key={`chk-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 0, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
           {action && onToggle ? (
             <div style={{ paddingTop: 2 }}>
-              <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, line.slice(2).trim(), !isCompleted)} />
+              <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, text.trim(), !isCompleted)} />
             </div>
           ) : (
-            <span style={{ color: C.t3, flexShrink: 0 }}>{'•'}</span>
+            <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${C.t3}`, flexShrink: 0, marginTop: 2 }} />
           )}
-          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(line.slice(2))}</span>
+          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(text)}</span>
+        </div>
+      )
+      continue
+    }
+
+    // Bullet points
+    if (line.match(/^[-*] /)) {
+      elements.push(
+        <div key={`li-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3, alignItems: 'flex-start' }}>
+          <span style={{ color: C.t3, flexShrink: 0 }}>{'•'}</span>
+          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(line.slice(2))}</span>
         </div>
       )
       continue
@@ -1252,18 +1272,10 @@ function renderMarkdown(
     if (line.match(/^\d+\. /)) {
       const match = line.match(/^(\d+)\. (.*)/)
       if (match) {
-        const action = actionLineMap?.get(i)
-        const isCompleted = action?.completed ?? false
         elements.push(
-          <div key={`ol-${i}`} style={{ display: 'flex', gap: 8, marginLeft: action ? 0 : 8, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-            {action && onToggle ? (
-              <div style={{ paddingTop: 2 }}>
-                <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, match[2].trim(), !isCompleted)} />
-              </div>
-            ) : (
-              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, flexShrink: 0, minWidth: 18 }}>{match[1]}.</span>
-            )}
-            <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(match[2])}</span>
+          <div key={`ol-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 8, marginTop: 3 }}>
+            <span style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, flexShrink: 0, minWidth: 18 }}>{match[1]}.</span>
+            <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(match[2])}</span>
           </div>
         )
         continue
