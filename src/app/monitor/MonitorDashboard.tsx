@@ -1117,13 +1117,7 @@ function extractActions(md: string): ExtractedAction[] {
     }
     if (inCode) { codeBlock.push(line); continue }
 
-    // Detect manual step checkboxes: "- [ ] step" under Fix Prompts
-    if (isFixPrompts(currentSection) && line.match(/^- \[ \] /)) {
-      const text = line.slice(6).trim()
-      if (text) {
-        actions.push({ hash: hashString(text), text, lineIndex: i, isCodeBlock: false })
-      }
-    }
+
   }
 
   return actions
@@ -1237,21 +1231,13 @@ function renderMarkdown(
       continue
     }
 
-    // Manual step checkboxes: "- [ ] step"
+    // Manual step items: "- [ ] step" — render as plain bullet
     if (line.match(/^- \[ \] /)) {
-      const action = actionLineMap?.get(i)
-      const isCompleted = action?.completed ?? false
       const text = line.slice(6)
       elements.push(
-        <div key={`chk-${i}`} style={{ display: 'flex', gap: 8, marginLeft: 0, marginTop: 3, alignItems: 'flex-start', opacity: isCompleted ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-          {action && onToggle ? (
-            <div style={{ paddingTop: 2 }}>
-              <ActionCheckbox checked={isCompleted} onClick={() => onToggle(action.hash, text.trim(), !isCompleted)} />
-            </div>
-          ) : (
-            <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${C.t3}`, flexShrink: 0, marginTop: 2 }} />
-          )}
-          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, textDecoration: isCompleted ? 'line-through' : 'none' }}>{renderInline(text)}</span>
+        <div key={`ms-${i}`} style={{ display: 'flex', gap: 6, marginLeft: 8, marginTop: 3, alignItems: 'flex-start' }}>
+          <span style={{ color: C.t3, flexShrink: 0 }}>•</span>
+          <span style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{renderInline(text)}</span>
         </div>
       )
       continue

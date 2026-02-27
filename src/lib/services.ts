@@ -104,6 +104,51 @@ export async function getAllSlugs(): Promise<{ slug: string; updated_at: string 
   return all
 }
 
+/** Lean query for directory listing — selects only card-relevant columns and filters at the DB level */
+export async function getServicesForDirectory(): Promise<Service[]> {
+  const supabase = createAnonClient()
+  const COLUMNS = 'name, slug, description, category, composite_score, status, icon, logo_url, updated_at, created_at, github_repo, publisher:publishers(name, website_url)'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const all: any[] = []
+  let from = 0
+  const PAGE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('services')
+      .select(COLUMNS)
+      .neq('status', 'pending')
+      .or('npm_package.not.is.null,github_repo.not.is.null,endpoint_url.not.is.null,pypi_package.not.is.null,homepage_url.not.is.null')
+      .order('composite_score', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  return all.map(db => ({
+    name: db.name,
+    slug: db.slug,
+    publisher: db.publisher?.name ?? 'Unknown',
+    publisher_url: db.publisher?.website_url || undefined,
+    category: db.category,
+    tag: TAG_CLASSES[db.category] || '',
+    description: db.description ?? '',
+    signals: [],
+    score: db.composite_score,
+    status: db.status,
+    icon: db.icon,
+    logo_url: db.logo_url || (db.icon?.startsWith('http') ? db.icon : undefined),
+    updated: formatUpdatedAt(db.updated_at),
+    domain: extractDomain(db.publisher?.website_url),
+    github_repo: db.github_repo || undefined,
+    created_at: db.created_at || undefined,
+    updated_at: db.updated_at || undefined,
+  }))
+}
+
 export async function getServices(): Promise<Service[]> {
   const supabase = createAnonClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
