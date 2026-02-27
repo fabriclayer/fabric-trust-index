@@ -22,6 +22,7 @@ interface MKol { id: string; name: string; handle: string; platform: string; tie
 interface MNetworking { id: string; project_name: string; handle: string | null; platform: string; trust_page_slug: string | null; website_url: string | null; stage: string; engagement_count: number; last_contacted_at: string | null; notes: string | null }
 interface MContact { id: string; networking_id: string; name: string; role: string | null; x_handle: string | null; linkedin_handle: string | null; telegram_handle: string | null }
 interface NData { kols: MKol[]; networking: MNetworking[]; contacts: MContact[] }
+interface OutreachTarget { name: string; slug: string; composite_score: number; github_repo: string; github_org: string | null; homepage_url: string | null; category: string | null; publisher_name: string | null }
 
 // ─── ATOMS ───────────────────────────────────────────────────────
 function Mono({ children, style: s }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -87,6 +88,7 @@ const timeAgo = (iso: string | null) => {
 }
 
 const profileUrl = (handle: string, platform: string) => {
+  if (platform === 'github') return `https://github.com/${handle.replace('@', '')}`
   if (platform === 'x') return `https://x.com/${handle.replace('@', '')}`
   if (platform === 'bluesky') return `https://bsky.app/profile/${handle.replace('@', '')}`
   if (platform === 'linkedin') return `https://linkedin.com/in/${handle.replace('@', '')}`
@@ -217,7 +219,7 @@ function KolSection({ kols, onUpdate, onEngage, onCreate }: {
 }
 
 // ─── NETWORKING SECTION ──────────────────────────────────────────
-function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate, onDelete, onCreateContact, onUpdateContact, onDeleteContact }: {
+function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate, onDelete, onCreateContact, onUpdateContact, onDeleteContact, onFindTargets }: {
   networking: MNetworking[]
   contacts: MContact[]
   onUpdate: (id: string, updates: Record<string, unknown>) => void
@@ -227,6 +229,7 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
   onCreateContact: (item: { networking_id: string; name: string; role?: string; x_handle?: string; linkedin_handle?: string; telegram_handle?: string }) => void
   onUpdateContact: (id: string, updates: Record<string, unknown>) => void
   onDeleteContact: (id: string) => void
+  onFindTargets: () => void
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
@@ -268,7 +271,10 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
 
   return (
     <Card title="Networking / Outreach" right={
-      <button onClick={() => setShowAdd(!showAdd)} style={addBtnStyle}>+ Add Project</button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onFindTargets} style={{ fontFamily: F.mono, fontSize: 11, color: C.pink, background: C.pinkDim, border: `1px solid ${C.pink}22`, borderRadius: 8, padding: '5px 14px', cursor: 'pointer' }}>Find Outreach Targets</button>
+        <button onClick={() => setShowAdd(!showAdd)} style={addBtnStyle}>+ Add Project</button>
+      </div>
     } pad={false}>
       {showAdd && (
         <div style={{ padding: '12px 24px 16px', borderBottom: `1px solid ${C.border}` }}>
@@ -277,7 +283,7 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
             <input placeholder="Website URL" value={newWebsite} onChange={e => setNewWebsite(e.target.value)} style={{ ...inputStyle, width: 200 }} />
             <input placeholder="@handle" value={newHandle} onChange={e => setNewHandle(e.target.value)} style={{ ...inputStyle, width: 130 }} />
             <select value={newPlatform} onChange={e => setNewPlatform(e.target.value)} style={selectStyle}>
-              {['x', 'bluesky', 'linkedin'].map(p => <option key={p} value={p}>{p}</option>)}
+              {['x', 'github', 'bluesky', 'linkedin'].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -445,10 +451,149 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
   )
 }
 
+// ─── FIND TARGETS MODAL ─────────────────────────────────────────
+function FindTargetsModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [loading, setLoading] = useState(true)
+  const [targets, setTargets] = useState<OutreachTarget[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [adding, setAdding] = useState(false)
+  const [result, setResult] = useState<{ inserted: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/monitor/generate-targets')
+        if (!res.ok) { setError('Failed to fetch targets'); setLoading(false); return }
+        const json = await res.json()
+        setTargets(json.targets ?? [])
+        // Pre-select all
+        setSelected(new Set((json.targets ?? []).map((t: OutreachTarget) => t.slug)))
+      } catch { setError('Network error') }
+      setLoading(false)
+    })()
+  }, [])
+
+  const toggleSelect = (slug: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug); else next.add(slug)
+      return next
+    })
+  }
+  const toggleAll = () => {
+    if (selected.size === targets.length) setSelected(new Set())
+    else setSelected(new Set(targets.map(t => t.slug)))
+  }
+
+  const handleAdd = async () => {
+    const toAdd = targets.filter(t => selected.has(t.slug))
+    if (toAdd.length === 0) return
+    setAdding(true)
+    try {
+      const res = await fetch('/api/monitor/generate-targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets: toAdd.map(t => ({ name: t.name, slug: t.slug, github_org: t.github_org, composite_score: t.composite_score, category: t.category, homepage_url: t.homepage_url })) }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setResult({ inserted: json.inserted ?? toAdd.length })
+        onAdded()
+      } else {
+        setError('Failed to insert targets')
+      }
+    } catch { setError('Network error') }
+    setAdding(false)
+  }
+
+  const catLabel = (c: string | null) => {
+    if (!c) return '-'
+    return c.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'relative', background: '#111', borderRadius: 16, border: `1px solid ${C.border}`, width: '90%', maxWidth: 900, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: F.sans, fontSize: 16, fontWeight: 600, color: C.text }}>Find Outreach Targets</div>
+            <Mono style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>High-scoring trusted services from the Trust Index (score {'\u2265'} 4.0, with GitHub repos)</Mono>
+          </div>
+          <button onClick={onClose} style={{ fontFamily: F.mono, fontSize: 20, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}>&times;</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>Querying Trust Index...</Mono></div>
+          ) : error ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.red }}>{error}</Mono></div>
+          ) : result ? (
+            <div style={{ padding: 40, textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>&#10003;</div>
+              <Mono style={{ fontSize: 14, color: C.green }}>{result.inserted} targets added to Networking</Mono>
+              <div style={{ marginTop: 16 }}>
+                <button onClick={onClose} style={{ ...submitBtnStyle, padding: '10px 24px' }}>Done</button>
+              </div>
+            </div>
+          ) : targets.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No new targets found — all high-scoring services are already in your networking list</Mono></div>
+          ) : (
+            <>
+              {/* Select all row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px 100px', gap: 10, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', background: C.bg }}>
+                <input type="checkbox" checked={selected.size === targets.length} onChange={toggleAll} style={{ width: 14, height: 14, cursor: 'pointer', accentColor: C.pink }} />
+                <Mono style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>SERVICE</Mono>
+                <Mono style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>SCORE</Mono>
+                <Mono style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>CATEGORY</Mono>
+                <Mono style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>GITHUB ORG</Mono>
+              </div>
+              {targets.map(t => (
+                <div key={t.slug} onClick={() => toggleSelect(t.slug)} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px 100px', gap: 10, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', cursor: 'pointer', background: selected.has(t.slug) ? 'rgba(254,131,224,0.04)' : 'transparent', transition: 'background 0.1s' }}>
+                  <input type="checkbox" checked={selected.has(t.slug)} onChange={() => toggleSelect(t.slug)} style={{ width: 14, height: 14, cursor: 'pointer', accentColor: C.pink }} />
+                  <div>
+                    <span style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, color: C.text }}>{t.name}</span>
+                    {t.publisher_name && <Mono style={{ fontSize: 10, color: C.t3, marginLeft: 8 }}>by {t.publisher_name}</Mono>}
+                    {t.homepage_url && (
+                      <div><a href={t.homepage_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontFamily: F.mono, fontSize: 10, color: C.blue, textDecoration: 'none' }}>{t.homepage_url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}</a></div>
+                    )}
+                  </div>
+                  <Mono style={{ fontSize: 13, fontWeight: 600, color: C.green }}>{t.composite_score.toFixed(2)}</Mono>
+                  <Badge text={catLabel(t.category)} color={C.t2} bg={C.surface} />
+                  <Mono style={{ fontSize: 11, color: C.t2 }}>{t.github_org || '-'}</Mono>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && !error && !result && targets.length > 0 && (
+          <div style={{ padding: '16px 24px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Mono style={{ fontSize: 11, color: C.t3 }}>{selected.size} of {targets.length} selected</Mono>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={onClose} style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleAdd} disabled={adding || selected.size === 0} style={{
+                ...submitBtnStyle, padding: '8px 20px',
+                opacity: adding || selected.size === 0 ? 0.5 : 1,
+                cursor: adding || selected.size === 0 ? 'not-allowed' : 'pointer',
+              }}>{adding ? 'Adding...' : `Add ${selected.size} Targets`}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN NETWORKING TAB ─────────────────────────────────────────
 export default function NetworkingTab() {
   const [data, setData] = useState<NData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showTargets, setShowTargets] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -564,7 +709,9 @@ export default function NetworkingTab() {
         onCreateContact={handleCreateContact}
         onUpdateContact={handleUpdateContact}
         onDeleteContact={handleDeleteContact}
+        onFindTargets={() => setShowTargets(true)}
       />
+      {showTargets && <FindTargetsModal onClose={() => setShowTargets(false)} onAdded={() => fetchData()} />}
     </div>
   )
 }
