@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import MarketingTab from './MarketingTab'
 
 // ─── FABRIC DESIGN TOKENS ──────────────────────────────────────────
 const F = {
@@ -110,6 +111,7 @@ const TABS = [
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'crons', label: 'All Crons' },
   { id: 'review', label: 'Dev Review' },
+  { id: 'marketing', label: 'Marketing' },
 ]
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
@@ -1891,6 +1893,7 @@ export default function MonitorDashboard() {
         {tab === 'overrides' && <OverridesTab data={data} />}
         {tab === 'crons' && <CronsTab />}
         {tab === 'review' && <ReviewTab />}
+        {tab === 'marketing' && <MarketingTab />}
       </div>
 
       {/* FOOTER */}
