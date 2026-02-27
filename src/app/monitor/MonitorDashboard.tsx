@@ -1088,10 +1088,8 @@ function extractActions(md: string): ExtractedAction[] {
   let inCode = false
   let codeStart = -1
   let codeBlock: string[] = []
-  const actionSections = ['critical', 'warning', 'fix prompt']
-
-  const isActionSection = (section: string) =>
-    actionSections.some(s => section.toLowerCase().includes(s))
+  const isFixPrompts = (section: string) =>
+    section.toLowerCase().includes('fix prompt')
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -1100,11 +1098,10 @@ function extractActions(md: string): ExtractedAction[] {
       currentSection = line.slice(3)
     }
 
-    // Track code blocks under Fix Prompts
+    // Only detect actions under Fix Prompts section
     if (line.startsWith('```')) {
       if (inCode) {
-        // End of code block — if under an action section, this is an action
-        if (isActionSection(currentSection)) {
+        if (isFixPrompts(currentSection)) {
           const text = codeBlock.join('\n').trim()
           if (text) {
             actions.push({ hash: hashString(text), text, lineIndex: codeStart, isCodeBlock: true })
@@ -1119,16 +1116,6 @@ function extractActions(md: string): ExtractedAction[] {
       continue
     }
     if (inCode) { codeBlock.push(line); continue }
-
-    // Bullet points and numbered items under action sections
-    if (isActionSection(currentSection)) {
-      if (line.match(/^[-*] /) || line.match(/^\d+\. /)) {
-        const text = line.replace(/^[-*] /, '').replace(/^\d+\. /, '').trim()
-        if (text) {
-          actions.push({ hash: hashString(text), text, lineIndex: i, isCodeBlock: false })
-        }
-      }
-    }
   }
 
   return actions
