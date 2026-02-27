@@ -393,15 +393,17 @@ export async function addDiscoveredService(params: {
     return `insert: ${insertError.message}`
   }
 
-  // Log the discovery
-  await supabase.from('discovery_queue').insert({
-    source: params.source,
-    query: params.name,
-    package_name: params.name,
-    status: 'completed',
-    result: { slug: params.slug, category: params.category },
-    processed_at: new Date().toISOString(),
-  })
+  // Log the discovery (skip for monitor:approved — approval handler updates the existing queue entry)
+  if (!params.source.startsWith('monitor:')) {
+    await supabase.from('discovery_queue').insert({
+      source: params.source,
+      query: params.name,
+      package_name: params.name,
+      status: 'completed',
+      result: { slug: params.slug, category: params.category },
+      processed_at: new Date().toISOString(),
+    })
+  }
 
   // Post-insert enrichment: resolve missing github_repo, npm/pypi packages
   if (!params.github_repo || !params.npm_package || !params.pypi_package) {
