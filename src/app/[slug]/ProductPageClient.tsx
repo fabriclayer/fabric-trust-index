@@ -972,7 +972,7 @@ export default function ProductPageClient({
                     {formatNumber(adoptionMeta!.weekly_downloads as number)}
                     {typeof adoptionMeta!.growth_rate === 'number' && (
                       <span className={`text-[0.88rem] font-normal ml-1 ${(adoptionMeta!.growth_rate as number) >= 0 ? 'text-[#0dc956]' : 'text-[#d03a3d]'}`}>
-                        {(adoptionMeta!.growth_rate as number) >= 0 ? '+' : ''}{(adoptionMeta!.growth_rate as number).toFixed(1)}%
+                        {(adoptionMeta!.growth_rate as number) >= 0 ? '+' : ''}{Math.round(adoptionMeta!.growth_rate as number)}%
                       </span>
                     )}
                   </div>
@@ -1096,7 +1096,7 @@ export default function ProductPageClient({
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Score History</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{signalHistory.length} snapshots</span>
             </div>
-            <div className="w-full h-40 relative mt-2">
+            <div className="w-full h-40 relative mt-2 pr-10">
               <svg className="w-full h-full" viewBox="0 0 800 160" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1118,9 +1118,9 @@ export default function ProductPageClient({
                   />
                 )}
               </svg>
-              <div className="absolute top-0 right-0 h-40 flex flex-col justify-between py-1">
+              <div className="absolute top-0 right-0 h-40 flex flex-col justify-between">
                 {['5.00', '3.75', '2.50', '1.25', '0.00'].map(v => (
-                  <span key={v} className="font-mono text-[0.58rem] text-fabric-300 text-right">{v}</span>
+                  <span key={v} className="font-mono text-[0.58rem] text-fabric-300 text-right leading-none">{v}</span>
                 ))}
               </div>
             </div>
