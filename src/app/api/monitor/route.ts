@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     vulnFallback, opFallback, maintFallback, adoptFallback, transFallback, pubFallback,
     nonPendingCount,
     todayUpdated,
+    discoveryQueuePendingCount,
   ] = await Promise.all([
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'trusted'),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('status', 'caution'),
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('signal_publisher_trust', 2.5).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).neq('status', 'pending'),
     supabase.from('services').select('id', { count: 'exact', head: true }).gte('updated_at', today).neq('status', 'pending'),
+    supabase.from('discovery_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending_review'),
   ])
 
   // ── SECONDARY QUERIES (data fetches — may be slower) ──────────
@@ -90,7 +92,7 @@ export async function GET(request: NextRequest) {
       recentCves,
     ] = await Promise.all([
       supabase.from('services').select('active_modifiers').not('active_modifiers', 'eq', '{}'),
-      supabase.from('discovery_queue').select('*').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
+      supabase.from('discovery_queue').select('id, source, created_at, result, status').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(100),
       fetch('https://api.github.com/rate_limit', { headers: githubHeaders(), signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
       // Vercel analytics (only if token configured)
       (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID
@@ -119,6 +121,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Discovery queue
+    if (discoveryPending.error) {
+      console.error('Discovery queue query error:', discoveryPending.error)
+    }
     discoveryQueue = (discoveryPending.data ?? []).map((d: Record<string, unknown>) => ({
       id: d.id,
       source: typeof d.source === 'string' ? d.source.replace('ai-news:', '') : d.source,
@@ -208,6 +213,7 @@ export async function GET(request: NextRequest) {
         rowsIncidents: incidentsCount.count ?? 0,
         rowsCveRecords: cveRecordsCount.count ?? 0,
         rowsDiscoveryQueue: discoveryQueueCount.count ?? 0,
+        rowsDiscoveryPending: discoveryQueuePendingCount.count ?? 0,
       },
       github: githubRate ? {
         rateRemaining: githubRate.rate?.remaining ?? 0,
