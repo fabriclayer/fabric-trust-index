@@ -91,37 +91,80 @@ async function postMarketing(body: Record<string, unknown>) {
   return res.json()
 }
 
-// ─── INLINE EDIT CELL ───────────────────────────────────────────
-function EditableCell({ value, onSave, placeholder, mono, style: s }: {
-  value: string | null
-  onSave: (val: string | null) => void
-  placeholder?: string
-  mono?: boolean
-  style?: React.CSSProperties
+// ─── EDIT DROPDOWN ──────────────────────────────────────────────
+function KolEditDropdown({ kol, onUpdate, onClose }: {
+  kol: MKol
+  onUpdate: (id: string, updates: Record<string, unknown>) => void
+  onClose: () => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(value || '')
+  const [name, setName] = useState(kol.name)
+  const [handle, setHandle] = useState(kol.handle)
+  const [platform, setPlatform] = useState(kol.platform)
+  const [tier, setTier] = useState(kol.tier)
+  const [followers, setFollowers] = useState(kol.followers || '')
+  const [project, setProject] = useState(kol.project || '')
+  const [notes, setNotes] = useState(kol.notes || '')
 
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') { onSave(val.trim() || null); setEditing(false) }
-          if (e.key === 'Escape') setEditing(false)
-        }}
-        onBlur={() => { onSave(val.trim() || null); setEditing(false) }}
-        style={{ fontFamily: mono ? F.mono : F.sans, fontSize: 12, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 6px', outline: 'none', width: '100%', ...s }}
-      />
-    )
+  const handleSave = () => {
+    const updates: Record<string, unknown> = {}
+    if (name.trim() && name.trim() !== kol.name) updates.name = name.trim()
+    if (handle.trim() && handle.trim() !== kol.handle) updates.handle = handle.trim()
+    if (platform !== kol.platform) updates.platform = platform
+    if (tier !== kol.tier) updates.tier = tier
+    if ((followers.trim() || null) !== kol.followers) updates.followers = followers.trim() || null
+    if ((project.trim() || null) !== kol.project) updates.project = project.trim() || null
+    if ((notes.trim() || null) !== kol.notes) updates.notes = notes.trim() || null
+    if (Object.keys(updates).length > 0) onUpdate(kol.id, updates)
+    onClose()
   }
+
+  const fieldLabel: React.CSSProperties = { fontFamily: F.mono, fontSize: 10, color: C.t3, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }
+  const fieldInput: React.CSSProperties = { ...inputStyle, width: '100%', fontSize: 12 }
+
   return (
-    <span
-      onClick={() => { setEditing(true); setVal(value || '') }}
-      style={{ fontFamily: mono ? F.mono : F.sans, fontSize: 12, color: value ? C.t2 : C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', cursor: 'pointer', ...s }}
-    >{value || placeholder || 'click to edit'}</span>
+    <div style={{ padding: '14px 24px 18px', background: 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 100px 100px', gap: 12 }}>
+        <div>
+          <div style={fieldLabel}>Name</div>
+          <input value={name} onChange={e => setName(e.target.value)} style={fieldInput} />
+        </div>
+        <div>
+          <div style={fieldLabel}>Handle</div>
+          <input value={handle} onChange={e => setHandle(e.target.value)} style={{ ...fieldInput, fontFamily: F.mono }} />
+        </div>
+        <div>
+          <div style={fieldLabel}>Project</div>
+          <input value={project} onChange={e => setProject(e.target.value)} style={fieldInput} placeholder="Company / project" />
+        </div>
+        <div>
+          <div style={fieldLabel}>Platform</div>
+          <select value={platform} onChange={e => setPlatform(e.target.value)} style={{ ...selectStyle, width: '100%' }}>
+            {['x', 'github', 'bluesky', 'linkedin', 'youtube'].map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={fieldLabel}>Tier</div>
+          <select value={tier} onChange={e => setTier(Number(e.target.value))} style={{ ...selectStyle, width: '100%' }}>
+            <option value={1}>Tier 1</option>
+            <option value={2}>Tier 2</option>
+          </select>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, marginTop: 10 }}>
+        <div>
+          <div style={fieldLabel}>Followers</div>
+          <input value={followers} onChange={e => setFollowers(e.target.value)} style={{ ...fieldInput, fontFamily: F.mono }} placeholder="e.g. 12K" />
+        </div>
+        <div>
+          <div style={fieldLabel}>Notes</div>
+          <input value={notes} onChange={e => setNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} style={fieldInput} placeholder="Optional notes" />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+        <button onClick={onClose} style={{ fontFamily: F.mono, fontSize: 11, color: C.t2, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 16px', cursor: 'pointer' }}>Cancel</button>
+        <button onClick={handleSave} style={submitBtnStyle}>Save</button>
+      </div>
+    </div>
   )
 }
 
@@ -142,6 +185,7 @@ function KolSection({ kols, onUpdate, onEngage, onCreate, onDelete }: {
   const [newFollowers, setNewFollowers] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const cycleStage = (current: string) => {
     const idx = KOL_STAGES.indexOf(current as typeof KOL_STAGES[number])
@@ -199,34 +243,50 @@ function KolSection({ kols, onUpdate, onEngage, onCreate, onDelete }: {
           {kols.map(kol => {
             const sc = STAGE_COLORS[kol.stage] ?? STAGE_COLORS.follow
             const tierColor = kol.tier === 1 ? { color: C.pink, bg: C.pinkDim } : { color: C.blue, bg: C.blueDim }
+            const isEditing = editingId === kol.id
             return (
-              <div key={kol.id} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
-                <EditableCell value={kol.name} onSave={v => v && onUpdate(kol.id, { name: v })} style={{ fontSize: 13, fontWeight: 500, color: C.text }} />
-                <EditableCell value={kol.handle} mono onSave={v => v && onUpdate(kol.id, { handle: v })} style={{ color: C.blue }} />
-                <EditableCell value={kol.project} onSave={v => onUpdate(kol.id, { project: v })} placeholder="-" style={{ fontSize: 11 }} />
-                <Badge text={`T${kol.tier}`} color={tierColor.color} bg={tierColor.bg} onClick={() => onUpdate(kol.id, { tier: kol.tier === 1 ? 2 : 1 })} />
-                <EditableCell value={kol.followers} mono onSave={v => onUpdate(kol.id, { followers: v })} placeholder="-" />
-                <Badge text={kol.stage} color={sc.color} bg={sc.bg} onClick={() => onUpdate(kol.id, { stage: cycleStage(kol.stage) })} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Mono style={{ fontSize: 13, color: C.text }}>{kol.engagement_count}</Mono>
-                  <button onClick={() => onEngage(kol.id)} style={{
-                    fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim,
-                    border: `1px solid ${C.green}22`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 600,
-                  }}>+1</button>
-                </div>
-                <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(kol.last_engaged_at)}</Mono>
-                <EditableCell value={kol.notes} mono onSave={v => onUpdate(kol.id, { notes: v })} placeholder="click to add note" style={{ fontSize: 11 }} />
-                {deleteConfirm === kol.id ? (
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => { onDelete(kol.id); setDeleteConfirm(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>Yes</button>
-                    <button onClick={() => setDeleteConfirm(null)} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>No</button>
+              <div key={kol.id}>
+                <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, padding: '10px 16px', background: isEditing ? 'rgba(6,140,255,0.04)' : C.surface, alignItems: 'center', borderLeft: isEditing ? `2px solid ${C.blue}` : '2px solid transparent' }}>
+                  <span
+                    onClick={() => setEditingId(isEditing ? null : kol.id)}
+                    style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                    title="Click to edit"
+                  >{kol.name}</span>
+                  <a href={profileUrl(kol.handle, kol.platform)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}>{kol.handle}</a>
+                  <span style={{ fontFamily: F.sans, fontSize: 11, color: kol.project ? C.t2 : C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kol.project || '-'}</span>
+                  <Badge text={`T${kol.tier}`} color={tierColor.color} bg={tierColor.bg} onClick={() => onUpdate(kol.id, { tier: kol.tier === 1 ? 2 : 1 })} />
+                  <Mono style={{ fontSize: 12, color: C.t2 }}>{kol.followers || '-'}</Mono>
+                  <Badge text={kol.stage} color={sc.color} bg={sc.bg} onClick={() => onUpdate(kol.id, { stage: cycleStage(kol.stage) })} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Mono style={{ fontSize: 13, color: C.text }}>{kol.engagement_count}</Mono>
+                    <button onClick={() => onEngage(kol.id)} style={{
+                      fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim,
+                      border: `1px solid ${C.green}22`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 600,
+                    }}>+1</button>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setDeleteConfirm(kol.id)}
-                    style={{ fontFamily: F.mono, fontSize: 18, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px', lineHeight: 1 }}
-                    title="Delete"
-                  >&times;</button>
+                  <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(kol.last_engaged_at)}</Mono>
+                  <Mono style={{ fontSize: 11, color: kol.notes ? C.t2 : C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kol.notes || '-'}</Mono>
+                  <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                    {deleteConfirm === kol.id ? (
+                      <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 4, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', zIndex: 10, whiteSpace: 'nowrap' }}>
+                        <button onClick={() => { onDelete(kol.id); setDeleteConfirm(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Yes</button>
+                        <button onClick={() => setDeleteConfirm(null)} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>No</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirm(kol.id)}
+                        style={{ fontFamily: F.mono, fontSize: 18, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px', lineHeight: 1 }}
+                        title="Delete"
+                      >&times;</button>
+                    )}
+                  </div>
+                </div>
+                {isEditing && (
+                  <KolEditDropdown
+                    kol={kol}
+                    onUpdate={(id, updates) => { onUpdate(id, updates); setEditingId(null) }}
+                    onClose={() => setEditingId(null)}
+                  />
                 )}
               </div>
             )
