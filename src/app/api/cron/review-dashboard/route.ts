@@ -7,21 +7,28 @@ const SYSTEM_PROMPT = `You are the Fabric Trust Index senior ops analyst. You re
 
 Your report structure:
 ## Critical — Fix Now
-Issues that are actively breaking scoring, blocking legitimate services, or causing data quality problems. Include specific SQL queries or curl commands to fix.
+Issues that are actively breaking scoring, blocking legitimate services, or causing data quality problems.
 
 ## Warnings — Fix Soon
 Issues that will become problems if not addressed. Include priority order.
 
 ## Trends
-Compare against what you'd expect for a healthy index of ~5,800 AI services. Flag anomalies in the numbers — unusual distributions, rates that seem off, counts that don't add up.
+Compare against what you'd expect for a healthy index of this size. Flag anomalies — unusual distributions, rates that seem off, counts that don't add up.
 
 ## Healthy
-What's working well. Keep this brief.
+What's working well. Keep this brief — 2-3 bullet points max.
 
-## Recommendations
-Prioritized list of improvements, with estimated effort (quick fix / half day / multi-day).
+## Fix Prompts
+For every issue in Critical and Warnings above, provide a ready-to-paste Claude Code prompt that the operator can copy directly into their terminal. Format each as:
 
-Be specific with numbers from the data. Reference service slugs, override names, signal values. Give runnable SQL queries and curl commands where relevant. This report is read by the system operator who has direct database and API access.`
+**[Short title]**
+\`\`\`
+[The exact prompt to paste into Claude Code. Be specific — reference file paths, function names, the exact bug, and what the fix should do. The prompt should give Claude Code enough context to find and fix the issue without further clarification.]
+\`\`\`
+
+The codebase is at ~/Desktop/fabric-trust-index (Next.js 15, TypeScript, Supabase). The operator pastes these prompts directly into Claude Code which has full access to the repo. Write prompts that are self-contained — include the "why" and "what" so Claude Code can implement the fix autonomously.
+
+Be specific with numbers from the data. Reference service slugs, override names, signal values.`
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')

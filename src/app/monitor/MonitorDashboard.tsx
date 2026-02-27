@@ -853,6 +853,28 @@ interface ReviewData {
   duration_ms: number | null
 }
 
+function CodeBlock({ code, id }: { code: string; id: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div style={{ position: 'relative', margin: '8px 0' }}>
+      <button
+        onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+        style={{
+          position: 'absolute', top: 6, right: 6, fontFamily: F.mono, fontSize: 9, fontWeight: 600,
+          color: copied ? C.green : C.t3, background: copied ? C.greenDim : 'rgba(255,255,255,0.06)',
+          border: `1px solid ${copied ? C.green + '33' : C.border}`, borderRadius: 4,
+          padding: '3px 8px', cursor: 'pointer', transition: 'all 0.15s', zIndex: 1,
+        }}
+      >{copied ? 'Copied!' : 'Copy'}</button>
+      <pre style={{
+        background: 'rgba(0,0,0,0.4)', border: `1px solid ${C.border}`, borderRadius: 8,
+        padding: '12px 16px', paddingRight: 70, overflowX: 'auto', fontFamily: F.mono, fontSize: 11,
+        color: C.t2, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+      }}>{code}</pre>
+    </div>
+  )
+}
+
 function renderMarkdown(md: string): React.ReactNode[] {
   const lines = md.split('\n')
   const elements: React.ReactNode[] = []
@@ -865,13 +887,8 @@ function renderMarkdown(md: string): React.ReactNode[] {
     // Code block toggle
     if (line.startsWith('```')) {
       if (inCode) {
-        elements.push(
-          <pre key={`code-${i}`} style={{
-            background: 'rgba(0,0,0,0.4)', border: `1px solid ${C.border}`, borderRadius: 8,
-            padding: '12px 16px', margin: '8px 0', overflowX: 'auto', fontFamily: F.mono, fontSize: 11,
-            color: C.t2, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-          }}>{codeBlock.join('\n')}</pre>
-        )
+        const code = codeBlock.join('\n')
+        elements.push(<CodeBlock key={`code-${i}`} code={code} id={`code-${i}`} />)
         codeBlock = []
         inCode = false
       } else {
