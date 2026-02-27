@@ -247,6 +247,8 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
   const [cX, setCX] = useState('')
   const [cLinkedin, setCLinkedin] = useState('')
   const [cTelegram, setCTelegram] = useState('')
+  const [editingNameId, setEditingNameId] = useState<string | null>(null)
+  const [editNameVal, setEditNameVal] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteContactConfirm, setDeleteContactConfirm] = useState<string | null>(null)
 
@@ -321,7 +323,24 @@ function NetworkingSection({ networking, contacts, onUpdate, onEngage, onCreate,
                     style={{ fontSize: 10, color: C.t3, cursor: 'pointer', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', textAlign: 'center' }}
                   >&#9654;</span>
                   <div>
-                    <span style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500 }}>{net.project_name}</span>
+                    {editingNameId === net.id ? (
+                      <input
+                        autoFocus
+                        value={editNameVal}
+                        onChange={e => setEditNameVal(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && editNameVal.trim()) { onUpdate(net.id, { project_name: editNameVal.trim() }); setEditingNameId(null) }
+                          if (e.key === 'Escape') setEditingNameId(null)
+                        }}
+                        onBlur={() => { if (editNameVal.trim()) onUpdate(net.id, { project_name: editNameVal.trim() }); setEditingNameId(null) }}
+                        style={{ fontFamily: F.sans, fontSize: 13, fontWeight: 500, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 6px', outline: 'none', width: '100%' }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => { setEditingNameId(net.id); setEditNameVal(net.project_name) }}
+                        style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500, cursor: 'pointer' }}
+                      >{net.project_name}</span>
+                    )}
                     {net.website_url && (
                       <a href={net.website_url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 10, color: C.blue, textDecoration: 'none', display: 'block', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {net.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
