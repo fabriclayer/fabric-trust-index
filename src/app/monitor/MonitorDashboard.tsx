@@ -751,39 +751,44 @@ function ScheduleTab({ data }: { data: MonitorData }) {
           <div key={cron.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
             {/* Header row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px', borderBottom: `1px solid ${C.border}` }}>
-              <Dot color={cron.color} pulse={progress.pct > 0 && progress.pct < 100} />
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.text, minWidth: 160 }}>{cron.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <Dot color={cron.color} pulse={progress.pct > 0 && progress.pct < 100} />
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text, display: 'block' }}>{cron.name}</span>
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {cronState === 'running' ? (
+                      <>
+                        <div style={{
+                          width: 12, height: 12, border: `2px solid ${C.t4}`, borderTopColor: cron.color,
+                          borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                        }} />
+                        <Mono style={{ fontSize: 10, color: cron.color }}>Running...</Mono>
+                      </>
+                    ) : cronState === 'confirm' ? (
+                      <>
+                        <Mono style={{ fontSize: 10, color: C.orange }}>Run now?</Mono>
+                        <button onClick={() => handleRun(cron.id, cron.name)} style={{
+                          fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.green, background: C.greenDim,
+                          border: `1px solid ${C.green}22`, borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+                        }}>Yes</button>
+                        <button onClick={() => cancelConfirm(cron.id)} style={{
+                          fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent',
+                          border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+                        }}>No</button>
+                      </>
+                    ) : (
+                      <button onClick={() => handleRun(cron.id, cron.name)} style={{
+                        fontFamily: F.mono, fontSize: 10, fontWeight: 500, color: C.t2, background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 12px', cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}>Run</button>
+                    )}
+                  </div>
+                </div>
+              </div>
               <Mono style={{ fontSize: 11, color: C.t3, minWidth: 110 }}>{cron.schedule}</Mono>
               <div style={{ flex: 1 }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                {/* Run button / confirmation / spinner */}
-                {cronState === 'running' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{
-                      width: 12, height: 12, border: `2px solid ${C.t4}`, borderTopColor: cron.color,
-                      borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-                    }} />
-                    <Mono style={{ fontSize: 10, color: cron.color }}>Running...</Mono>
-                  </div>
-                ) : cronState === 'confirm' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Mono style={{ fontSize: 10, color: C.orange }}>Run {cron.name}?</Mono>
-                    <button onClick={() => handleRun(cron.id, cron.name)} style={{
-                      fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.green, background: C.greenDim,
-                      border: `1px solid ${C.green}22`, borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
-                    }}>Yes</button>
-                    <button onClick={() => cancelConfirm(cron.id)} style={{
-                      fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent',
-                      border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
-                    }}>No</button>
-                  </div>
-                ) : (
-                  <button onClick={() => handleRun(cron.id, cron.name)} style={{
-                    fontFamily: F.mono, fontSize: 10, fontWeight: 500, color: C.t2, background: 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 12px', cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}>Run</button>
-                )}
                 {lastRun && (
                   <div style={{ textAlign: 'right' }}>
                     <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Last run</Mono>
