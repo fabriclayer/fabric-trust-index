@@ -155,6 +155,9 @@ export interface DbService {
   discovered_from: string | null
   discovery_query: string | null
 
+  // Project age
+  first_published_at: string | null
+
   // AI assessment
   ai_assessment: string | null
   ai_assessment_updated_at: string | null

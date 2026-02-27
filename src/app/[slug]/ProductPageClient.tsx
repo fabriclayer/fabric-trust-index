@@ -227,7 +227,14 @@ function getStandardSignalSummary(key: string, meta: Record<string, any>): strin
     }
     case 'publisher_trust': {
       const parts: string[] = []
-      if (meta.account_age_days != null) parts.push(`${Math.round((meta.account_age_days as number) / 365)}yr account`)
+      if (meta.account_age_years != null) parts.push(`${Math.round(meta.account_age_years as number)}yr account`)
+      else if (meta.account_age_days != null) parts.push(`${Math.round((meta.account_age_days as number) / 365)}yr account`)
+      if (meta.project_age_days != null) {
+        const days = meta.project_age_days as number
+        if (days < 30) parts.push(`${days}d old (new)`)
+        else if (days < 365) parts.push(`${Math.round(days / 30)}mo project`)
+        else parts.push(`${Math.round(days / 365)}yr project`)
+      }
       if (meta.npm_maintainers) parts.push(`${(meta.npm_maintainers as string[]).length} maintainers`)
       return parts.length > 0 ? parts.join(' · ') : 'No publisher data'
     }
