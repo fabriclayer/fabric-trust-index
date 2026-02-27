@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         source: `ai-news:${c.source}`,
         query: c.name,
         package_name: c.slug,
-        status: 'pending_review',
+        status: 'pending',
         result: {
           name: c.name,
           slug: c.slug,
