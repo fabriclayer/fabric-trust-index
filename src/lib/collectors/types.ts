@@ -28,7 +28,7 @@ export interface OsvVulnerability {
   database_specific?: { severity?: string }
   affected?: Array<{
     package?: { name?: string; ecosystem?: string }
-    ranges?: Array<{ type?: string; events: Array<{ introduced?: string; fixed?: string }> }>
+    ranges?: Array<{ type?: string; events: Array<{ introduced?: string; fixed?: string; last_affected?: string }> }>
   }>
 }
 
@@ -80,12 +80,31 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * Determine the patch status of a vulnerability against the service's latest version.
- * - 'patched': latest version >= fix version (vulnerability resolved in current release)
+ * - 'patched': latest version >= fix version, or latest version > last_affected
  * - 'patch_available': fix exists but latest version < fix version
- * - 'unpatched': no fix version exists in the advisory
+ * - 'unpatched': no fix version exists in the advisory and no last_affected
  */
 export function determinePatchStatus(vuln: OsvVulnerability, latestVersion: string | null): PatchStatus {
   const fixedVersions = getFixedVersions(vuln)
+
+  // Check last_affected: if latest version > last_affected, the CVE is resolved
+  if (latestVersion) {
+    const current = coerceSemver(latestVersion)
+    if (current) {
+      for (const a of vuln.affected ?? []) {
+        for (const r of a.ranges ?? []) {
+          if (r.type === 'GIT') continue
+          for (const e of r.events) {
+            if (e.last_affected && !isCommitHash(e.last_affected)) {
+              const lastAffSemver = coerceSemver(e.last_affected)
+              if (lastAffSemver && semver.gt(current, lastAffSemver)) return 'patched'
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (fixedVersions.length === 0) return 'unpatched'
   if (!latestVersion) return 'patch_available'
 
