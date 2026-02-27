@@ -648,14 +648,6 @@ export default function ProductPageClient({
 
   // Data sources
   const dataSources = service.category === 'skill' ? SKILL_DATA_SOURCES : getDataSources(service)
-  const activeSourceCount = service.category === 'skill'
-    ? SKILL_DATA_SOURCES.length
-    : [
-        service.npm_package ? 1 : 0,
-        service.pypi_package ? 1 : 0,
-        service.github_repo ? 1 : 0,
-        service.endpoint_url ? 1 : 0,
-      ].reduce((a, b) => a + b, 0)
 
   return (
     <>
@@ -674,7 +666,7 @@ export default function ProductPageClient({
                     <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-pink transition-colors no-underline">{service.publisher}</a>
                   ) : (
                     <span className="text-fabric-600">{service.publisher}</span>
-                  )} · last scanned {service.updated}
+                  )}
                 </div>
               </div>
 
@@ -807,12 +799,12 @@ export default function ProductPageClient({
           {/* Hero meta */}
           <div className="flex gap-6 flex-wrap font-mono text-[0.68rem] text-fabric-400 mt-4 pt-4 border-t border-fabric-100">
             <span className="flex items-center gap-1">
-              <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-              6 signals analysed
+              <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              {service.updated}
             </span>
             <span className="flex items-center gap-1">
-              <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-              {activeSourceCount > 0 ? `${activeSourceCount} active source${activeSourceCount > 1 ? 's' : ''}` : 'No active sources'}
+              <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+              6 signals analysed
             </span>
             {maintenanceMeta?.commits_90d !== undefined && (
               <span className="flex items-center gap-1">
