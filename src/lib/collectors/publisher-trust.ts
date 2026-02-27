@@ -62,18 +62,26 @@ async function getPypiFirstRelease(pkg: string): Promise<string | null> {
  * Score project/package age based on how long the project has existed.
  * Addresses typosquatting and supply chain attacks from new packages.
  *
- * < 30 days:     -0.25 (significant penalty — new/unestablished)
- * 30-90 days:    0.15  (moderate penalty)
- * 90d - 1 year:  0.4   (slight penalty)
- * 1-3 years:     0.7   (neutral)
- * 3+ years:      1.0   (small bonus — established project)
+ * 30 days = neutral (0.5). Curve extends both directions:
+ *   0 days:   0.0   (brand new — maximum penalty)
+ *   7 days:   0.15  (very new)
+ *   30 days:  0.5   (neutral baseline)
+ *   180 days: 0.7   (moderate bonus)
+ *   1 year:   0.8   (solid track record)
+ *   3+ years: 1.0   (fully established)
+ *
+ * Uses smooth logarithmic curve so there are no harsh step changes.
  */
 function scoreProjectAge(ageDays: number): number {
-  if (ageDays < 30) return -0.25
-  if (ageDays < 90) return 0.15
-  if (ageDays < 365) return 0.4
-  if (ageDays < 365 * 3) return 0.7
-  return 1.0
+  if (ageDays <= 0) return 0
+  // ln(31) ≈ 3.43, ln(1096) ≈ 7.0 — maps 30d→0.5, 1095d→1.0
+  // Below 30d: linear ramp 0→0.5
+  if (ageDays < 30) return (ageDays / 30) * 0.5
+  // 30d+: logarithmic curve from 0.5 to 1.0, saturating around 3 years
+  const maxDays = 365 * 3
+  if (ageDays >= maxDays) return 1.0
+  const t = Math.log(ageDays / 30) / Math.log(maxDays / 30)
+  return 0.5 + t * 0.5
 }
 
 export const publisherTrustCollector: Collector = {
