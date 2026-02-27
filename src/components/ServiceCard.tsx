@@ -54,9 +54,6 @@ export default function ServiceCard({ service }: { service: Service }) {
         <span className={`font-mono text-[0.82rem] font-semibold tracking-tight ${scoreNumColor[service.status]}`}>
           {service.score.toFixed(2)}
         </span>
-        <span className="font-mono text-[0.58rem] text-fabric-400 ml-auto whitespace-nowrap">
-          {service.updated}
-        </span>
       </div>
     </Link>
   )
