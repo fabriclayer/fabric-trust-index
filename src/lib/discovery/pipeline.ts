@@ -180,15 +180,16 @@ export async function runDiscoveryPipeline(): Promise<{
   let added = 0
   let skipped = 0
 
-  // Process npm candidates — queue for manual review
+  // Process npm candidates
   for (const pkg of npmCandidates) {
     discovered++
     const slug = toSlug(pkg.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
+    // Resolve GitHub repo from npm registry metadata
     const githubRepo = await resolveGitHubFromNpm(pkg.name)
 
-    const result = await queueForReview({
+    await addDiscoveredService({
       name: pkg.name,
       slug,
       publisher: pkg.publisher,
@@ -201,17 +202,17 @@ export async function runDiscoveryPipeline(): Promise<{
       pricing: { model: 'open-source' },
       tags: pkg.keywords,
     })
-    if (result === 'queued') added++
-    else skipped++
+    existingSlugs.add(slug)
+    added++
   }
 
-  // Process PyPI candidates — queue for manual review
+  // Process PyPI candidates
   for (const pkg of pypiCandidates) {
     discovered++
     const slug = toSlug(pkg.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
-    const result = await queueForReview({
+    await addDiscoveredService({
       name: pkg.name,
       slug,
       publisher: pkg.publisher,
@@ -225,17 +226,17 @@ export async function runDiscoveryPipeline(): Promise<{
       tags: pkg.keywords,
       homepage_url: pkg.projectUrl !== `https://pypi.org/project/${pkg.name}` ? pkg.projectUrl : undefined,
     })
-    if (result === 'queued') added++
-    else skipped++
+    existingSlugs.add(slug)
+    added++
   }
 
-  // Process GitHub candidates — queue for manual review
+  // Process GitHub candidates
   for (const repo of githubCandidates) {
     discovered++
     const slug = toSlug(repo.name)
     if (existingSlugs.has(slug)) { skipped++; continue }
 
-    const result = await queueForReview({
+    await addDiscoveredService({
       name: repo.name,
       slug,
       publisher: repo.owner,
@@ -248,8 +249,8 @@ export async function runDiscoveryPipeline(): Promise<{
       language: repo.language ?? undefined,
       homepage_url: repo.homepage ?? undefined,
     })
-    if (result === 'queued') added++
-    else skipped++
+    existingSlugs.add(slug)
+    added++
   }
 
   return { discovered, added, skipped }
@@ -391,6 +392,16 @@ export async function addDiscoveredService(params: {
   if (insertError) {
     return `insert: ${insertError.message}`
   }
+
+  // Log the discovery
+  await supabase.from('discovery_queue').insert({
+    source: params.source,
+    query: params.name,
+    package_name: params.name,
+    status: 'completed',
+    result: { slug: params.slug, category: params.category },
+    processed_at: new Date().toISOString(),
+  })
 
   // Post-insert enrichment: resolve missing github_repo, npm/pypi packages
   if (!params.github_repo || !params.npm_package || !params.pypi_package) {

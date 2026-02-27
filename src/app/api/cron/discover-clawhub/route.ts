@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { discoverClawHubSkills } from '@/lib/discovery/clawhub'
-import { queueForReview, toSlug } from '@/lib/discovery/pipeline'
+import { addDiscoveredService, toSlug } from '@/lib/discovery/pipeline'
 
 export const maxDuration = 300
 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     const errors: string[] = []
 
     for (const skill of batch) {
-      const result = await queueForReview({
+      const result = await addDiscoveredService({
         name: skill.name,
         slug: skill.slug,
         publisher: 'OpenClaw Community',
@@ -65,12 +65,12 @@ export async function GET(request: NextRequest) {
         homepage_url: skill.homepage,
       })
 
-      if (result === 'queued') {
+      if (result === true) {
         added++
         existingSlugs.add(skill.slug)
       } else {
         skipped++
-        if (result !== 'duplicate' && errors.length < 10) errors.push(`${skill.slug}: ${result}`)
+        if (errors.length < 10) errors.push(`${skill.slug}: ${result}`)
       }
     }
 
