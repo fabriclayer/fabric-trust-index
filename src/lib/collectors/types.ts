@@ -1,4 +1,5 @@
 import type { DbService } from '@/lib/supabase/types'
+import semver from 'semver'
 
 export interface CollectorResult {
   signal_name: string
@@ -27,19 +28,37 @@ export interface OsvVulnerability {
   database_specific?: { severity?: string }
   affected?: Array<{
     package?: { name?: string; ecosystem?: string }
-    ranges?: Array<{ events: Array<{ introduced?: string; fixed?: string }> }>
+    ranges?: Array<{ type?: string; events: Array<{ introduced?: string; fixed?: string }> }>
   }>
 }
 
 export type PatchStatus = 'patched' | 'patch_available' | 'unpatched'
 
-/** Extract all fixed versions from an OSV vulnerability across all affected entries */
+/** Coerce a version string to valid semver, stripping leading 'v' and junk */
+function coerceSemver(v: string): string | null {
+  const coerced = semver.coerce(v)
+  return coerced ? coerced.version : null
+}
+
+/** Returns true if the string looks like a 40-char hex commit hash */
+function isCommitHash(s: string): boolean {
+  return /^[0-9a-f]{40}$/i.test(s)
+}
+
+/**
+ * Extract all fixed versions from an OSV vulnerability across all affected entries.
+ * Skips GIT ranges (commit hashes) and only returns semver-parseable versions.
+ */
 export function getFixedVersions(vuln: OsvVulnerability): string[] {
   const versions: string[] = []
   for (const a of vuln.affected ?? []) {
     for (const r of a.ranges ?? []) {
+      // Skip GIT ranges — they use commit hashes, not version numbers
+      if (r.type === 'GIT') continue
       for (const e of r.events) {
-        if (e.fixed) versions.push(e.fixed)
+        if (e.fixed && !isCommitHash(e.fixed) && coerceSemver(e.fixed)) {
+          versions.push(e.fixed)
+        }
       }
     }
   }
@@ -51,18 +70,12 @@ export function hasFixAvailable(vuln: OsvVulnerability): boolean {
   return getFixedVersions(vuln).length > 0
 }
 
-/** Compare two version strings (semver-like). Returns -1, 0, or 1. */
+/** Compare two version strings using semver. Returns -1, 0, or 1. */
 export function compareVersions(a: string, b: string): number {
-  const pa = a.replace(/[^0-9.]/g, '').split('.').map(Number)
-  const pb = b.replace(/[^0-9.]/g, '').split('.').map(Number)
-  const len = Math.max(pa.length, pb.length)
-  for (let i = 0; i < len; i++) {
-    const na = pa[i] ?? 0
-    const nb = pb[i] ?? 0
-    if (na > nb) return 1
-    if (na < nb) return -1
-  }
-  return 0
+  const sa = coerceSemver(a)
+  const sb = coerceSemver(b)
+  if (!sa || !sb) return 0 // can't compare — treat as equal
+  return semver.compare(sa, sb)
 }
 
 /**
@@ -76,9 +89,13 @@ export function determinePatchStatus(vuln: OsvVulnerability, latestVersion: stri
   if (fixedVersions.length === 0) return 'unpatched'
   if (!latestVersion) return 'patch_available'
 
+  const current = coerceSemver(latestVersion)
+  if (!current) return 'patch_available'
+
   // Check if the latest version is >= any fix version
   for (const fixed of fixedVersions) {
-    if (compareVersions(latestVersion, fixed) >= 0) return 'patched'
+    const fixedSemver = coerceSemver(fixed)
+    if (fixedSemver && semver.gte(current, fixedSemver)) return 'patched'
   }
   return 'patch_available'
 }
