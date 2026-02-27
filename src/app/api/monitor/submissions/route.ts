@@ -57,6 +57,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    case 'delete_claim': {
+      const { id } = body
+      const { error } = await supabase.from('provider_claims').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'delete_report': {
+      const { id } = body
+      const { error } = await supabase.from('issue_reports').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'delete_request': {
+      const { id } = body
+      const { error } = await supabase.from('service_requests').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'delete_waitlist': {
+      const { id } = body
+      const { error } = await supabase.from('waitlist').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
     default:
       return NextResponse.json({ error: `Unknown action: ${body.action}` }, { status: 400 })
   }

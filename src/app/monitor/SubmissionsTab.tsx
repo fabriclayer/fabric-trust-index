@@ -107,6 +107,39 @@ export default function SubmissionsTab() {
     postSubmissions({ action: 'update_request', id, status })
   }
 
+  const deleteClaim = (id: string) => {
+    setData(prev => prev ? { ...prev, claims: prev.claims.filter(c => c.id !== id) } : prev)
+    postSubmissions({ action: 'delete_claim', id })
+  }
+
+  const deleteReport = (id: string) => {
+    setData(prev => prev ? { ...prev, reports: prev.reports.filter(r => r.id !== id) } : prev)
+    postSubmissions({ action: 'delete_report', id })
+  }
+
+  const deleteRequest = (id: string) => {
+    setData(prev => prev ? { ...prev, requests: prev.requests.filter(r => r.id !== id) } : prev)
+    postSubmissions({ action: 'delete_request', id })
+  }
+
+  const deleteWaitlist = (id: string) => {
+    setData(prev => prev ? { ...prev, waitlist: prev.waitlist.filter(w => w.id !== id) } : prev)
+    postSubmissions({ action: 'delete_waitlist', id })
+  }
+
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  const DeleteBtn = ({ id, onDelete }: { id: string; onDelete: (id: string) => void }) => (
+    deleteConfirm === id ? (
+      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        <button onClick={() => { onDelete(id); setDeleteConfirm(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Yes</button>
+        <button onClick={() => setDeleteConfirm(null)} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>No</button>
+      </div>
+    ) : (
+      <button onClick={() => setDeleteConfirm(id)} style={{ fontFamily: F.mono, fontSize: 18, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px', lineHeight: 1, flexShrink: 0 }} title="Delete">&times;</button>
+    )
+  )
+
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>Loading submissions...</Mono></div>
   }
@@ -130,8 +163,8 @@ export default function SubmissionsTab() {
       } pad={false}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 700 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 160px 120px 1fr 90px 80px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-              {['SERVICE', 'NAME', 'EMAIL', 'ROLE', 'MESSAGE', 'STATUS', 'WHEN'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 160px 120px 1fr 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
+              {['SERVICE', 'NAME', 'EMAIL', 'ROLE', 'MESSAGE', 'STATUS', 'WHEN', ''].map(h => (
                 <Mono key={h} style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</Mono>
               ))}
             </div>
@@ -140,7 +173,7 @@ export default function SubmissionsTab() {
             ) : data.claims.map(claim => {
               const sc = STATUS_COLORS[claim.status] ?? STATUS_COLORS.pending
               return (
-                <div key={claim.id} style={{ display: 'grid', gridTemplateColumns: '160px 140px 160px 120px 1fr 90px 80px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
+                <div key={claim.id} style={{ display: 'grid', gridTemplateColumns: '160px 140px 160px 120px 1fr 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
                   <a href={`https://trust.fabriclayer.ai/${claim.service_slug}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{claim.service_name}</a>
                   <span style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{claim.contact_name}</span>
                   <a href={`mailto:${claim.contact_email}`} style={{ fontFamily: F.mono, fontSize: 11, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{claim.contact_email}</a>
@@ -151,6 +184,7 @@ export default function SubmissionsTab() {
                     updateClaimStatus(claim.id, next)
                   }} />
                   <Mono style={{ fontSize: 10, color: C.t3 }}>{timeAgo(claim.created_at)}</Mono>
+                  <DeleteBtn id={claim.id} onDelete={deleteClaim} />
                 </div>
               )
             })}
@@ -167,8 +201,8 @@ export default function SubmissionsTab() {
       } pad={false}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 700 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 120px 1fr 140px 90px 80px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-              {['SERVICE', 'TYPE', 'DESCRIPTION', 'EMAIL', 'STATUS', 'WHEN'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '160px 120px 1fr 140px 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
+              {['SERVICE', 'TYPE', 'DESCRIPTION', 'EMAIL', 'STATUS', 'WHEN', ''].map(h => (
                 <Mono key={h} style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</Mono>
               ))}
             </div>
@@ -178,7 +212,7 @@ export default function SubmissionsTab() {
               const sc = STATUS_COLORS[report.status] ?? STATUS_COLORS.pending
               const tc = report.issue_type === 'security_concern' ? { color: C.red, bg: C.redDim } : report.issue_type === 'incorrect_score' ? { color: C.orange, bg: C.orangeDim } : { color: C.blue, bg: C.blueDim }
               return (
-                <div key={report.id} style={{ display: 'grid', gridTemplateColumns: '160px 120px 1fr 140px 90px 80px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
+                <div key={report.id} style={{ display: 'grid', gridTemplateColumns: '160px 120px 1fr 140px 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
                   <a href={`https://trust.fabriclayer.ai/${report.service_slug}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{report.service_name}</a>
                   <Badge text={ISSUE_TYPE_LABELS[report.issue_type] ?? report.issue_type} color={tc.color} bg={tc.bg} />
                   <Mono style={{ fontSize: 11, color: C.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{report.description}</Mono>
@@ -192,6 +226,7 @@ export default function SubmissionsTab() {
                     updateReportStatus(report.id, next)
                   }} />
                   <Mono style={{ fontSize: 10, color: C.t3 }}>{timeAgo(report.created_at)}</Mono>
+                  <DeleteBtn id={report.id} onDelete={deleteReport} />
                 </div>
               )
             })}
@@ -208,8 +243,8 @@ export default function SubmissionsTab() {
       } pad={false}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 500 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '200px 200px 180px 90px 80px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-              {['SERVICE NAME', 'URL', 'EMAIL', 'STATUS', 'WHEN'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '200px 200px 180px 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
+              {['SERVICE NAME', 'URL', 'EMAIL', 'STATUS', 'WHEN', ''].map(h => (
                 <Mono key={h} style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</Mono>
               ))}
             </div>
@@ -218,7 +253,7 @@ export default function SubmissionsTab() {
             ) : data.requests.map(req => {
               const sc = STATUS_COLORS[req.status] ?? STATUS_COLORS.pending
               return (
-                <div key={req.id} style={{ display: 'grid', gridTemplateColumns: '200px 200px 180px 90px 80px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
+                <div key={req.id} style={{ display: 'grid', gridTemplateColumns: '200px 200px 180px 90px 80px 40px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
                   <span style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.service_name}</span>
                   {req.url ? (
                     <a href={req.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 11, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.url.replace(/^https?:\/\//, '').slice(0, 30)}</a>
@@ -235,6 +270,7 @@ export default function SubmissionsTab() {
                     updateRequestStatus(req.id, next)
                   }} />
                   <Mono style={{ fontSize: 10, color: C.t3 }}>{timeAgo(req.created_at)}</Mono>
+                  <DeleteBtn id={req.id} onDelete={deleteRequest} />
                 </div>
               )
             })}
@@ -248,18 +284,19 @@ export default function SubmissionsTab() {
       } pad={false}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 400 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-              {['EMAIL', 'SOURCE', 'SIGNED UP'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 40px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
+              {['EMAIL', 'SOURCE', 'SIGNED UP', ''].map(h => (
                 <Mono key={h} style={{ fontSize: 9, color: C.t3, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</Mono>
               ))}
             </div>
             {data.waitlist.length === 0 ? (
               <div style={{ padding: '20px 16px', background: C.surface, textAlign: 'center' }}><Mono style={{ fontSize: 12, color: C.t3 }}>No signups yet</Mono></div>
             ) : data.waitlist.map(entry => (
-              <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
+              <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 40px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
                 <a href={`mailto:${entry.email}`} style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, textDecoration: 'none' }}>{entry.email}</a>
                 <Badge text={entry.source || 'unknown'} color={C.purple} bg={C.purpleDim} />
                 <Mono style={{ fontSize: 10, color: C.t3 }}>{timeAgo(entry.created_at)}</Mono>
+                <DeleteBtn id={entry.id} onDelete={deleteWaitlist} />
               </div>
             ))}
           </div>
