@@ -24,22 +24,20 @@ export interface EndpointResult {
 async function pingEndpoint(url: string): Promise<{ status: EndpointStatus; response_ms: number; status_code: number | null; error: string | null }> {
   const start = Date.now()
   try {
-    // OSV.dev requires POST
-    const isOsv = url.includes('osv.dev')
     const res = await fetch(url, {
-      method: isOsv ? 'POST' : 'HEAD',
-      headers: isOsv ? { 'Content-Type': 'application/json' } : {},
-      body: isOsv ? '{}' : undefined,
+      method: 'GET',
       signal: AbortSignal.timeout(5000),
       redirect: 'follow',
     })
     const ms = Date.now() - start
     const code = res.status
 
+    // 5xx = server error → down
     if (code >= 500) return { status: 'down', response_ms: ms, status_code: code, error: null }
-    if (ms > 2000 || (code >= 300 && code < 400)) return { status: 'degraded', response_ms: ms, status_code: code, error: null }
-    if (code >= 200 && code < 300) return { status: 'up', response_ms: ms, status_code: code, error: null }
-    return { status: 'down', response_ms: ms, status_code: code, error: `Unexpected status ${code}` }
+    // Slow response → degraded (server is responding but poorly)
+    if (ms > 3000) return { status: 'degraded', response_ms: ms, status_code: code, error: null }
+    // 1xx–4xx = server responded → up (4xx just means bad request, server is healthy)
+    return { status: 'up', response_ms: ms, status_code: code, error: null }
   } catch (err) {
     return { status: 'down', response_ms: Date.now() - start, status_code: null, error: err instanceof Error ? err.message : 'Unknown error' }
   }
