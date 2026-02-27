@@ -924,6 +924,15 @@ export default function MonitorDashboard() {
   const [now, setNow] = useState(new Date())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyJson = () => {
+    if (!data) return
+    const text = `Review my Fabric Trust Index monitor dashboard data. Flag critical issues, warnings, and recommendations with specific actions.\n\n` + JSON.stringify(data, null, 2)
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -1030,6 +1039,11 @@ export default function MonitorDashboard() {
             <Dot color={error ? C.red : C.green} pulse />
             <Mono style={{ fontSize: 12, color: error ? C.red : C.green }}>{error ? 'error' : 'nominal'}</Mono>
           </div>
+          <button onClick={handleCopyJson} style={{
+            fontFamily: F.mono, fontSize: 10, color: copied ? C.green : C.t3,
+            background: 'none', border: `1px solid ${copied ? C.green + '44' : C.border}`,
+            borderRadius: 6, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
+          }}>{copied ? 'Copied!' : 'Copy JSON'}</button>
           <Mono style={{ fontSize: 11, color: C.t3 }}>{now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Mono>
         </div>
       </nav>
