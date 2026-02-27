@@ -5,8 +5,8 @@ import { runAllCollectors } from '@/lib/collectors/runner'
 export const maxDuration = 300
 
 /**
- * Collect specific services by ID for calibration testing.
- * POST body: { ids: string[] }
+ * Collect specific services by ID or slug for calibration testing.
+ * POST body: { ids?: string[], slugs?: string[] }
  */
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -16,19 +16,30 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json()
   const ids: string[] = body.ids ?? []
+  const slugs: string[] = body.slugs ?? []
 
-  if (ids.length === 0 || ids.length > 50) {
-    return NextResponse.json({ error: 'Provide 1-50 service IDs' }, { status: 400 })
+  if (ids.length === 0 && slugs.length === 0) {
+    return NextResponse.json({ error: 'Provide ids or slugs' }, { status: 400 })
+  }
+  if (ids.length + slugs.length > 50) {
+    return NextResponse.json({ error: 'Max 50 services per request' }, { status: 400 })
   }
 
   const supabase = createServerClient()
-  const { data: services } = await supabase
-    .from('services')
-    .select('*')
-    .in('id', ids)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let services: any[] = []
 
-  if (!services || services.length === 0) {
-    return NextResponse.json({ error: 'No services found for given IDs' }, { status: 404 })
+  if (ids.length > 0) {
+    const { data } = await supabase.from('services').select('*').in('id', ids)
+    if (data) services.push(...data)
+  }
+  if (slugs.length > 0) {
+    const { data } = await supabase.from('services').select('*').in('slug', slugs)
+    if (data) services.push(...data)
+  }
+
+  if (services.length === 0) {
+    return NextResponse.json({ error: 'No services found' }, { status: 404 })
   }
 
   const results: Array<{
