@@ -114,10 +114,10 @@ const TABS = [
   { id: 'activity', label: 'Activity' },
   { id: 'pipeline', label: 'Schedule' },
   { id: 'discovery', label: 'Discovery' },
-  { id: 'overrides', label: 'Overrides & CVEs' },
-  { id: 'crons', label: 'All Crons' },
   { id: 'review', label: 'Dev Review' },
   { id: 'marketing', label: 'Marketing' },
+  { id: 'overrides', label: 'Overrides & CVEs' },
+  { id: 'crons', label: 'All Crons' },
 ]
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
