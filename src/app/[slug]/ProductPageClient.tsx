@@ -130,113 +130,105 @@ function scoreBadgeColor(score: number): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getSignalSummary(key: string, meta: Record<string, any>): string {
-  switch (key) {
-    case 'virustotal_scan': {
-      const reason = meta.reason as string | undefined
-      if (reason === 'clean_moderation') return 'Clean — no issues detected'
-      if (reason === 'suspicious_flagged') return 'Flagged as suspicious'
-      if (reason === 'malware_blocked') return 'Malware detected'
-      if (reason === 'no_moderation_data') return 'Awaiting scan'
-      if (meta.source === 'virustotal_api') {
-        const m = (meta.malicious as number) ?? 0
-        const s = (meta.suspicious as number) ?? 0
-        return m > 0 ? `${m} malicious + ${s} suspicious detections` : s > 0 ? `${s} suspicious detections` : 'Clean — 0 detections'
-      }
-      return 'No scan data'
-    }
-    case 'content_safety': {
-      const count = (meta.findingsCount as number) ?? 0
-      return count === 0 ? 'No malicious patterns detected' : `${count} finding${count > 1 ? 's' : ''} detected`
-    }
-    case 'publisher_reputation': {
-      const parts: string[] = []
-      if (meta.isOrg) parts.push('Organization')
-      if (meta.accountAgeYears != null) parts.push(`${(meta.accountAgeYears as number).toFixed(1)}yr account`)
-      if (meta.publicRepos != null) parts.push(`${meta.publicRepos} repos`)
-      return parts.length > 0 ? parts.join(' · ') : 'No publisher data'
-    }
-    case 'adoption': {
-      const parts: string[] = []
-      if (meta.installsAllTime != null) parts.push(`${(meta.installsAllTime as number).toLocaleString()} installs`)
-      if (meta.stars != null) parts.push(`${meta.stars} stars`)
-      return parts.length > 0 ? parts.join(' · ') : 'No adoption data'
-    }
-    case 'freshness': {
-      const parts: string[] = []
-      const days = meta.daysSinceUpdate as number | undefined
-      if (days != null) parts.push(days === 0 ? 'Updated today' : `Updated ${days}d ago`)
-      if (meta.latestVersion) parts.push(`v${meta.latestVersion}`)
-      return parts.length > 0 ? parts.join(' · ') : 'No freshness data'
-    }
-    case 'transparency': {
-      const checks = meta.checks as Record<string, boolean> | undefined
-      if (!checks) return 'No transparency data'
-      const total = Object.keys(checks).length
-      const passed = Object.values(checks).filter(Boolean).length
-      return `${passed}/${total} metadata checks passed`
-    }
-    default:
-      return ''
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getStandardSignalSummary(key: string, meta: Record<string, any>): string {
+function getStandardSignalDetail(key: string, meta: Record<string, any>, service: { uptime_30d?: number; avg_latency_ms?: number; category: string }): string {
   switch (key) {
     case 'vulnerability': {
       const total = meta.total_cves as number | undefined
-      if (total == null) return 'No vulnerability data'
-      if (total === 0) return 'No known CVEs'
+      if (total == null || total === 0) return 'No known CVEs found in the OSV.dev database. Full dependency tree scanned.'
       const cves = meta.cves as Array<{ severity: string; patch_status: string }> | undefined
-      if (!cves) return `${total} CVE${total > 1 ? 's' : ''}`
-      const unpatched = cves.filter(c => c.patch_status === 'unpatched').length
-      const patchAvail = cves.filter(c => c.patch_status === 'patch_available').length
-      const patched = cves.filter(c => c.patch_status === 'patched').length
-      const parts: string[] = [`${total} CVE${total > 1 ? 's' : ''}`]
-      if (patched > 0) parts.push(`${patched} patched`)
-      if (patchAvail > 0) parts.push(`${patchAvail} patch available`)
-      if (unpatched > 0) parts.push(`${unpatched} unpatched`)
-      return parts.join(' · ')
+      if (!cves) return `${total} CVE${total > 1 ? 's' : ''} found.`
+      const bySev = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>
+      const byPatch = { patched: 0, patch_available: 0, unpatched: 0 } as Record<string, number>
+      for (const c of cves) { bySev[c.severity] = (bySev[c.severity] ?? 0) + 1; byPatch[c.patch_status] = (byPatch[c.patch_status] ?? 0) + 1 }
+      const sevParts = ['critical', 'high', 'medium', 'low'].filter(s => bySev[s] > 0).map(s => `${bySev[s]} ${s}`)
+      const patchParts = ['patched', 'patch_available', 'unpatched'].filter(s => byPatch[s] > 0).map(s => `${byPatch[s]} ${s.replace('_', ' ')}`)
+      let text = `${total} CVE${total > 1 ? 's' : ''} found — ${sevParts.join(', ')}. ${patchParts.join(', ')}.`
+      if (meta.supply_chain_cve_count) text += ` ${meta.supply_chain_cve_count} additional CVEs in the dependency supply chain.`
+      if (meta.has_critical_unpatched) text += ' Unpatched critical vulnerability detected — score capped.'
+      return text
     }
     case 'operational': {
+      if (meta.reason === 'no_endpoint_configured') return 'No endpoint configured — operational health not monitored.'
       const parts: string[] = []
-      if (meta.uptime_percent != null) parts.push(`${(meta.uptime_percent as number).toFixed(1)}% uptime`)
-      if (meta.p50_ms != null) parts.push(`p50: ${meta.p50_ms}ms`)
-      return parts.length > 0 ? parts.join(' · ') : 'No operational data'
+      const uptime = meta.uptime_percent ?? service.uptime_30d
+      if (uptime != null) parts.push(`${Number(uptime).toFixed(1)}% uptime over 30 days`)
+      const p50 = meta.p50_latency_ms ?? meta.p50_ms
+      if (p50 != null) parts.push(`p50 latency: ${p50}ms`)
+      const p99 = meta.p99_latency_ms
+      if (p99 != null) parts.push(`p99: ${p99}ms`)
+      if (meta.total_checks) parts.push(`${meta.total_checks} health checks performed`)
+      if (meta.is_up != null) parts.push(meta.is_up ? 'Currently up' : 'Currently down')
+      return parts.length > 0 ? parts.join('. ') + '.' : 'No operational data available.'
     }
     case 'maintenance': {
+      if (meta.reason === 'no_github_repo') return 'No GitHub repository linked.'
+      if (meta.repo_archived) return 'Repository is archived — no longer actively maintained.'
+      if (meta.repo_transferred) return `Repository ownership transferred from ${meta.old_owner ?? 'unknown'} to ${meta.new_owner ?? 'unknown'} — under review.`
       const parts: string[] = []
-      if (meta.days_since_release != null) parts.push(`${meta.days_since_release}d since release`)
-      if (meta.days_since_commit != null) parts.push(`${meta.days_since_commit}d since commit`)
-      if (meta.commits_90d != null) parts.push(`${meta.commits_90d} commits (90d)`)
-      return parts.length > 0 ? parts.join(' · ') : 'No maintenance data'
+      if (meta.commits_90d != null) parts.push(`${meta.commits_90d} commits in the last 90 days`)
+      if (meta.days_since_last_push != null) parts.push(`Last push: ${meta.days_since_last_push}d ago`)
+      if (meta.total_releases != null) {
+        let relText = `${meta.total_releases} releases`
+        if (meta.avg_release_interval_days != null) relText += ` (avg ${Math.round(meta.avg_release_interval_days)}d apart)`
+        parts.push(relText)
+      }
+      if (meta.open_issues != null) parts.push(`${meta.open_issues} open issues`)
+      if (meta.median_issue_response_hours != null) parts.push(`Median issue response: ${Math.round(meta.median_issue_response_hours)}h`)
+      return parts.length > 0 ? parts.join('. ') + '.' : 'No maintenance data available.'
     }
     case 'adoption': {
+      if (meta.reason === 'no_download_data') return 'No download data available for this service.'
       const parts: string[] = []
-      if (meta.weekly_downloads != null) parts.push(`${formatCompact(meta.weekly_downloads as number)} weekly downloads`)
-      if (meta.stars != null) parts.push(`${formatCompact(meta.stars as number)} stars`)
-      return parts.length > 0 ? parts.join(' · ') : 'No adoption data'
+      if (meta.weekly_downloads != null) parts.push(`${formatCompact(meta.weekly_downloads)} weekly downloads`)
+      if (meta.growth_rate != null) {
+        const rate = Number(meta.growth_rate)
+        parts.push(rate > 0 ? `${rate.toFixed(0)}% week-over-week growth` : rate < 0 ? `${Math.abs(rate).toFixed(0)}% weekly decline` : 'Stable download volume')
+      }
+      if (meta.category_percentile != null && meta.category_peer_count != null) {
+        const pct = Math.round(100 - Number(meta.category_percentile))
+        parts.push(`Top ${pct > 0 ? pct : 1}% among ${meta.category_peer_count} ${service.category} peers`)
+      }
+      if (meta.stars != null) parts.push(`${formatCompact(meta.stars)} GitHub stars`)
+      return parts.length > 0 ? parts.join('. ') + '.' : 'No adoption data available.'
     }
     case 'transparency': {
+      if (meta.reason === 'no_github_repo') return 'No GitHub repository linked — transparency not evaluated.'
       const parts: string[] = []
-      if (meta.has_readme != null) parts.push(meta.has_readme ? 'has README' : 'no README')
-      if (meta.has_license != null) parts.push(meta.has_license ? 'licensed' : 'no license')
-      if (meta.has_description != null) parts.push(meta.has_description ? 'described' : 'no description')
-      return parts.length > 0 ? parts.join(' · ') : 'No transparency data'
+      const cl = meta.checklist as Record<string, boolean | undefined> | undefined
+      if (cl) {
+        const items: string[] = []
+        if (cl.public_source != null) items.push(cl.public_source ? 'Public source ✓' : 'Public source ✗')
+        if (cl.recognized_license != null) items.push(cl.recognized_license ? `License (${meta.license ?? 'recognized'}) ✓` : 'License ✗')
+        if (cl.readme_with_examples != null) items.push(cl.readme_with_examples ? 'README with examples ✓' : 'README ✗')
+        if (cl.security_md != null) items.push(cl.security_md ? 'SECURITY.md ✓' : 'SECURITY.md ✗')
+        if (cl.api_docs != null) items.push(cl.api_docs ? 'API docs ✓' : 'API docs ✗')
+        if (cl.model_card != null) items.push(cl.model_card ? 'Model card ✓' : 'Model card ✗')
+        else if (meta.model_card_applicable === false) items.push('Model card N/A')
+        if (items.length > 0) parts.push(items.join(' · '))
+      }
+      if (meta.items_passed != null && meta.items_total != null) parts.push(`${meta.items_passed}/${meta.items_total} transparency checks passed`)
+      return parts.length > 0 ? parts.join('. ') + '.' : 'No transparency data available.'
     }
     case 'publisher_trust': {
+      if (meta.reason) return meta.reason === 'publisher_not_found' ? 'Publisher not found in the database.' : meta.reason === 'no_publisher_github' ? 'No GitHub organization linked to publisher.' : 'Publisher data unavailable.'
       const parts: string[] = []
-      if (meta.account_age_years != null) parts.push(`${Math.round(meta.account_age_years as number)}yr account`)
-      else if (meta.account_age_days != null) parts.push(`${Math.round((meta.account_age_days as number) / 365)}yr account`)
-      if (meta.project_age_days != null) {
-        const days = meta.project_age_days as number
-        if (days < 30) parts.push(`${days}d old (new)`)
-        else if (days < 365) parts.push(`${Math.round(days / 30)}mo project`)
-        else parts.push(`${Math.round(days / 365)}yr project`)
+      if (meta.account_age_years != null) {
+        const age = Number(meta.account_age_years)
+        const label = meta.is_organization ? 'organization' : 'user'
+        parts.push(age >= 1 ? `${age.toFixed(1)}-year-old ${label} account` : `${Math.round(age * 12)}-month-old ${label} account`)
       }
-      if (meta.npm_maintainers) parts.push(`${(meta.npm_maintainers as string[]).length} maintainers`)
-      return parts.length > 0 ? parts.join(' · ') : 'No publisher data'
+      if (meta.public_repos != null) parts.push(`${meta.public_repos} public repositories`)
+      if (meta.identity_registries) {
+        const regs = meta.identity_registries as string[]
+        if (regs.length > 0) parts.push(`Present on: ${regs.join(', ')}`)
+      }
+      if (meta.npm_maintainers) parts.push(`${(meta.npm_maintainers as string[]).length} npm maintainers`)
+      if (meta.project_age_days != null) {
+        const d = Number(meta.project_age_days)
+        parts.push(d < 30 ? `Project age: ${d} days (new)` : d < 365 ? `Project age: ${Math.round(d / 30)} months` : `Project age: ${(d / 365).toFixed(1)} years`)
+      }
+      if (meta.npm_deprecated) parts.push('Warning: npm package is marked as deprecated')
+      return parts.length > 0 ? parts.join('. ') + '.' : 'No publisher data available.'
     }
     default:
       return ''
@@ -509,7 +501,7 @@ function SignalDetailCards({ signals, metas, homepageUrl }: { signals: number[];
 
 // ---------- Helper components ----------
 
-function SignalRow({ name, score, weight, detail, note, summary, isSkill }: { name: string; score: number; weight: string; detail: string; note?: string; summary?: string; isSkill?: boolean }) {
+function SignalRow({ name, score, weight, detail, note, isSkill }: { name: string; score: number; weight: string; detail: string; note?: string; isSkill?: boolean }) {
   const [open, setOpen] = useState(false)
   const pct = (score / 5) * 100
   const level = score >= 4 ? 'high' : score >= 3 ? 'medium' : 'low'
@@ -533,13 +525,6 @@ function SignalRow({ name, score, weight, detail, note, summary, isSkill }: { na
           </button>
         )}
       </div>
-      {/* Summary line for skills */}
-      {summary && (
-        <div className={`grid gap-4 max-md:gap-2 mt-0.5 ${isSkill ? 'grid-cols-[180px_1fr_50px_42px] max-md:grid-cols-[100px_1fr_40px_36px]' : 'grid-cols-[180px_1fr_50px_42px_20px] max-md:grid-cols-[100px_1fr_40px_36px_20px]'}`}>
-          <div />
-          <span className="font-mono text-[0.66rem] text-fabric-400">{summary}</span>
-        </div>
-      )}
       {/* Expandable detail for non-skills */}
       {!isSkill && open && (
         <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 py-1.5">
@@ -806,20 +791,19 @@ export default function ProductPageClient({
               const isSkill = service.category === 'skill'
               const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : STANDARD_SIGNAL_KEYS[i]
               const rawMeta = signalKey ? signalMetas[signalKey] : undefined
-              const summary = signalKey && rawMeta
-                ? (isSkill ? getSignalSummary(signalKey, rawMeta) : getStandardSignalSummary(signalKey, rawMeta))
-                : undefined
+              const detail = !isSkill && signalKey && rawMeta
+                ? getStandardSignalDetail(signalKey, rawMeta, service)
+                : signal.detail
               return (
                 <SignalRow
                   key={signal.name}
                   name={signal.name}
                   score={service.signals[i]}
                   weight={signal.weight}
-                  detail={signal.detail}
+                  detail={detail}
                   note={isSkill && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
                     ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
                     : undefined}
-                  summary={summary}
                   isSkill={isSkill}
                 />
               )
