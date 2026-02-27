@@ -41,7 +41,22 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(15000),
     })
     if (!res.ok) throw new Error(`Monitor API returned ${res.status}`)
-    dashboardData = await res.json()
+    const fullData = await res.json()
+
+    // Trim bulky arrays to reduce token count (~36k → ~3-4k)
+    const events = Array.isArray(fullData.events) ? fullData.events : []
+    const timeline = Array.isArray(fullData.timeline) ? fullData.timeline : []
+    const discoveryQueue = Array.isArray(fullData.discoveryQueue) ? fullData.discoveryQueue : []
+
+    dashboardData = {
+      ...fullData,
+      discoveryQueue: undefined,
+      discoveryPending: discoveryQueue.length,
+      events: events.slice(0, 5),
+      eventsTotal: events.length,
+      timeline: timeline.slice(0, 5),
+      timelineTotal: timeline.length,
+    }
   } catch (err) {
     return NextResponse.json(
       { error: 'Failed to fetch dashboard data', message: err instanceof Error ? err.message : 'Unknown' },
