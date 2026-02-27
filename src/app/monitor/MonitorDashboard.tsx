@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import MarketingTab from './MarketingTab'
 import NetworkingTab from './NetworkingTab'
 import CostsTab from './CostsTab'
+import SubmissionsTab from './SubmissionsTab'
 
 // ─── FABRIC DESIGN TOKENS ──────────────────────────────────────────
 const F = {
@@ -115,14 +116,14 @@ const srcLabel = (s: string) => s === 'producthunt' ? 'Product Hunt' : s === 'gi
 const TABS = [
   { id: 'health', label: 'System Health' },
   { id: 'activity', label: 'Activity' },
-  { id: 'pipeline', label: 'Schedule' },
-  { id: 'discovery', label: 'Discovery' },
   { id: 'review', label: 'Dev Review' },
+  { id: 'discovery', label: 'Discovery' },
   { id: 'marketing', label: 'Marketing' },
   { id: 'networking', label: 'Networking' },
-  { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'costs', label: 'Costs' },
-  { id: 'crons', label: 'All Crons' },
+  { id: 'crons', label: 'Crons' },
+  { id: 'overrides', label: 'Overrides & CVEs' },
+  { id: 'submissions', label: 'Submissions' },
 ]
 
 // ─── OVERRIDE DEFINITIONS ─────────────────────────────────────────
@@ -1653,28 +1654,34 @@ function ReviewTab() {
   )
 }
 
-// ─── ALL CRONS TAB ────────────────────────────────────────────────
-function CronsTab() {
+// ─── COMBINED CRONS TAB ──────────────────────────────────────────
+function CombinedCronsTab({ data }: { data: MonitorData }) {
   const headers = ['Pipeline', 'Frequency', 'Schedule', 'Step', '']
   const cols = '240px 140px 140px 120px 40px'
   return (
-    <Card pad={false}>
-      <div style={{ padding: '20px 24px 0' }}><SecLabel>All Cron Endpoints · {PIPELINES.length} registered</SecLabel></div>
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, padding: '12px 24px 8px', borderBottom: `1px solid ${C.border}`, minWidth: 680 }}>
-          {headers.map(h => <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>)}
-        </div>
-        {PIPELINES.map((p, i) => (
-          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: cols, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', minWidth: 680, background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-            <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{p.name}</span>
-            <Mono style={{ fontSize: 11, color: C.t3 }}>{p.freq}</Mono>
-            <Mono style={{ fontSize: 11, color: C.t2 }}>{p.schedule}</Mono>
-            <Badge text={p.step} color={C.t2} bg={C.surface} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Dot color={C.green} /></div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Schedule section on top */}
+      <ScheduleTab data={data} />
+
+      {/* All registered pipelines */}
+      <Card pad={false}>
+        <div style={{ padding: '20px 24px 0' }}><SecLabel>All Cron Endpoints · {PIPELINES.length} registered</SecLabel></div>
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, padding: '12px 24px 8px', borderBottom: `1px solid ${C.border}`, minWidth: 680 }}>
+            {headers.map(h => <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>)}
           </div>
-        ))}
-      </div>
-    </Card>
+          {PIPELINES.map((p, i) => (
+            <div key={p.id} style={{ display: 'grid', gridTemplateColumns: cols, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', minWidth: 680, background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{p.name}</span>
+              <Mono style={{ fontSize: 11, color: C.t3 }}>{p.freq}</Mono>
+              <Mono style={{ fontSize: 11, color: C.t2 }}>{p.schedule}</Mono>
+              <Badge text={p.step} color={C.t2} bg={C.surface} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Dot color={C.green} /></div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   )
 }
 
@@ -1894,15 +1901,15 @@ export default function MonitorDashboard() {
       {/* CONTENT */}
       <div style={{ padding: '24px 40px 60px', maxWidth: 1400, margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         {tab === 'health' && <HealthTab data={data} />}
-        {tab === 'costs' && <CostsTab githubRate={data.health.github} vercelData={data.health.vercel} />}
         {tab === 'activity' && <ActivityTab data={data} />}
-        {tab === 'pipeline' && <ScheduleTab data={data} />}
-        {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
-        {tab === 'overrides' && <OverridesTab data={data} />}
-        {tab === 'crons' && <CronsTab />}
         {tab === 'review' && <ReviewTab />}
+        {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
         {tab === 'marketing' && <MarketingTab />}
         {tab === 'networking' && <NetworkingTab />}
+        {tab === 'costs' && <CostsTab githubRate={data.health.github} vercelData={data.health.vercel} />}
+        {tab === 'crons' && <CombinedCronsTab data={data} />}
+        {tab === 'overrides' && <OverridesTab data={data} />}
+        {tab === 'submissions' && <SubmissionsTab />}
       </div>
 
       {/* FOOTER */}
