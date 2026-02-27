@@ -32,6 +32,7 @@ async function loadIncidents() {
   return await getRecentIncidents(50)
 }
 
+export const dynamic = 'force-dynamic'
 export const revalidate = 300 // ISR: revalidate every 5 minutes
 
 export default async function TrustIndexPage() {
