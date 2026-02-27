@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { runCollectors, runAllCollectors } from '@/lib/collectors/runner'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 300
 
@@ -48,15 +49,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const result = { processed, rescored, total: services.length }
+    await logCronRun('collect-cve', result)
+
     return NextResponse.json({
       ok: true,
-      processed,
-      rescored,
-      total: services.length,
+      ...result,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
     console.error('CVE collection failed:', err)
+    await logCronRun('collect-cve', {}, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       { error: 'Collection failed', message: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 }

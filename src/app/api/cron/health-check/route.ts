@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { runCollectors } from '@/lib/collectors/runner'
 import { pingAllEndpoints, storeResults } from '@/lib/infra-health'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 120
 
@@ -45,15 +46,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const result = { processed, total: services.length, infra: infraResults.length }
+    await logCronRun('health-check', result)
     return NextResponse.json({
       ok: true,
-      processed,
-      total: services.length,
-      infra: infraResults.length,
+      ...result,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
     console.error('Health check cron failed:', err)
+    await logCronRun('health-check', {}, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       { error: 'Health check failed', message: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 }

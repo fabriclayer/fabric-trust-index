@@ -169,18 +169,30 @@ export const publisherTrustCollector: Collector = {
     let identityPoints = 0
     const identityChecks: string[] = []
 
+    // Count registry presence from both publisher fields AND service package refs
     if (publisher.github_org) identityChecks.push('github')
-    if (publisher.npm_org) identityChecks.push('npm')
-    if (publisher.pypi_org) identityChecks.push('pypi')
+    if (publisher.npm_org || service.npm_package) identityChecks.push('npm')
+    if (publisher.pypi_org || service.pypi_package) identityChecks.push('pypi')
 
-    // Cross-check npm maintainer matches GitHub org
+    // Cross-check npm identity matches GitHub org
     let npmInfo: NpmPackageInfo | null = null
     if (service.npm_package && publisher.github_org) {
       npmInfo = await getNpmPackageInfo(service.npm_package)
-      if (npmInfo?.maintainers?.some(m =>
-        m.name.toLowerCase() === publisher.github_org!.toLowerCase() ||
-        m.name.toLowerCase() === publisher.npm_org?.toLowerCase()
-      )) {
+
+      // Check maintainer names OR scoped package scope against github org
+      const ghOrgLower = publisher.github_org.toLowerCase()
+      const npmOrgLower = publisher.npm_org?.toLowerCase()
+      const npmScope = service.npm_package.startsWith('@')
+        ? service.npm_package.split('/')[0].slice(1).toLowerCase()
+        : null
+
+      const maintainerMatch = npmInfo?.maintainers?.some(m => {
+        const name = m.name.toLowerCase()
+        return name === ghOrgLower || (npmOrgLower && name === npmOrgLower)
+      })
+      const scopeMatch = npmScope && (npmScope === ghOrgLower || npmScope === npmOrgLower)
+
+      if (maintainerMatch || scopeMatch) {
         identityPoints += 0.375
         sources.push(`npm:${service.npm_package}`)
       }

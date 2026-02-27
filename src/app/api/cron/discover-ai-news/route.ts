@@ -7,6 +7,7 @@ import {
   deriveCapabilities,
 } from '@/lib/discovery/pipeline'
 import { sendDiscoveryDigest } from '@/lib/alerts/email'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 300
 
@@ -92,18 +93,23 @@ export async function GET(request: NextRequest) {
       emailSent = await sendDiscoveryDigest(toProcess)
     }
 
-    return NextResponse.json({
-      ok: true,
+    const cronResult = {
       ...result,
       pendingReview: pendingCount,
       duplicates: duplicateCount,
       emailSent,
       insertErrors: insertErrors.length > 0 ? insertErrors : undefined,
       sourceFilter: sourceFilter ?? 'all',
+    }
+    await logCronRun('discover-ai-news', cronResult as Record<string, unknown>)
+    return NextResponse.json({
+      ok: true,
+      ...cronResult,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
     console.error('AI news discovery failed:', err)
+    await logCronRun('discover-ai-news', {}, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       {
         error: 'AI news discovery failed',

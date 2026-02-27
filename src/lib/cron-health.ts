@@ -15,8 +15,9 @@ interface CronDef {
   name: string
   schedule: string
   expectedIntervalMs: number
+  /** Fallback detection if cron_runs table has no entry for this cron */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  detectLastRun: (supabase: any) => Promise<string | null>
+  fallbackDetect?: (supabase: any) => Promise<string | null>
 }
 
 const CRON_DEFS: CronDef[] = [
@@ -25,7 +26,7 @@ const CRON_DEFS: CronDef[] = [
     name: 'Daily Scoring',
     schedule: '0 2 * * *',
     expectedIntervalMs: 26 * 3600000, // 26h grace
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('signal_history').select('recorded_at').eq('signal_name', 'composite').order('recorded_at', { ascending: false }).limit(1)
       return data?.[0]?.recorded_at ?? null
     },
@@ -35,9 +36,9 @@ const CRON_DEFS: CronDef[] = [
     name: 'CVE Full Scan',
     schedule: '0 * * * *',
     expectedIntervalMs: 2 * 3600000, // 2h grace
-    detectLastRun: async (sb) => {
-      const { data } = await sb.from('cve_records').select('created_at').order('created_at', { ascending: false }).limit(1)
-      return data?.[0]?.created_at ?? null
+    fallbackDetect: async (sb) => {
+      const { data } = await sb.from('signal_history').select('recorded_at').eq('signal_name', 'vulnerability').order('recorded_at', { ascending: false }).limit(1)
+      return data?.[0]?.recorded_at ?? null
     },
   },
   {
@@ -45,18 +46,15 @@ const CRON_DEFS: CronDef[] = [
     name: 'CVE Fast-Path',
     schedule: '*/5 * * * *',
     expectedIntervalMs: 15 * 60000, // 15m grace
-    detectLastRun: async (sb) => {
-      // Uses same cve_records table — detect by most recent
-      const { data } = await sb.from('cve_records').select('created_at').order('created_at', { ascending: false }).limit(1)
-      return data?.[0]?.created_at ?? null
-    },
+    // No fallback — checkpoint writes to signal_history fail due to FK constraint on service_id.
+    // Detection relies entirely on cron_runs table.
   },
   {
     id: 'health-check',
     name: 'Health Check',
     schedule: '*/15 * * * *',
     expectedIntervalMs: 30 * 60000, // 30m grace
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('infra_health_checks').select('checked_at').order('checked_at', { ascending: false }).limit(1)
       return data?.[0]?.checked_at ?? null
     },
@@ -66,7 +64,7 @@ const CRON_DEFS: CronDef[] = [
     name: 'Registry Discovery',
     schedule: '0 4 * * *',
     expectedIntervalMs: 26 * 3600000,
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('services').select('created_at').order('created_at', { ascending: false }).limit(1)
       return data?.[0]?.created_at ?? null
     },
@@ -76,7 +74,7 @@ const CRON_DEFS: CronDef[] = [
     name: 'AI News Scanner',
     schedule: '30 4 * * *',
     expectedIntervalMs: 26 * 3600000,
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('discovery_queue').select('created_at').order('created_at', { ascending: false }).limit(1)
       return data?.[0]?.created_at ?? null
     },
@@ -86,7 +84,7 @@ const CRON_DEFS: CronDef[] = [
     name: 'Watchdog QA',
     schedule: '0 3 * * *',
     expectedIntervalMs: 26 * 3600000,
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('incidents').select('created_at').order('created_at', { ascending: false }).limit(1)
       return data?.[0]?.created_at ?? null
     },
@@ -96,7 +94,7 @@ const CRON_DEFS: CronDef[] = [
     name: 'AI Review',
     schedule: '0 10,22 * * *',
     expectedIntervalMs: 14 * 3600000, // 14h grace
-    detectLastRun: async (sb) => {
+    fallbackDetect: async (sb) => {
       const { data } = await sb.from('monitor_reviews').select('created_at').order('created_at', { ascending: false }).limit(1)
       return data?.[0]?.created_at ?? null
     },
@@ -106,13 +104,46 @@ const CRON_DEFS: CronDef[] = [
 export async function checkCronHealth(supabase: ReturnType<typeof createServerClient>): Promise<CronHealthItem[]> {
   const now = Date.now()
 
+  // Primary detection: cron_runs table (most reliable — each cron logs its own runs)
+  let cronRunsMap = new Map<string, string>()
+  try {
+    const { data: recentRuns } = await supabase
+      .from('cron_runs')
+      .select('cron_id, completed_at')
+      .eq('status', 'success')
+      .order('completed_at', { ascending: false })
+      .limit(50)
+
+    if (recentRuns) {
+      for (const run of recentRuns) {
+        // Keep only the most recent per cron_id
+        if (!cronRunsMap.has(run.cron_id)) {
+          cronRunsMap.set(run.cron_id, run.completed_at)
+        }
+      }
+    }
+  } catch {
+    // Table may not exist yet — fall through to fallback detection
+    cronRunsMap = new Map()
+  }
+
+  // Resolve last run for each cron: prefer cron_runs, then fallback detection
   const lastRuns = await Promise.all(
     CRON_DEFS.map(async (cron) => {
-      try {
-        return await cron.detectLastRun(supabase)
-      } catch {
-        return null
+      // Check cron_runs first
+      const fromCronRuns = cronRunsMap.get(cron.id)
+      if (fromCronRuns) return fromCronRuns
+
+      // Fallback to side-effect detection
+      if (cron.fallbackDetect) {
+        try {
+          return await cron.fallbackDetect(supabase)
+        } catch {
+          return null
+        }
       }
+
+      return null
     })
   )
 

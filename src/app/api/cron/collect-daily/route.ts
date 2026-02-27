@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { runAllCollectors } from '@/lib/collectors/runner'
 import { runClawHubScoring } from '@/lib/collectors/clawhub/runner'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 300
 
@@ -34,10 +35,14 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + batchSize - 1)
 
     if (!services || services.length === 0) {
-      return NextResponse.json({
-        ok: true,
+      const result = {
         message: 'Daily scoring complete',
         totalProcessed: offset,
+      }
+      await logCronRun('collect-daily', result)
+      return NextResponse.json({
+        ok: true,
+        ...result,
         timestamp: new Date().toISOString(),
       })
     }
@@ -77,16 +82,23 @@ export async function GET(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({
-      ok: true,
+    const result = {
       batch: { offset, size: services.length, processed, errors },
       progress: { completed: nextOffset, total: totalCount, remaining: totalCount - nextOffset },
       chaining: hasMore,
       errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+    }
+    if (!hasMore) {
+      await logCronRun('collect-daily', result)
+    }
+    return NextResponse.json({
+      ok: true,
+      ...result,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
     console.error('Daily collection failed:', err)
+    await logCronRun('collect-daily', {}, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       { error: 'Collection failed', message: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 },

@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { runWatchdog } from '@/lib/watchdog'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 300
 
@@ -33,12 +34,20 @@ export async function GET(request: NextRequest) {
   try {
     const report = await runWatchdog({ dryRun, maxRemediations, maxRescores })
 
+    await logCronRun('watchdog', {
+      issues_found: report.issues_found,
+      issues_fixed: report.issues_fixed,
+      issues_unfixable: report.issues_unfixable,
+      rescored: report.rescored,
+      dry_run: dryRun,
+    })
     return NextResponse.json({
       ok: report.issues_unfixable === 0 && report.issues_found - report.issues_fixed <= report.issues_unfixable,
       ...report,
     })
   } catch (err) {
     console.error('Watchdog failed:', err)
+    await logCronRun('watchdog', {}, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       { error: 'Watchdog failed', message: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 }

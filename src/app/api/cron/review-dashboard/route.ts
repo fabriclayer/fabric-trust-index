@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { logApiUsage } from '@/lib/api-usage'
+import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 120
 
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
       timelineTotal: timeline.length,
     }
   } catch (err) {
+    await logCronRun('review-dashboard', {}, 'failed', `Dashboard fetch: ${err instanceof Error ? err.message : 'Unknown'}`)
     return NextResponse.json(
       { error: 'Failed to fetch dashboard data', message: err instanceof Error ? err.message : 'Unknown' },
       { status: 500 },
@@ -80,6 +82,7 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (insertError || !review) {
+    await logCronRun('review-dashboard', {}, 'failed', `Insert review row: ${insertError?.message ?? 'Unknown'}`)
     return NextResponse.json(
       { error: 'Failed to create review row', detail: insertError?.message },
       { status: 500 },
@@ -140,6 +143,12 @@ export async function GET(request: NextRequest) {
       })
       .eq('id', reviewId)
 
+    await logCronRun('review-dashboard', {
+      review_id: reviewId,
+      duration_ms: durationMs,
+      token_usage: tokenUsage,
+      analysis_length: analysis.length,
+    })
     return NextResponse.json({
       ok: true,
       review_id: reviewId,
@@ -160,6 +169,7 @@ export async function GET(request: NextRequest) {
       })
       .eq('id', reviewId)
 
+    await logCronRun('review-dashboard', { review_id: reviewId, duration_ms: durationMs }, 'failed', err instanceof Error ? err.message : 'Unknown')
     return NextResponse.json(
       { error: 'Review failed', message: err instanceof Error ? err.message : 'Unknown', review_id: reviewId },
       { status: 500 },
