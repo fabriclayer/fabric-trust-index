@@ -225,7 +225,7 @@ function HealthTab({ data }: { data: MonitorData }) {
         }>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(endpoints.length, 4)}, 1fr)`, gap: 12 }}>
             {endpoints.map(ep => (
-              <div key={ep.endpoint} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: `1px solid ${ep.status !== 'up' ? epStatusColor(ep.status) + '33' : C.border}` }}>
+              <div key={ep.endpoint} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: `1px solid ${ep.status === 'up' ? C.green + '44' : epStatusColor(ep.status) + '33'}`, boxShadow: ep.status === 'up' ? `0 0 12px ${C.green}22, inset 0 0 12px ${C.green}08` : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <Dot color={epStatusColor(ep.status)} pulse={ep.status !== 'up'} />
                   <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{ep.label}</span>
