@@ -11,12 +11,13 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient()
 
-  const [tasks, content, kols, kpis, networking] = await Promise.all([
+  const [tasks, content, kols, kpis, networking, contacts] = await Promise.all([
     supabase.from('marketing_tasks').select('*').order('sort_order'),
     supabase.from('marketing_content').select('*').order('sort_order').order('created_at', { ascending: false }),
     supabase.from('marketing_kol_tracker').select('*').order('tier').order('sort_order'),
     supabase.from('marketing_kpis').select('*').order('month').order('metric'),
     supabase.from('marketing_networking').select('*').order('sort_order').order('created_at', { ascending: false }),
+    supabase.from('marketing_networking_contacts').select('*').order('sort_order'),
   ])
 
   return NextResponse.json({
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
     kols: kols.data ?? [],
     kpis: kpis.data ?? [],
     networking: networking.data ?? [],
+    contacts: contacts.data ?? [],
   })
 }
 
@@ -125,10 +127,10 @@ export async function POST(request: NextRequest) {
     }
 
     case 'create_networking': {
-      const { project_name, handle, platform, trust_page_slug, notes } = body
+      const { project_name, handle, platform, trust_page_slug, website_url, notes } = body
       const { data, error } = await supabase
         .from('marketing_networking')
-        .insert({ project_name, handle: handle || null, platform: platform || 'x', trust_page_slug: trust_page_slug || null, stage: 'identified', engagement_count: 0, notes: notes || null })
+        .insert({ project_name, handle: handle || null, platform: platform || 'x', trust_page_slug: trust_page_slug || null, website_url: website_url || null, stage: 'identified', engagement_count: 0, notes: notes || null })
         .select('id')
         .single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -153,6 +155,34 @@ export async function POST(request: NextRequest) {
     case 'delete_networking': {
       const { id } = body
       const { error } = await supabase.from('marketing_networking').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'create_contact': {
+      const { networking_id, name, role, x_handle, linkedin_handle, telegram_handle } = body
+      const { data, error } = await supabase
+        .from('marketing_networking_contacts')
+        .insert({ networking_id, name, role: role || null, x_handle: x_handle || null, linkedin_handle: linkedin_handle || null, telegram_handle: telegram_handle || null })
+        .select('id')
+        .single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, id: data.id })
+    }
+
+    case 'update_contact': {
+      const { id, updates } = body
+      const { error } = await supabase
+        .from('marketing_networking_contacts')
+        .update({ ...updates, updated_at: now })
+        .eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
+    }
+
+    case 'delete_contact': {
+      const { id } = body
+      const { error } = await supabase.from('marketing_networking_contacts').delete().eq('id', id)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ ok: true })
     }

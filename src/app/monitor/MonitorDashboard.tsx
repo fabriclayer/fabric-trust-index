@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import MarketingTab from './MarketingTab'
+import NetworkingTab from './NetworkingTab'
 import CostsTab from './CostsTab'
 
 // ─── FABRIC DESIGN TOKENS ──────────────────────────────────────────
@@ -118,6 +119,7 @@ const TABS = [
   { id: 'discovery', label: 'Discovery' },
   { id: 'review', label: 'Dev Review' },
   { id: 'marketing', label: 'Marketing' },
+  { id: 'networking', label: 'Networking' },
   { id: 'overrides', label: 'Overrides & CVEs' },
   { id: 'costs', label: 'Costs' },
   { id: 'crons', label: 'All Crons' },
@@ -251,17 +253,7 @@ function HealthTab({ data }: { data: MonitorData }) {
 
       {/* Cron Schedule Health */}
       {cronHealth.length > 0 && (
-        <Card title="Cron Schedule Health" right={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Badge text={`${cronHealth.filter(c => c.status === 'on_schedule').length} on schedule`} color={C.green} bg={C.greenDim} />
-            {cronHealth.filter(c => c.status === 'overdue').length > 0 && (
-              <Badge text={`${cronHealth.filter(c => c.status === 'overdue').length} overdue`} color={C.orange} bg={C.orangeDim} />
-            )}
-            {cronHealth.filter(c => c.status === 'missed').length > 0 && (
-              <Badge text={`${cronHealth.filter(c => c.status === 'missed').length} missed`} color={C.red} bg={C.redDim} />
-            )}
-          </div>
-        } pad={false}>
+        <Card title="Cron Schedule Health" pad={false}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {cronHealth.map((cron, i) => (
               <div key={cron.cronId} style={{
@@ -1910,6 +1902,7 @@ export default function MonitorDashboard() {
         {tab === 'crons' && <CronsTab />}
         {tab === 'review' && <ReviewTab />}
         {tab === 'marketing' && <MarketingTab />}
+        {tab === 'networking' && <NetworkingTab />}
       </div>
 
       {/* FOOTER */}

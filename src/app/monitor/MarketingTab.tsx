@@ -20,10 +20,8 @@ const C = {
 // ─── TYPES ───────────────────────────────────────────────────────
 interface MTask { id: string; section: string; title: string; subtitle: string | null; note: string | null; priority: string; status: string; sort_order: number }
 interface MContent { id: string; title: string; type: string; platform: string; target_date: string | null; status: string; url: string | null; notes: string | null; content_body: string | null; sort_order: number }
-interface MKol { id: string; name: string; handle: string; platform: string; tier: number; followers: string | null; stage: string; engagement_count: number; last_engaged_at: string | null; notes: string | null }
-interface MNetworking { id: string; project_name: string; handle: string | null; platform: string; trust_page_slug: string | null; stage: string; engagement_count: number; last_contacted_at: string | null; notes: string | null }
 interface MKpi { id: string; metric: string; month: number; target: number; actual: number }
-interface MData { tasks: MTask[]; content: MContent[]; kols: MKol[]; kpis: MKpi[]; networking: MNetworking[] }
+interface MData { tasks: MTask[]; content: MContent[]; kpis: MKpi[] }
 
 // ─── ATOMS ───────────────────────────────────────────────────────
 function Mono({ children, style: s }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -81,26 +79,6 @@ const submitBtnStyle: React.CSSProperties = {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────────
-const KOL_STAGES = ['follow', 'like', 'reply', 'quote-tweet', 'dm', 'relationship'] as const
-const STAGE_COLORS: Record<string, { color: string; bg: string }> = {
-  follow: { color: C.t3, bg: 'rgba(255,255,255,0.05)' },
-  like: { color: C.blue, bg: C.blueDim },
-  reply: { color: C.green, bg: C.greenDim },
-  'quote-tweet': { color: C.purple, bg: C.purpleDim },
-  dm: { color: C.orange, bg: C.orangeDim },
-  relationship: { color: C.pink, bg: C.pinkDim },
-}
-
-const NETWORKING_STAGES = ['identified', 'followed', 'engaged', 'sent-page', 'responded', 'relationship'] as const
-const NETWORKING_STAGE_COLORS: Record<string, { color: string; bg: string }> = {
-  identified: { color: C.t3, bg: 'rgba(255,255,255,0.05)' },
-  followed: { color: C.blue, bg: C.blueDim },
-  engaged: { color: C.green, bg: C.greenDim },
-  'sent-page': { color: C.orange, bg: C.orangeDim },
-  responded: { color: C.purple, bg: C.purpleDim },
-  relationship: { color: C.pink, bg: C.pinkDim },
-}
-
 const CONTENT_STATUSES = ['idea', 'draft', 'ready', 'published', 'skipped'] as const
 const CONTENT_STATUS_COLORS: Record<string, { color: string; bg: string }> = {
   idea: { color: C.t3, bg: 'rgba(255,255,255,0.05)' },
@@ -138,19 +116,6 @@ const KPI_LABELS: Record<string, string> = {
   hn_front_page: 'HN Front Page',
   newsletter_mentions: 'Newsletter Mentions',
   kol_interactions: 'KOL Interactions',
-}
-
-const timeAgo = (iso: string | null) => {
-  if (!iso) return '-'
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`
-}
-
-const profileUrl = (handle: string, platform: string) => {
-  if (platform === 'x') return `https://x.com/${handle.replace('@', '')}`
-  if (platform === 'bluesky') return `https://bsky.app/profile/${handle.replace('@', '')}`
-  if (platform === 'linkedin') return `https://linkedin.com/in/${handle.replace('@', '')}`
-  return `https://x.com/${handle.replace('@', '')}`
 }
 
 // ─── POST HELPER ─────────────────────────────────────────────────
@@ -229,6 +194,7 @@ function ContentSection({ content, onChange, onCreate, onDelete }: {
   const [editingBodyId, setEditingBodyId] = useState<string | null>(null)
   const [editBodyVal, setEditBodyVal] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   const cycleStatus = (current: string) => {
     const idx = CONTENT_STATUSES.indexOf(current as typeof CONTENT_STATUSES[number])
@@ -321,11 +287,18 @@ function ContentSection({ content, onChange, onCreate, onDelete }: {
                 <Mono style={{ fontSize: 11, color: C.t2 }}>{item.platform}</Mono>
                 <Mono style={{ fontSize: 11, color: C.t3 }}>{item.target_date ?? '-'}</Mono>
                 <Badge text={item.status} color={sc.color} bg={sc.bg} onClick={() => onChange(item.id, { status: cycleStatus(item.status) })} />
-                <button
-                  onClick={() => { if (confirm('Delete this content item?')) onDelete(item.id) }}
-                  style={{ fontFamily: F.mono, fontSize: 12, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                  title="Delete"
-                >&times;</button>
+                {deleteConfirm === item.id ? (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => { onDelete(item.id); setDeleteConfirm(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Yes</button>
+                    <button onClick={() => setDeleteConfirm(null)} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>No</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setDeleteConfirm(item.id)}
+                    style={{ fontFamily: F.mono, fontSize: 18, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', lineHeight: 1 }}
+                    title="Delete"
+                  >&times;</button>
+                )}
               </div>
               {/* Expanded content body */}
               {isExpanded && (
@@ -504,244 +477,6 @@ function ChecklistSection({ title, section, tasks, onToggle, onCreate }: {
   )
 }
 
-// ─── KOL TRACKER ─────────────────────────────────────────────────
-function KolSection({ kols, onUpdate, onEngage, onCreate }: {
-  kols: MKol[]
-  onUpdate: (id: string, updates: Record<string, unknown>) => void
-  onEngage: (id: string) => void
-  onCreate: (item: { name: string; handle: string; platform: string; tier: number; followers?: string; notes?: string }) => void
-}) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newHandle, setNewHandle] = useState('')
-  const [newPlatform, setNewPlatform] = useState('x')
-  const [newTier, setNewTier] = useState(2)
-  const [newFollowers, setNewFollowers] = useState('')
-  const [newNotes, setNewNotes] = useState('')
-  const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
-  const [editNotesVal, setEditNotesVal] = useState('')
-
-  const cycleStage = (current: string) => {
-    const idx = KOL_STAGES.indexOf(current as typeof KOL_STAGES[number])
-    return KOL_STAGES[(idx + 1) % KOL_STAGES.length]
-  }
-
-  const handleAdd = () => {
-    if (!newName.trim() || !newHandle.trim()) return
-    onCreate({ name: newName.trim(), handle: newHandle.trim(), platform: newPlatform, tier: newTier, followers: newFollowers.trim() || undefined, notes: newNotes.trim() || undefined })
-    setNewName(''); setNewHandle(''); setNewFollowers(''); setNewNotes(''); setShowAdd(false)
-  }
-
-  return (
-    <Card title="KOL Tracker" right={
-      <button onClick={() => setShowAdd(!showAdd)} style={addBtnStyle}>+ Add KOL</button>
-    } pad={false}>
-      {showAdd && (
-        <div style={{ padding: '12px 24px 16px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
-            <input placeholder="@handle" value={newHandle} onChange={e => setNewHandle(e.target.value)} style={{ ...inputStyle, width: 130 }} />
-            <select value={newPlatform} onChange={e => setNewPlatform(e.target.value)} style={selectStyle}>
-              {['x', 'bluesky', 'linkedin', 'youtube'].map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select value={newTier} onChange={e => setNewTier(Number(e.target.value))} style={selectStyle}>
-              <option value={1}>Tier 1</option>
-              <option value={2}>Tier 2</option>
-            </select>
-            <input placeholder="Followers (e.g. 12K)" value={newFollowers} onChange={e => setNewFollowers(e.target.value)} style={{ ...inputStyle, width: 100 }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            <input placeholder="Notes (optional)" value={newNotes} onChange={e => setNewNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} style={{ ...inputStyle, flex: 1 }} />
-            <button onClick={handleAdd} style={submitBtnStyle}>Add</button>
-          </div>
-        </div>
-      )}
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 700 }}>
-          {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 110px 50px 70px 110px 80px 80px 1fr', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>NAME</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>HANDLE</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>TIER</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>FOLLOWERS</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>STAGE</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>ENGAGED</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>LAST</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>NOTES</Mono>
-          </div>
-          {kols.map(kol => {
-            const sc = STAGE_COLORS[kol.stage] ?? STAGE_COLORS.follow
-            const tierColor = kol.tier === 1 ? { color: C.pink, bg: C.pinkDim } : { color: C.blue, bg: C.blueDim }
-            const isEditingNotes = editingNotesId === kol.id
-            return (
-              <div key={kol.id} style={{ display: 'grid', gridTemplateColumns: '140px 110px 50px 70px 110px 80px 80px 1fr', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
-                <span style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500 }}>{kol.name}</span>
-                <a href={profileUrl(kol.handle, kol.platform)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, textDecoration: 'none' }}>{kol.handle}</a>
-                <Badge text={`T${kol.tier}`} color={tierColor.color} bg={tierColor.bg} />
-                <Mono style={{ fontSize: 12, color: C.t2 }}>{kol.followers ?? '-'}</Mono>
-                <Badge text={kol.stage} color={sc.color} bg={sc.bg} onClick={() => onUpdate(kol.id, { stage: cycleStage(kol.stage) })} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Mono style={{ fontSize: 13, color: C.text }}>{kol.engagement_count}</Mono>
-                  <button onClick={() => onEngage(kol.id)} style={{
-                    fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim,
-                    border: `1px solid ${C.green}22`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 600,
-                  }}>+1</button>
-                </div>
-                <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(kol.last_engaged_at)}</Mono>
-                <div style={{ overflow: 'hidden' }}>
-                  {isEditingNotes ? (
-                    <input
-                      autoFocus
-                      value={editNotesVal}
-                      onChange={e => setEditNotesVal(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { onUpdate(kol.id, { notes: editNotesVal || null }); setEditingNotesId(null) }
-                        if (e.key === 'Escape') setEditingNotesId(null)
-                      }}
-                      onBlur={() => { onUpdate(kol.id, { notes: editNotesVal || null }); setEditingNotesId(null) }}
-                      style={{ fontFamily: F.mono, fontSize: 11, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 6px', outline: 'none', width: '100%' }}
-                    />
-                  ) : (
-                    <span
-                      onClick={() => { setEditingNotesId(kol.id); setEditNotesVal(kol.notes || '') }}
-                      style={{ fontFamily: F.mono, fontSize: 11, color: kol.notes ? C.t2 : C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', cursor: 'pointer' }}
-                    >{kol.notes || 'click to add note'}</span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-// ─── NETWORKING SECTION ──────────────────────────────────────────
-function NetworkingSection({ networking, onUpdate, onEngage, onCreate, onDelete }: {
-  networking: MNetworking[]
-  onUpdate: (id: string, updates: Record<string, unknown>) => void
-  onEngage: (id: string) => void
-  onCreate: (item: { project_name: string; handle: string; platform: string; trust_page_slug?: string; notes?: string }) => void
-  onDelete: (id: string) => void
-}) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newHandle, setNewHandle] = useState('')
-  const [newPlatform, setNewPlatform] = useState('x')
-  const [newSlug, setNewSlug] = useState('')
-  const [newNotes, setNewNotes] = useState('')
-  const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
-  const [editNotesVal, setEditNotesVal] = useState('')
-
-  const cycleStage = (current: string) => {
-    const idx = NETWORKING_STAGES.indexOf(current as typeof NETWORKING_STAGES[number])
-    return NETWORKING_STAGES[(idx + 1) % NETWORKING_STAGES.length]
-  }
-
-  const handleAdd = () => {
-    if (!newName.trim()) return
-    onCreate({ project_name: newName.trim(), handle: newHandle.trim(), platform: newPlatform, trust_page_slug: newSlug.trim() || undefined, notes: newNotes.trim() || undefined })
-    setNewName(''); setNewHandle(''); setNewSlug(''); setNewNotes(''); setShowAdd(false)
-  }
-
-  return (
-    <Card title="Networking / Outreach" right={
-      <button onClick={() => setShowAdd(!showAdd)} style={addBtnStyle}>+ Add Project</button>
-    } pad={false}>
-      {showAdd && (
-        <div style={{ padding: '12px 24px 16px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input placeholder="Project name" value={newName} onChange={e => setNewName(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
-            <input placeholder="@handle" value={newHandle} onChange={e => setNewHandle(e.target.value)} style={{ ...inputStyle, width: 130 }} />
-            <select value={newPlatform} onChange={e => setNewPlatform(e.target.value)} style={selectStyle}>
-              {['x', 'bluesky', 'linkedin'].map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <input placeholder="Trust page slug (e.g. openai-gpt-4o)" value={newSlug} onChange={e => setNewSlug(e.target.value)} style={{ ...inputStyle, width: 200 }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            <input placeholder="Notes (optional)" value={newNotes} onChange={e => setNewNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} style={{ ...inputStyle, flex: 1 }} />
-            <button onClick={handleAdd} style={submitBtnStyle}>Add</button>
-          </div>
-        </div>
-      )}
-      <div style={{ overflowX: 'auto' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: C.border, minWidth: 700 }}>
-          {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '160px 110px 130px 110px 80px 80px 1fr 40px', gap: 10, padding: '10px 16px', background: C.bg, alignItems: 'center' }}>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>PROJECT</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>HANDLE</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>TRUST PAGE</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>STAGE</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>CONTACT</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>LAST</Mono>
-            <Mono style={{ fontSize: 10, color: C.t3, letterSpacing: 0.5 }}>NOTES</Mono>
-            <span />
-          </div>
-          {networking.map(net => {
-            const sc = NETWORKING_STAGE_COLORS[net.stage] ?? NETWORKING_STAGE_COLORS.identified
-            const isEditingNotes = editingNotesId === net.id
-            return (
-              <div key={net.id} style={{ display: 'grid', gridTemplateColumns: '160px 110px 130px 110px 80px 80px 1fr 40px', gap: 10, padding: '10px 16px', background: C.surface, alignItems: 'center' }}>
-                <span style={{ fontFamily: F.sans, fontSize: 13, color: C.text, fontWeight: 500 }}>{net.project_name}</span>
-                {net.handle ? (
-                  <a href={profileUrl(net.handle, net.platform)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 12, color: C.blue, textDecoration: 'none' }}>{net.handle}</a>
-                ) : (
-                  <Mono style={{ fontSize: 11, color: C.t4 }}>-</Mono>
-                )}
-                {net.trust_page_slug ? (
-                  <a href={`https://trust.fabriclayer.ai/${net.trust_page_slug}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: F.mono, fontSize: 11, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{net.trust_page_slug}</a>
-                ) : (
-                  <Mono style={{ fontSize: 11, color: C.t4 }}>-</Mono>
-                )}
-                <Badge text={net.stage} color={sc.color} bg={sc.bg} onClick={() => onUpdate(net.id, { stage: cycleStage(net.stage) })} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Mono style={{ fontSize: 13, color: C.text }}>{net.engagement_count}</Mono>
-                  <button onClick={() => onEngage(net.id)} style={{
-                    fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim,
-                    border: `1px solid ${C.green}22`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 600,
-                  }}>+1</button>
-                </div>
-                <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(net.last_contacted_at)}</Mono>
-                <div style={{ overflow: 'hidden' }}>
-                  {isEditingNotes ? (
-                    <input
-                      autoFocus
-                      value={editNotesVal}
-                      onChange={e => setEditNotesVal(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { onUpdate(net.id, { notes: editNotesVal || null }); setEditingNotesId(null) }
-                        if (e.key === 'Escape') setEditingNotesId(null)
-                      }}
-                      onBlur={() => { onUpdate(net.id, { notes: editNotesVal || null }); setEditingNotesId(null) }}
-                      style={{ fontFamily: F.mono, fontSize: 11, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 6px', outline: 'none', width: '100%' }}
-                    />
-                  ) : (
-                    <span
-                      onClick={() => { setEditingNotesId(net.id); setEditNotesVal(net.notes || '') }}
-                      style={{ fontFamily: F.mono, fontSize: 11, color: net.notes ? C.t2 : C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', cursor: 'pointer' }}
-                    >{net.notes || 'click to add note'}</span>
-                  )}
-                </div>
-                <button
-                  onClick={() => { if (confirm('Remove this project?')) onDelete(net.id) }}
-                  style={{ fontFamily: F.mono, fontSize: 12, color: C.t3, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                  title="Delete"
-                >&times;</button>
-              </div>
-            )
-          })}
-          {networking.length === 0 && (
-            <div style={{ padding: '20px 16px', background: C.surface, textAlign: 'center' }}>
-              <Mono style={{ fontSize: 12, color: C.t3 }}>No projects yet — add one to start tracking outreach</Mono>
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
 // ─── MAIN MARKETING TAB ─────────────────────────────────────────
 export default function MarketingTab() {
   const [data, setData] = useState<MData | null>(null)
@@ -797,56 +532,9 @@ export default function MarketingTab() {
     postMarketing({ action: 'delete_content', id })
   }
 
-  const handleUpdateKol = (id: string, updates: Record<string, unknown>) => {
-    setData(prev => prev ? { ...prev, kols: prev.kols.map(k => k.id === id ? { ...k, ...updates } : k) } : prev)
-    postMarketing({ action: 'update_kol', id, updates })
-  }
-
-  const handleEngageKol = (id: string) => {
-    setData(prev => prev ? {
-      ...prev,
-      kols: prev.kols.map(k => k.id === id ? { ...k, engagement_count: k.engagement_count + 1, last_engaged_at: new Date().toISOString() } : k),
-    } : prev)
-    postMarketing({ action: 'update_kol', id, updates: {}, increment_engagement: true })
-  }
-
-  const handleCreateKol = async (item: { name: string; handle: string; platform: string; tier: number; followers?: string; notes?: string }) => {
-    const tempId = `temp-${Date.now()}`
-    const newKol: MKol = { id: tempId, ...item, followers: item.followers || null, stage: 'follow', engagement_count: 0, last_engaged_at: null, notes: item.notes || null }
-    setData(prev => prev ? { ...prev, kols: [...prev.kols, newKol] } : prev)
-    await postMarketing({ action: 'create_kol', ...item })
-    fetchData()
-  }
-
   const handleUpdateKpi = (id: string, actual: number) => {
     setData(prev => prev ? { ...prev, kpis: prev.kpis.map(k => k.id === id ? { ...k, actual } : k) } : prev)
     postMarketing({ action: 'update_kpi', id, actual })
-  }
-
-  const handleCreateNetworking = async (item: { project_name: string; handle: string; platform: string; trust_page_slug?: string; notes?: string }) => {
-    const tempId = `temp-${Date.now()}`
-    const newNet: MNetworking = { id: tempId, ...item, handle: item.handle || null, trust_page_slug: item.trust_page_slug || null, stage: 'identified', engagement_count: 0, last_contacted_at: null, notes: item.notes || null }
-    setData(prev => prev ? { ...prev, networking: [...prev.networking, newNet] } : prev)
-    await postMarketing({ action: 'create_networking', ...item })
-    fetchData()
-  }
-
-  const handleUpdateNetworking = (id: string, updates: Record<string, unknown>) => {
-    setData(prev => prev ? { ...prev, networking: prev.networking.map(n => n.id === id ? { ...n, ...updates } : n) } : prev)
-    postMarketing({ action: 'update_networking', id, updates })
-  }
-
-  const handleEngageNetworking = (id: string) => {
-    setData(prev => prev ? {
-      ...prev,
-      networking: prev.networking.map(n => n.id === id ? { ...n, engagement_count: n.engagement_count + 1, last_contacted_at: new Date().toISOString() } : n),
-    } : prev)
-    postMarketing({ action: 'update_networking', id, updates: {}, increment_engagement: true })
-  }
-
-  const handleDeleteNetworking = (id: string) => {
-    setData(prev => prev ? { ...prev, networking: prev.networking.filter(n => n.id !== id) } : prev)
-    postMarketing({ action: 'delete_networking', id })
   }
 
   // ── Render ──
@@ -874,8 +562,6 @@ export default function MarketingTab() {
     <div style={{ padding: '30px 40px', display: 'flex', flexDirection: 'column', gap: 24 }}>
       <KpiSection kpis={data.kpis} onUpdate={handleUpdateKpi} />
       <ContentSection content={data.content} onChange={handleUpdateContent} onCreate={handleCreateContent} onDelete={handleDeleteContent} />
-      <KolSection kols={data.kols} onUpdate={handleUpdateKol} onEngage={handleEngageKol} onCreate={handleCreateKol} />
-      <NetworkingSection networking={data.networking ?? []} onUpdate={handleUpdateNetworking} onEngage={handleEngageNetworking} onCreate={handleCreateNetworking} onDelete={handleDeleteNetworking} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <ChecklistSection title="Platform Setup" section="platform" tasks={platformTasks} onToggle={handleToggleTask} onCreate={handleCreateTask} />
         <ChecklistSection title="SEO Checklist" section="seo" tasks={seoTasks} onToggle={handleToggleTask} onCreate={handleCreateTask} />
