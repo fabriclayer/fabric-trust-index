@@ -110,6 +110,7 @@ export default function CostsTab({ githubRate, vercelData }: {
   const [showInactive, setShowInactive] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editFields, setEditFields] = useState<Partial<CostItem>>({})
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // Add form
   const [newCat, setNewCat] = useState('infrastructure')
@@ -320,101 +321,171 @@ export default function CostsTab({ githubRate, vercelData }: {
         )}
 
         {/* Table header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px 80px 80px 90px 70px', gap: 8, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
-          {['Category', 'Provider', 'Item', 'Type', 'Amount', 'Cycle', 'Renewal', ''].map(h => (
-            <Mono key={h} style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</Mono>
+        <div style={{ display: 'grid', gridTemplateColumns: '20px 120px 100px 1fr 70px 70px 70px 90px 70px', gap: 8, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+          {['', 'Category', 'Provider', 'Item', 'Type', 'Amount', 'Cycle', 'Renewal', ''].map(h => (
+            <Mono key={h} style={{ fontSize: 9, fontWeight: 600, color: C.t2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</Mono>
           ))}
         </div>
 
         {/* Table rows */}
         {displayItems.map((item, i) => {
           const isEditing = editingId === item.id
+          const isExpanded = expandedId === item.id
           const overdue = item.renewal_date && new Date(item.renewal_date + 'T00:00:00') < now && item.is_active
+          const eF = editFields // shorthand
           return (
-            <div key={item.id} style={{
-              display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px 80px 80px 90px 70px', gap: 8,
-              padding: '10px 24px', borderBottom: i < displayItems.length - 1 ? `1px solid ${C.border}` : 'none',
-              background: !item.is_active ? 'rgba(255,255,255,0.01)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
-              opacity: item.is_active ? 1 : 0.4,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 12 }}>{catIcon(item.category)}</span>
-                <Mono style={{ fontSize: 11, color: C.t2 }}>{catLabel(item.category)}</Mono>
-              </div>
-              <Mono style={{ fontSize: 11, color: C.text }}>{item.provider}</Mono>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <div key={item.id} style={{ borderBottom: i < displayItems.length - 1 ? `1px solid ${C.border}` : 'none', opacity: item.is_active ? 1 : 0.4 }}>
+              {/* Main row */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '20px 120px 100px 1fr 70px 70px 70px 90px 70px', gap: 8,
+                padding: '10px 24px', alignItems: 'center',
+                background: !item.is_active ? 'rgba(255,255,255,0.01)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+              }}>
+                {/* Expand icon */}
+                <span
+                  onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                  style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
+                >{isExpanded ? '▾' : '▸'}</span>
+                {/* Category */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                  <span style={{ fontSize: 11, flexShrink: 0 }}>{catIcon(item.category)}</span>
+                  <Mono style={{ fontSize: 11, color: C.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{catLabel(item.category)}</Mono>
+                </div>
+                {/* Provider */}
+                <Mono style={{ fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.provider}</Mono>
+                {/* Item name */}
                 <Mono style={{ fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item}</Mono>
-                {item.notes && <Mono style={{ fontSize: 9, color: C.t4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.notes}</Mono>}
-              </div>
-              <Badge
-                text={item.cost_type}
-                color={item.cost_type === 'fixed' ? C.blue : item.cost_type === 'metered' ? C.purple : C.orange}
-                bg={item.cost_type === 'fixed' ? C.blueDim : item.cost_type === 'metered' ? C.purpleDim : C.orangeDim}
-              />
-              {isEditing ? (
-                <input
-                  autoFocus
-                  value={editFields.amount_usd ?? item.amount_usd}
-                  onChange={e => setEditFields(prev => ({ ...prev, amount_usd: parseFloat(e.target.value) || 0 }))}
-                  style={{ fontFamily: F.mono, fontSize: 11, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 6px', outline: 'none', width: 70, textAlign: 'right' }}
+                {/* Type badge */}
+                <Badge
+                  text={item.cost_type}
+                  color={item.cost_type === 'fixed' ? C.blue : item.cost_type === 'metered' ? C.purple : C.orange}
+                  bg={item.cost_type === 'fixed' ? C.blueDim : item.cost_type === 'metered' ? C.purpleDim : C.orangeDim}
                 />
-              ) : (
-                <Mono style={{ fontSize: 11, color: C.text, textAlign: 'right' }}>
-                  ${item.amount_usd.toFixed(2)}
-                </Mono>
-              )}
-              {isEditing ? (
-                <select
-                  value={editFields.billing_cycle ?? item.billing_cycle ?? 'monthly'}
-                  onChange={e => setEditFields(prev => ({ ...prev, billing_cycle: e.target.value }))}
-                  style={{ fontFamily: F.mono, fontSize: 10, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 4px', outline: 'none' }}
-                >
-                  <option value="monthly">Monthly</option>
-                  <option value="annual">Annual</option>
-                  <option value="per-use">Per-use</option>
-                  <option value="one-time">One-time</option>
-                </select>
-              ) : (
+                {/* Amount */}
+                <Mono style={{ fontSize: 11, color: C.text, textAlign: 'right' }}>${item.amount_usd.toFixed(2)}</Mono>
+                {/* Cycle */}
                 <Mono style={{ fontSize: 10, color: C.t3 }}>{item.billing_cycle ?? '—'}</Mono>
-              )}
-              <div>
-                {isEditing ? (
-                  <input
-                    type="date"
-                    value={editFields.renewal_date ?? item.renewal_date ?? ''}
-                    onChange={e => setEditFields(prev => ({ ...prev, renewal_date: e.target.value || null }))}
-                    style={{ fontFamily: F.mono, fontSize: 10, background: 'transparent', border: `1px solid ${C.blue}`, borderRadius: 4, color: C.text, padding: '2px 4px', outline: 'none', width: 85 }}
-                  />
-                ) : item.renewal_date ? (
+                {/* Renewal */}
+                {item.renewal_date ? (
                   <Mono style={{ fontSize: 10, color: overdue ? C.red : C.t3 }}>
-                    {new Date(item.renewal_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(item.renewal_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     {overdue && ' ⚠️'}
                   </Mono>
                 ) : (
                   <Mono style={{ fontSize: 10, color: C.t4 }}>—</Mono>
                 )}
+                {/* Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    onClick={() => { setEditingId(item.id); setExpandedId(item.id); setEditFields({ category: item.category, provider: item.provider, item: item.item, cost_type: item.cost_type, amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date, notes: item.notes, is_active: item.is_active }) }}
+                    style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
+                    onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
+                  >Edit</span>
+                  <span
+                    onClick={() => handleToggleActive(item)}
+                    style={{ fontFamily: F.mono, fontSize: 10, color: item.is_active ? C.t4 : C.green, cursor: 'pointer' }}
+                  >{item.is_active ? '×' : '✓'}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {isEditing ? (
-                  <>
-                    <span onClick={() => handleUpdate(item.id)} style={{ fontFamily: F.mono, fontSize: 10, color: C.green, cursor: 'pointer' }}>Save</span>
-                    <span onClick={() => setEditingId(null)} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer' }}>Cancel</span>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      onClick={() => { setEditingId(item.id); setEditFields({ amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date }) }}
-                      style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
-                      onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
-                    >Edit</span>
-                    <span
-                      onClick={() => handleToggleActive(item)}
-                      style={{ fontFamily: F.mono, fontSize: 10, color: item.is_active ? C.t4 : C.green, cursor: 'pointer' }}
-                    >{item.is_active ? '×' : '✓'}</span>
-                  </>
-                )}
-              </div>
+
+              {/* Expanded detail / edit panel */}
+              {isExpanded && (
+                <div style={{ padding: '12px 24px 16px 52px', background: 'rgba(255,255,255,0.015)', borderTop: `1px solid ${C.border}` }}>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: 8 }}>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Category</Mono>
+                          <select value={eF.category ?? item.category} onChange={e => setEditFields(prev => ({ ...prev, category: e.target.value }))} style={selectStyle}>
+                            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Provider</Mono>
+                          <input value={eF.provider ?? item.provider} onChange={e => setEditFields(prev => ({ ...prev, provider: e.target.value }))} style={inputStyle} />
+                        </div>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Item</Mono>
+                          <input value={eF.item ?? item.item} onChange={e => setEditFields(prev => ({ ...prev, item: e.target.value }))} style={inputStyle} />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Type</Mono>
+                          <select value={eF.cost_type ?? item.cost_type} onChange={e => setEditFields(prev => ({ ...prev, cost_type: e.target.value }))} style={selectStyle}>
+                            <option value="fixed">Fixed</option>
+                            <option value="metered">Metered</option>
+                            <option value="one-time">One-time</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Amount ($)</Mono>
+                          <input value={eF.amount_usd ?? item.amount_usd} onChange={e => setEditFields(prev => ({ ...prev, amount_usd: parseFloat(e.target.value) || 0 }))} style={{ ...inputStyle, textAlign: 'right' }} />
+                        </div>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Billing Cycle</Mono>
+                          <select value={eF.billing_cycle ?? item.billing_cycle ?? 'monthly'} onChange={e => setEditFields(prev => ({ ...prev, billing_cycle: e.target.value }))} style={selectStyle}>
+                            <option value="monthly">Monthly</option>
+                            <option value="annual">Annual</option>
+                            <option value="per-use">Per-use</option>
+                            <option value="one-time">One-time</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Renewal Date</Mono>
+                          <input type="date" value={eF.renewal_date ?? item.renewal_date ?? ''} onChange={e => setEditFields(prev => ({ ...prev, renewal_date: e.target.value || null }))} style={inputStyle} />
+                        </div>
+                      </div>
+                      <div>
+                        <Mono style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' }}>Notes</Mono>
+                        <input value={eF.notes ?? item.notes ?? ''} onChange={e => setEditFields(prev => ({ ...prev, notes: e.target.value || null }))} placeholder="Optional notes..." style={inputStyle} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                        <button onClick={() => handleUpdate(item.id)} style={{
+                          fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: '#000', background: C.green,
+                          border: 'none', borderRadius: 8, padding: '7px 16px', cursor: 'pointer',
+                        }}>Save</button>
+                        <button onClick={() => { setEditingId(null); setExpandedId(null) }} style={{
+                          fontFamily: F.mono, fontSize: 11, color: C.t3, background: 'transparent',
+                          border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
+                        }}>Cancel</button>
+                        <div style={{ flex: 1 }} />
+                        <span
+                          onClick={() => { if (confirm('Delete this cost item?')) handleDelete(item.id) }}
+                          style={{ fontFamily: F.mono, fontSize: 10, color: C.red, cursor: 'pointer', transition: 'opacity 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = '0.7')}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                        >Delete</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {item.notes && (
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Mono>
+                          <Mono style={{ fontSize: 11, color: C.t2, display: 'block', marginTop: 2 }}>{item.notes}</Mono>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 16, marginTop: item.notes ? 4 : 0 }}>
+                        {item.billing_cycle === 'annual' && (
+                          <div>
+                            <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly equiv.</Mono>
+                            <Mono style={{ fontSize: 11, color: C.t2, display: 'block', marginTop: 2 }}>${monthlyEquiv(item).toFixed(2)}/mo</Mono>
+                          </div>
+                        )}
+                        <div>
+                          <Mono style={{ fontSize: 9, color: C.t4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Status</Mono>
+                          <Mono style={{ fontSize: 11, color: item.is_active ? C.green : C.t3, display: 'block', marginTop: 2 }}>{item.is_active ? 'Active' : 'Inactive'}</Mono>
+                        </div>
+                      </div>
+                      {!item.notes && !item.renewal_date && item.billing_cycle !== 'annual' && (
+                        <Mono style={{ fontSize: 11, color: C.t4 }}>No additional details</Mono>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
@@ -427,21 +498,19 @@ export default function CostsTab({ githubRate, vercelData }: {
             </div>
             {Object.entries(apiUsage.month.by_caller).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([caller, stats]) => (
               <div key={`api-${caller}`} style={{
-                display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px 80px 80px 90px 70px', gap: 8,
-                padding: '10px 24px', borderBottom: `1px solid ${C.border}`,
+                display: 'grid', gridTemplateColumns: '20px 120px 100px 1fr 70px 70px 70px 90px 70px', gap: 8,
+                padding: '10px 24px', alignItems: 'center', borderBottom: `1px solid ${C.border}`,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12 }}>⚡</span>
+                <span />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 11 }}>⚡</span>
                   <Mono style={{ fontSize: 11, color: C.t2 }}>API</Mono>
                 </div>
                 <Mono style={{ fontSize: 11, color: C.text }}>Anthropic</Mono>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Mono style={{ fontSize: 11, color: C.text }}>{fmtCaller(caller)}</Mono>
-                  <Mono style={{ fontSize: 9, color: C.t4 }}>{stats.calls.toLocaleString()} calls this month</Mono>
-                </div>
+                <Mono style={{ fontSize: 11, color: C.text }}>{fmtCaller(caller)} ({stats.calls.toLocaleString()} calls)</Mono>
                 <Badge text="metered" color={C.purple} bg={C.purpleDim} />
                 <Mono style={{ fontSize: 11, color: C.text, textAlign: 'right' }}>${stats.cost_usd.toFixed(2)}</Mono>
-                <Mono style={{ fontSize: 10, color: C.t3 }}>This month</Mono>
+                <Mono style={{ fontSize: 10, color: C.t3 }}>This mo</Mono>
                 <Mono style={{ fontSize: 10, color: C.t4 }}>—</Mono>
                 <Mono style={{ fontSize: 10, color: C.t4 }}>—</Mono>
               </div>
@@ -450,7 +519,8 @@ export default function CostsTab({ githubRate, vercelData }: {
         )}
 
         {/* Totals row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px 80px 80px 90px 70px', gap: 8, padding: '12px 24px', background: 'rgba(255,255,255,0.02)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '20px 120px 100px 1fr 70px 70px 70px 90px 70px', gap: 8, padding: '12px 24px', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+          <span />
           <Mono style={{ fontSize: 11, fontWeight: 600, color: C.text }}>Total</Mono>
           <span />
           <span />
