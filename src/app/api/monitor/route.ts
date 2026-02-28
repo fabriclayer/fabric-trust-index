@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
       cronHealth,
       costs,
       systemStatus: deriveSystemStatus(
-        infraEndpoints.map(e => ({ status: e.status, endpoint: e.endpoint })),
+        infraEndpoints.map(e => ({ status: e.status, endpoint: e.endpoint, uptime_24h: e.uptime_24h })),
         cronHealth,
         githubRate?.rate?.remaining ?? 5000,
       ),

@@ -217,85 +217,149 @@ function HealthTab({ data }: { data: MonitorData }) {
   const cronStatusBg = (s: string) => s === 'on_schedule' ? C.greenDim : s === 'overdue' ? C.orangeDim : C.redDim
 
   // Backfill state
-  const [backfillState, setBackfillState] = useState<'idle' | 'confirm' | 'running'>('idle')
-  const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number; reCollected: number; purged: number; errors: number } | null>(null)
+  const [backfillState, setBackfillState] = useState<'idle' | 'confirm' | 'running' | 'stopped'>('idle')
+  const [backfillProgress, setBackfillProgress] = useState<{
+    processed: number; total: number; reCollected: number; purged: number; skipped: number; errors: number; batchNumber: number
+  } | null>(null)
   const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const abortRef = useRef(false)
+  const cursorRef = useRef<string | null>(null)
+  const batchRef = useRef(1)
+  const cumulativeRef = useRef({ processed: 0, reCollected: 0, purged: 0, skipped: 0, errors: 0 })
 
-  // Poll backfill status from server
-  const pollBackfillStatus = useCallback(async () => {
+  // Persist/restore backfill state from localStorage
+  const STORAGE_KEY = 'fabric_backfill_state'
+  const saveBackfillState = useCallback((cursor: string | null, batch: number, cumulative: typeof cumulativeRef.current, total: number) => {
     try {
-      const res = await fetch('/api/monitor/backfill-status')
-      if (!res.ok) return
-      const status = await res.json()
-      setBackfillProgress({
-        processed: status.processed ?? 0,
-        total: status.total ?? 0,
-        reCollected: status.reCollected ?? 0,
-        purged: status.purged ?? 0,
-        errors: status.errors ?? 0,
-      })
-      if (!status.active) {
-        // Done or stale — stop polling
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-        setBackfillState('idle')
-        if (status.status === 'success') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ cursor, batch, cumulative, total, savedAt: Date.now() }))
+    } catch { /* ignore */ }
+  }, [])
+  const clearBackfillState = useCallback(() => {
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+  }, [])
+
+  // Client-driven batch chain
+  const runBackfillChain = useCallback(async (startCursor: string | null, startBatch: number, startCumulative: typeof cumulativeRef.current) => {
+    abortRef.current = false
+    cursorRef.current = startCursor
+    batchRef.current = startBatch
+    cumulativeRef.current = { ...startCumulative }
+
+    let cursor = startCursor
+    let batch = startBatch
+
+    while (!abortRef.current) {
+      try {
+        const res = await fetch('/api/monitor/backfill-cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ after: cursor || undefined, batchNumber: batch }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+          setBackfillResult({ ok: false, message: err.error || `Failed (${res.status})` })
+          setBackfillState('stopped')
+          return
+        }
+        const data = await res.json()
+
+        // Accumulate totals
+        cumulativeRef.current.processed += data.processed ?? 0
+        cumulativeRef.current.reCollected += data.reCollected ?? 0
+        cumulativeRef.current.purged += data.purged ?? 0
+        cumulativeRef.current.skipped += data.skipped ?? 0
+        cumulativeRef.current.errors += data.errors ?? 0
+
+        const progress = {
+          ...cumulativeRef.current,
+          total: data.total ?? 0,
+          batchNumber: batch,
+        }
+        setBackfillProgress(progress)
+        saveBackfillState(data.nextCursor, batch + 1, cumulativeRef.current, data.total ?? 0)
+
+        if (data.done) {
+          clearBackfillState()
           setBackfillResult({
             ok: true,
-            message: `Done — ${status.reCollected} re-collected, ${status.purged} purged, ${status.errors} errors`,
+            message: `Done — ${cumulativeRef.current.reCollected} re-collected, ${cumulativeRef.current.purged} purged, ${cumulativeRef.current.skipped} skipped, ${cumulativeRef.current.errors} errors`,
           })
-        } else if (status.status === 'stale') {
-          setBackfillResult({ ok: false, message: 'Backfill appears stalled (no update in 10 min)' })
+          setBackfillState('idle')
+          return
+        }
+
+        cursor = data.nextCursor
+        cursorRef.current = cursor
+        batch++
+        batchRef.current = batch
+      } catch {
+        setBackfillResult({ ok: false, message: 'Network error — you can resume from where it stopped' })
+        setBackfillState('stopped')
+        return
+      }
+
+      // Check abort before next iteration
+      if (abortRef.current) {
+        setBackfillState('stopped')
+        return
+      }
+    }
+    // Aborted
+    setBackfillState('stopped')
+  }, [saveBackfillState, clearBackfillState])
+
+  // On mount: check for saved state or active server-side backfill
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const state = JSON.parse(saved)
+        // Only restore if saved less than 1 hour ago
+        if (state.savedAt && Date.now() - state.savedAt < 60 * 60 * 1000) {
+          cursorRef.current = state.cursor
+          batchRef.current = state.batch ?? 1
+          cumulativeRef.current = state.cumulative ?? { processed: 0, reCollected: 0, purged: 0, skipped: 0, errors: 0 }
+          setBackfillProgress({
+            ...cumulativeRef.current,
+            total: state.total ?? 0,
+            batchNumber: batchRef.current,
+          })
+          setBackfillState('stopped')
+          setBackfillResult({ ok: false, message: `Stopped at batch ${state.batch ?? 1} — resume to continue` })
+          return
+        } else {
+          localStorage.removeItem(STORAGE_KEY)
         }
       }
-    } catch { /* ignore poll errors */ }
-  }, [])
+    } catch { /* ignore */ }
 
-  // On mount: check if a backfill is already running
-  useEffect(() => {
-    pollBackfillStatus().then(() => {
-      // If it set running state, start the poll interval
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Start polling when state becomes 'running'
-  useEffect(() => {
-    if (backfillState === 'running' && !pollRef.current) {
-      pollRef.current = setInterval(pollBackfillStatus, 10_000)
-    }
-    return () => {
-      if (backfillState !== 'running' && pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
-    }
-  }, [backfillState, pollBackfillStatus])
-
-  // Check on mount if backfill is active
-  useEffect(() => {
-    let cancelled = false
+    // Also check server status
     ;(async () => {
       try {
         const res = await fetch('/api/monitor/backfill-status')
-        if (!res.ok || cancelled) return
+        if (!res.ok) return
         const status = await res.json()
-        if (status.active) {
-          setBackfillState('running')
+        if (status.status === 'stale') {
           setBackfillProgress({
             processed: status.processed ?? 0,
             total: status.total ?? 0,
             reCollected: status.reCollected ?? 0,
             purged: status.purged ?? 0,
+            skipped: status.skipped ?? 0,
             errors: status.errors ?? 0,
+            batchNumber: status.batchNumber ?? 0,
           })
+          cursorRef.current = status.nextCursor ?? null
+          batchRef.current = (status.batchNumber ?? 0) + 1
+          setBackfillState('stopped')
+          setBackfillResult({ ok: false, message: 'Previous backfill stalled — resume to continue' })
         }
       } catch { /* ignore */ }
     })()
-    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleBackfill = async () => {
+  const handleBackfill = () => {
     if (backfillState === 'idle') {
       setBackfillState('confirm')
       setBackfillResult(null)
@@ -304,30 +368,31 @@ function HealthTab({ data }: { data: MonitorData }) {
     }
     if (backfillState === 'confirm') {
       setBackfillState('running')
-      try {
-        const res = await fetch('/api/monitor/backfill-cleanup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
-        const body = await res.json()
-        if (res.ok) {
-          setBackfillProgress({
-            processed: body.cumulative?.total_processed ?? 0,
-            total: body.total ?? 0,
-            reCollected: body.cumulative?.re_collected ?? 0,
-            purged: body.cumulative?.purged ?? 0,
-            errors: body.cumulative?.errors ?? 0,
-          })
-        } else {
-          setBackfillResult({ ok: false, message: body.error || `Failed (${res.status})` })
-          setBackfillState('idle')
-        }
-      } catch {
-        setBackfillResult({ ok: false, message: 'Network error' })
-        setBackfillState('idle')
-      }
+      cumulativeRef.current = { processed: 0, reCollected: 0, purged: 0, skipped: 0, errors: 0 }
+      runBackfillChain(null, 1, cumulativeRef.current)
+      return
     }
+  }
+
+  const handleBackfillStop = () => {
+    abortRef.current = true
+  }
+
+  const handleBackfillResume = () => {
+    setBackfillState('running')
+    setBackfillResult(null)
+    runBackfillChain(cursorRef.current, batchRef.current, cumulativeRef.current)
+  }
+
+  const handleBackfillReset = () => {
+    abortRef.current = true
+    clearBackfillState()
+    cursorRef.current = null
+    batchRef.current = 1
+    cumulativeRef.current = { processed: 0, reCollected: 0, purged: 0, skipped: 0, errors: 0 }
+    setBackfillState('idle')
+    setBackfillProgress(null)
+    setBackfillResult(null)
   }
 
   return (
@@ -485,40 +550,86 @@ function HealthTab({ data }: { data: MonitorData }) {
           ))}
         </div>
         {/* Backfill action */}
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Mono style={{ fontSize: 11, color: C.t3, flex: 1 }}>
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Mono style={{ fontSize: 11, color: C.t3, flex: 1, minWidth: 200 }}>
             {(h.scoring.confidenceLow + h.scoring.confidenceMinimal).toLocaleString()} services with ≤3 signals — re-collect those with metadata, purge empty ones
           </Mono>
-          {backfillState === 'running' && backfillProgress && (
+          {(backfillState === 'running' || backfillState === 'stopped') && backfillProgress && (
             <Mono style={{ fontSize: 11, color: C.blue, whiteSpace: 'nowrap' }}>
-              {backfillProgress.processed.toLocaleString()}/{backfillProgress.total.toLocaleString()} processed
+              Batch {backfillProgress.batchNumber} — {backfillProgress.processed.toLocaleString()}/{backfillProgress.total.toLocaleString()} processed
             </Mono>
           )}
-          <button
-            onClick={handleBackfill}
-            disabled={backfillState === 'running'}
-            style={{
-              fontFamily: F.mono, fontSize: 11, fontWeight: 500,
-              color: backfillState === 'confirm' ? C.orange : backfillState === 'running' ? C.t3 : C.blue,
-              background: backfillState === 'confirm' ? C.orangeDim : backfillState === 'running' ? 'rgba(255,255,255,0.02)' : C.blueDim,
-              border: `1px solid ${backfillState === 'confirm' ? C.orange + '33' : backfillState === 'running' ? C.border : C.blue + '33'}`,
-              borderRadius: 8, padding: '6px 16px', cursor: backfillState === 'running' ? 'wait' : 'pointer',
-              transition: 'all 0.15s', whiteSpace: 'nowrap',
-            }}
-          >
-            {backfillState === 'idle' ? 'Run Backfill' : backfillState === 'confirm' ? 'Confirm — this chains batches' : 'Running...'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(backfillState === 'idle' || backfillState === 'confirm') && (
+              <button
+                onClick={handleBackfill}
+                style={{
+                  fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+                  color: backfillState === 'confirm' ? C.orange : C.blue,
+                  background: backfillState === 'confirm' ? C.orangeDim : C.blueDim,
+                  border: `1px solid ${backfillState === 'confirm' ? C.orange + '33' : C.blue + '33'}`,
+                  borderRadius: 8, padding: '6px 16px', cursor: 'pointer',
+                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                }}
+              >
+                {backfillState === 'idle' ? 'Run Backfill' : 'Confirm — this chains batches'}
+              </button>
+            )}
+            {backfillState === 'running' && (
+              <button
+                onClick={handleBackfillStop}
+                style={{
+                  fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+                  color: C.red, background: C.redDim,
+                  border: `1px solid ${C.red}33`,
+                  borderRadius: 8, padding: '6px 16px', cursor: 'pointer',
+                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                }}
+              >
+                Stop
+              </button>
+            )}
+            {backfillState === 'stopped' && (
+              <>
+                <button
+                  onClick={handleBackfillResume}
+                  style={{
+                    fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+                    color: C.green, background: C.greenDim,
+                    border: `1px solid ${C.green}33`,
+                    borderRadius: 8, padding: '6px 16px', cursor: 'pointer',
+                    transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={handleBackfillReset}
+                  style={{
+                    fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+                    color: C.t3, background: 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8, padding: '6px 16px', cursor: 'pointer',
+                    transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  Reset
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        {backfillState === 'running' && backfillProgress && backfillProgress.processed > 0 && (
+        {(backfillState === 'running' || backfillState === 'stopped') && backfillProgress && backfillProgress.processed > 0 && (
           <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
             <Mono style={{ fontSize: 10, color: C.green }}>{backfillProgress.reCollected} re-collected</Mono>
             <Mono style={{ fontSize: 10, color: C.orange }}>{backfillProgress.purged} purged</Mono>
+            <Mono style={{ fontSize: 10, color: C.t2 }}>{backfillProgress.skipped} skipped</Mono>
             {backfillProgress.errors > 0 && <Mono style={{ fontSize: 10, color: C.red }}>{backfillProgress.errors} errors</Mono>}
           </div>
         )}
         {backfillResult && (
           <div style={{ marginTop: 8 }}>
-            <Mono style={{ fontSize: 11, color: backfillResult.ok ? C.green : C.red }}>{backfillResult.message}</Mono>
+            <Mono style={{ fontSize: 11, color: backfillResult.ok ? C.green : C.orange }}>{backfillResult.message}</Mono>
           </div>
         )}
       </Card>

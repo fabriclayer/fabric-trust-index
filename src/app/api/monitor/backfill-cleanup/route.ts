@@ -5,7 +5,8 @@ import { runAllCollectors } from '@/lib/collectors/runner'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-const BATCH_SIZE = 20
+const TIME_BUDGET_MS = 45_000
+const FETCH_LIMIT = 100
 const CHILD_TABLES = [
   'signal_history', 'incidents', 'versions', 'health_checks',
   'supply_chain', 'cve_records', 'feedback',
@@ -38,45 +39,32 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  // Cursor-based pagination: pass last processed slug to avoid offset drift from purges
   const afterSlug = (body.after as string) ?? ''
-  // When true, skip server-side self-chaining (client drives the loop)
-  const noChain = !!body.noChain
-  // Initial total passed through from first invocation
-  const initialTotal = (body.initialTotal as number) ?? 0
-  // Accumulate totals across chained invocations
-  const cumulative = {
-    total_processed: (body.cumulative?.total_processed as number) ?? 0,
-    re_collected: (body.cumulative?.re_collected as number) ?? 0,
-    still_low: (body.cumulative?.still_low as number) ?? 0,
-    purged: (body.cumulative?.purged as number) ?? 0,
-    errors: (body.cumulative?.errors as number) ?? 0,
-  }
+  const batchNumber = (body.batchNumber as number) ?? 1
 
   const supabase = createServerClient()
+  const startTime = Date.now()
 
-  // Count total remaining
+  // Count total remaining low-signal services
   const { count: totalCount } = await supabase
     .from('services')
     .select('id', { count: 'exact', head: true })
     .neq('status', 'pending')
     .or('signals_with_data.is.null,signals_with_data.lte.2')
   const totalRemaining = totalCount ?? 0
-  // On first invocation, set initialTotal; on subsequent, pass through
-  const runTotal = initialTotal || totalRemaining
 
   if (!afterSlug) {
     console.log(`[backfill-cleanup] Starting: ${totalRemaining} services with ≤2 signals`)
   }
 
-  // Fetch next batch using cursor (slug > afterSlug)
+  // Fetch batch using cursor
   let query = supabase
     .from('services')
     .select('*')
     .neq('status', 'pending')
     .or('signals_with_data.is.null,signals_with_data.lte.2')
     .order('slug')
-    .limit(BATCH_SIZE)
+    .limit(FETCH_LIMIT)
 
   if (afterSlug) {
     query = query.gt('slug', afterSlug)
@@ -90,28 +78,36 @@ export async function POST(request: NextRequest) {
   }
 
   if (!services || services.length === 0) {
-    console.log(`[backfill-cleanup] Done! Totals:`, cumulative)
-    await logBackfillProgress(supabase, 'success', { cumulative, total: runTotal, remaining: 0 })
+    console.log(`[backfill-cleanup] Done! No more services to process.`)
+    await logBackfillProgress(supabase, 'success', {
+      done: true, batchNumber, total: totalRemaining,
+      processed: 0, reCollected: 0, purged: 0, skipped: 0, errors: 0,
+    })
     return NextResponse.json({
-      ok: true,
-      done: true,
-      total: runTotal,
-      lastSlug: afterSlug,
-      cumulative,
-      timestamp: new Date().toISOString(),
+      ok: true, done: true, total: totalRemaining,
+      processed: 0, purged: 0, reCollected: 0, skipped: 0, errors: 0,
+      nextCursor: null, batchNumber, elapsedMs: Date.now() - startTime,
     })
   }
 
-  // Track the last slug for cursor
+  // Process services within time budget
   let lastSlug = afterSlug
-
-  // Split into rescore vs purge
-  const batchErrors: string[] = []
-  const batchRescored: { slug: string; before: number; after: number }[] = []
-  const batchPurged: string[] = []
+  let processed = 0
+  let reCollected = 0
+  let purged = 0
+  let skipped = 0
+  let errors = 0
 
   for (const svc of services) {
+    // Check time budget before each service
+    if (Date.now() - startTime > TIME_BUDGET_MS) {
+      console.log(`[backfill-cleanup] Time budget reached after ${processed} services`)
+      break
+    }
+
     lastSlug = svc.slug
+    processed++
+
     const hasMetadata = svc.github_repo || svc.npm_package || svc.pypi_package || svc.homepage_url
 
     if (hasMetadata) {
@@ -125,84 +121,92 @@ export async function POST(request: NextRequest) {
           .eq('id', svc.id)
           .single()
         const signalsAfter = updated?.signals_with_data ?? 0
-        batchRescored.push({ slug: svc.slug, before: signalsBefore, after: signalsAfter })
 
         if (signalsAfter > signalsBefore) {
-          cumulative.re_collected++
+          reCollected++
           console.log(`[backfill-cleanup] ✓ ${svc.slug}: ${signalsBefore} → ${signalsAfter} signals`)
         } else {
-          cumulative.still_low++
+          skipped++
           console.log(`[backfill-cleanup] – ${svc.slug}: ${signalsBefore} → ${signalsAfter} (no change)`)
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
-        batchErrors.push(`${svc.slug}: ${msg}`)
-        cumulative.errors++
+        errors++
         console.error(`[backfill-cleanup] ✗ ${svc.slug}: ${msg}`)
       }
     } else if (
       svc.discovered_from &&
       (svc.signals_with_data === null || svc.signals_with_data === 0)
     ) {
-      // Purge: auto-discovered, no metadata, zero signals
+      // Purge candidate — check for protected references first
       try {
+        // Check if service has more signals than the filter caught (race condition guard)
+        const { data: freshSvc } = await supabase
+          .from('services')
+          .select('signals_with_data')
+          .eq('id', svc.id)
+          .single()
+        if (freshSvc && (freshSvc.signals_with_data ?? 0) > 2) {
+          skipped++
+          console.log(`[backfill-cleanup] · skipped ${svc.slug} (signals updated since query)`)
+          continue
+        }
+
+        // Check provider_claims
+        const { count: claimCount } = await supabase
+          .from('provider_claims')
+          .select('id', { count: 'exact', head: true })
+          .eq('service_slug', svc.slug)
+        if ((claimCount ?? 0) > 0) {
+          skipped++
+          console.log(`[backfill-cleanup] · skipped ${svc.slug} (has provider claims)`)
+          continue
+        }
+
+        // Check issue_reports
+        const { count: reportCount } = await supabase
+          .from('issue_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('service_slug', svc.slug)
+        if ((reportCount ?? 0) > 0) {
+          skipped++
+          console.log(`[backfill-cleanup] · skipped ${svc.slug} (has issue reports)`)
+          continue
+        }
+
+        // Safe to purge
         for (const table of CHILD_TABLES) {
           await supabase.from(table).delete().eq('service_id', svc.id)
         }
         await supabase.from('services').delete().eq('id', svc.id)
-        batchPurged.push(svc.slug)
-        cumulative.purged++
+        purged++
         console.log(`[backfill-cleanup] 🗑 purged ${svc.slug} — no collectible metadata`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
-        batchErrors.push(`purge ${svc.slug}: ${msg}`)
-        cumulative.errors++
+        errors++
         console.error(`[backfill-cleanup] ✗ purge ${svc.slug}: ${msg}`)
       }
     } else {
       // No metadata but manually added or has some signals — skip
+      skipped++
       console.log(`[backfill-cleanup] · skipped ${svc.slug} (manual or has partial signals)`)
     }
-
-    cumulative.total_processed++
   }
 
-  // Self-chain to next batch (only when client isn't driving)
-  const hasMore = services.length === BATCH_SIZE
+  const elapsed = Date.now() - startTime
+  const done = processed < services.length ? false : services.length < FETCH_LIMIT
+  const nextCursor = done ? null : lastSlug
 
-  // Log progress to cron_runs for dashboard polling
-  const progressData = { cumulative, total: runTotal, remaining: totalRemaining }
-  await logBackfillProgress(supabase, hasMore ? 'running' : 'success', progressData)
+  // Log progress
+  await logBackfillProgress(supabase, done ? 'success' : 'running', {
+    done, batchNumber, total: totalRemaining, nextCursor,
+    processed, reCollected, purged, skipped, errors, elapsedMs: elapsed,
+  })
 
-  if (hasMore && !noChain) {
-    const baseUrl = request.nextUrl.origin || `https://${request.headers.get('host')}`
-    console.log(`[backfill-cleanup] Chaining next batch after "${lastSlug}" (processed ${cumulative.total_processed} so far)`)
-    fetch(`${baseUrl}/api/monitor/backfill-cleanup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({ after: lastSlug, cumulative, initialTotal: runTotal }),
-    }).catch(err => console.error(`[backfill-cleanup] Chain failed:`, err))
-  } else if (!hasMore) {
-    console.log(`[backfill-cleanup] Final batch complete. Totals:`, cumulative)
-  }
+  console.log(`[backfill-cleanup] Batch ${batchNumber}: ${processed} processed in ${elapsed}ms (${reCollected} re-collected, ${purged} purged, ${skipped} skipped, ${errors} errors)`)
 
   return NextResponse.json({
-    ok: true,
-    done: !hasMore,
-    total: runTotal,
-    lastSlug,
-    batch: {
-      after: afterSlug || null,
-      processed: services.length,
-      rescored: batchRescored,
-      purged: batchPurged,
-      errors: batchErrors,
-    },
-    cumulative,
-    chaining: hasMore && !noChain,
-    timestamp: new Date().toISOString(),
+    ok: true, done, total: totalRemaining, nextCursor, batchNumber,
+    processed, reCollected, purged, skipped, errors, elapsedMs: elapsed,
   })
 }

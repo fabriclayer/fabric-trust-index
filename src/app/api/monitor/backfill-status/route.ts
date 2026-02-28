@@ -28,9 +28,6 @@ export async function GET(request: NextRequest) {
   }
 
   const result = data.result as Record<string, unknown> | null
-  const cumulative = (result?.cumulative as Record<string, number>) ?? {}
-  const total = (result?.total as number) ?? 0
-  const remaining = (result?.remaining as number) ?? 0
   const isRunning = data.status === 'running'
   // Consider stale if last update was > 10 minutes ago
   const lastUpdate = new Date(data.completed_at).getTime()
@@ -39,12 +36,15 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     active: isRunning && !stale,
     status: stale ? 'stale' : data.status,
-    total,
-    remaining,
-    processed: cumulative.total_processed ?? 0,
-    reCollected: cumulative.re_collected ?? 0,
-    purged: cumulative.purged ?? 0,
-    errors: cumulative.errors ?? 0,
+    total: (result?.total as number) ?? 0,
+    processed: (result?.processed as number) ?? 0,
+    reCollected: (result?.reCollected as number) ?? 0,
+    purged: (result?.purged as number) ?? 0,
+    skipped: (result?.skipped as number) ?? 0,
+    errors: (result?.errors as number) ?? 0,
+    nextCursor: (result?.nextCursor as string) ?? null,
+    batchNumber: (result?.batchNumber as number) ?? 0,
+    done: (result?.done as boolean) ?? false,
     lastUpdate: data.completed_at,
   })
 }
