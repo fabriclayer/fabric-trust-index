@@ -216,6 +216,40 @@ function HealthTab({ data }: { data: MonitorData }) {
   const cronStatusColor = (s: string) => s === 'on_schedule' ? C.green : s === 'overdue' ? C.orange : C.red
   const cronStatusBg = (s: string) => s === 'on_schedule' ? C.greenDim : s === 'overdue' ? C.orangeDim : C.redDim
 
+  // Backfill state
+  const [backfillState, setBackfillState] = useState<'idle' | 'confirm' | 'running'>('idle')
+  const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  const handleBackfill = async () => {
+    if (backfillState === 'idle') {
+      setBackfillState('confirm')
+      setBackfillResult(null)
+      return
+    }
+    if (backfillState === 'confirm') {
+      setBackfillState('running')
+      try {
+        const res = await fetch('/api/monitor/backfill-cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        const body = await res.json()
+        if (res.ok) {
+          const msg = body.chaining
+            ? `Batch started — processing ${body.batch?.processed ?? 0} services, chaining next batch...`
+            : `Complete — re-collected: ${body.cumulative?.re_collected ?? body.batch?.processed ?? 0}, purged: ${body.cumulative?.purged ?? 0}`
+          setBackfillResult({ ok: true, message: msg })
+        } else {
+          setBackfillResult({ ok: false, message: body.error || `Failed (${res.status})` })
+        }
+      } catch {
+        setBackfillResult({ ok: false, message: 'Network error' })
+      }
+      setBackfillState('idle')
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Infrastructure Endpoints */}
@@ -370,6 +404,31 @@ function HealthTab({ data }: { data: MonitorData }) {
             </div>
           ))}
         </div>
+        {/* Backfill action */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Mono style={{ fontSize: 11, color: C.t3, flex: 1 }}>
+            {(h.scoring.confidenceLow + h.scoring.confidenceMinimal).toLocaleString()} services with ≤3 signals — re-collect those with metadata, purge empty ones
+          </Mono>
+          <button
+            onClick={handleBackfill}
+            disabled={backfillState === 'running'}
+            style={{
+              fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+              color: backfillState === 'confirm' ? C.orange : backfillState === 'running' ? C.t3 : C.blue,
+              background: backfillState === 'confirm' ? C.orangeDim : backfillState === 'running' ? 'rgba(255,255,255,0.02)' : C.blueDim,
+              border: `1px solid ${backfillState === 'confirm' ? C.orange + '33' : backfillState === 'running' ? C.border : C.blue + '33'}`,
+              borderRadius: 8, padding: '6px 16px', cursor: backfillState === 'running' ? 'wait' : 'pointer',
+              transition: 'all 0.15s', whiteSpace: 'nowrap',
+            }}
+          >
+            {backfillState === 'idle' ? 'Run Backfill' : backfillState === 'confirm' ? 'Confirm — this chains batches' : 'Running...'}
+          </button>
+        </div>
+        {backfillResult && (
+          <div style={{ marginTop: 8 }}>
+            <Mono style={{ fontSize: 11, color: backfillResult.ok ? C.green : C.red }}>{backfillResult.message}</Mono>
+          </div>
+        )}
       </Card>
 
       {/* AI Assessments + Quick Numbers */}
