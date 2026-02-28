@@ -34,9 +34,11 @@ async function pingEndpoint(url: string): Promise<{ status: EndpointStatus; resp
 
     // 5xx = server error → down
     if (code >= 500) return { status: 'down', response_ms: ms, status_code: code, error: null }
+    // 4xx = client error → down (route missing, auth failure, etc.)
+    if (code >= 400) return { status: 'down', response_ms: ms, status_code: code, error: null }
     // Slow response → degraded (server is responding but poorly)
     if (ms > 3000) return { status: 'degraded', response_ms: ms, status_code: code, error: null }
-    // 1xx–4xx = server responded → up (4xx just means bad request, server is healthy)
+    // 2xx–3xx = healthy
     return { status: 'up', response_ms: ms, status_code: code, error: null }
   } catch (err) {
     return { status: 'down', response_ms: Date.now() - start, status_code: null, error: err instanceof Error ? err.message : 'Unknown error' }
