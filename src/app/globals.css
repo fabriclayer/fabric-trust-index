@@ -62,3 +62,17 @@
 .c-num { color: #f7931e; }
 .c-comment { color: #787874; }
 .c-type { color: #fe83e0; }
+
+/* ── Reduced motion preference ── */
+@media (prefers-reduced-motion: reduce) {
+  .rating-fill,
+  .signal-bar-fill {
+    transition: none;
+  }
+  .spinner {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

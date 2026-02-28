@@ -41,7 +41,7 @@ export default function Nav() {
               ))}
             </div>
             <button
-              className="flex md:hidden flex-col gap-1 bg-transparent border-none cursor-pointer p-1.5 rounded-md transition-colors hover:bg-fabric-100"
+              className="flex md:hidden flex-col gap-1 bg-transparent border-none cursor-pointer p-1.5 min-w-[44px] min-h-[44px] items-center justify-center rounded-md transition-colors hover:bg-fabric-100"
               onClick={() => setMenuOpen(!menuOpen)}
               aria-label="Menu"
             >
@@ -61,7 +61,7 @@ export default function Nav() {
               {l.label} <span className="text-[0.62rem]">· coming soon</span>
             </span>
           ) : (
-            <a key={l.href} href={l.href} className="block font-mono text-[0.78rem] text-fabric-600 no-underline py-2 px-5 transition-all hover:bg-fabric-50 hover:text-black">
+            <a key={l.href} href={l.href} className="flex items-center min-h-[44px] font-mono text-[0.78rem] text-fabric-600 no-underline py-2 px-5 transition-all hover:bg-fabric-50 hover:text-black">
               {l.label}
             </a>
           ))}

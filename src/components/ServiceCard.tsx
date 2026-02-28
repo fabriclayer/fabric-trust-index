@@ -22,7 +22,7 @@ export default function ServiceCard({ service }: { service: Service }) {
       <div className="flex items-start gap-2.5">
         <ServiceLogo logoUrl={service.logo_url} domain={service.domain} githubRepo={service.github_repo} name={service.name} size={40} className="rounded-[10px]" />
         <div className="flex-1 min-w-0">
-          <div className="text-[0.92rem] font-semibold text-black tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-[0.92rem] max-[480px]:text-[0.82rem] font-semibold text-black tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
             {service.name}
           </div>
           <div className="font-mono text-[0.62rem] text-fabric-400 whitespace-nowrap overflow-hidden text-ellipsis">

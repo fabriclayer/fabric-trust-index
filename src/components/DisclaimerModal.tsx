@@ -11,7 +11,7 @@ export default function DisclaimerModal({ onAccept, onDecline }: DisclaimerModal
   const [checked, setChecked] = useState(false)
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/55 backdrop-blur-sm flex items-center justify-center p-5 animate-[fadeIn_0.3s]">
+    <div className="fixed inset-0 z-[9999] bg-black/55 backdrop-blur-sm flex items-center justify-center p-5 max-[480px]:p-3 animate-[fadeIn_0.3s]">
       <div className="bg-white rounded-2xl max-w-[520px] w-full max-h-[85vh] flex flex-col shadow-2xl max-md:max-w-full max-md:rounded-xl">
         <div className="p-7 pb-0 flex items-center gap-3 max-md:p-5 max-md:pb-0">
           <div className="w-10 h-10 rounded-[10px] bg-amber-50 flex items-center justify-center flex-shrink-0">
@@ -45,7 +45,7 @@ export default function DisclaimerModal({ onAccept, onDecline }: DisclaimerModal
               type="checkbox"
               checked={checked}
               onChange={e => setChecked(e.target.checked)}
-              className="mt-0.5 accent-blue w-4 h-4 flex-shrink-0"
+              className="mt-0.5 accent-blue w-5 h-5 flex-shrink-0"
             />
             <span className="text-[13px] text-fabric-600 leading-normal">
               I understand that trust scores are automated and informational only, and I accept full responsibility for my own due diligence.

@@ -178,7 +178,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
       <div className={`px-8 pt-5 pb-16 max-md:px-4 transition-[margin] duration-200 ${alertsOpen ? 'mr-[360px] max-md:mr-0' : ''}`}>
        <div className="max-w-container mx-auto">
         {filtered.length === 0 ? (
-          <div className="text-center py-16">
+          <div className="text-center py-16 max-[480px]:py-8">
             <svg className="mx-auto text-fabric-300 mb-4" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
@@ -201,7 +201,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 max-md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] max-md:gap-2 max-[480px]:grid-cols-2">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 max-md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] max-md:gap-2 max-[480px]:grid-cols-2 max-[380px]:grid-cols-1">
               {displayed.map(svc => (
                 <ServiceCard key={svc.slug} service={svc} />
               ))}

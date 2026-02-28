@@ -7,9 +7,9 @@ export default function Footer() {
           <a href="https://motherbird.ai" className="text-fabric-500 no-underline hover:text-fabric-800">Motherbird</a> product.
         </div>
         <ul className="flex gap-5 list-none flex-wrap justify-center">
-          <li><a href="https://github.com/motherbirdai/fabric" target="_blank" rel="noopener" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800">GitHub</a></li>
-          <li><a href="https://x.com/fabriclayer" target="_blank" rel="noopener" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800">Twitter / X</a></li>
-          <li><a href="https://fabriclayer.dev/docs" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800">Docs</a></li>
+          <li><a href="https://github.com/motherbirdai/fabric" target="_blank" rel="noopener" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800 max-[480px]:py-1">GitHub</a></li>
+          <li><a href="https://x.com/fabriclayer" target="_blank" rel="noopener" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800 max-[480px]:py-1">Twitter / X</a></li>
+          <li><a href="https://fabriclayer.dev/docs" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800 max-[480px]:py-1">Docs</a></li>
           <li className="w-px bg-fabric-200 self-stretch" />
           <li><a href="https://fabriclayer.dev/terms" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800">Terms</a></li>
           <li><a href="https://fabriclayer.dev/privacy" className="font-mono text-xs text-fabric-400 no-underline hover:text-fabric-800">Privacy</a></li>

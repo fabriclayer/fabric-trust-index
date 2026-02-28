@@ -524,7 +524,7 @@ function SignalRow({ name, score, weight, detail, note, isSkill }: { name: strin
 
   return (
     <div>
-      <div className={`grid items-center gap-4 max-md:gap-2 ${isSkill ? 'grid-cols-[180px_1fr_50px_42px] max-md:grid-cols-[100px_1fr_40px_36px]' : 'grid-cols-[180px_1fr_50px_42px_20px] max-md:grid-cols-[100px_1fr_40px_36px_20px]'}`}>
+      <div className={`grid items-center gap-4 max-md:gap-2 max-[480px]:gap-1.5 ${isSkill ? 'grid-cols-[180px_1fr_50px_42px] max-md:grid-cols-[100px_1fr_40px_36px] max-[480px]:grid-cols-[80px_1fr_36px_30px]' : 'grid-cols-[180px_1fr_50px_42px_20px] max-md:grid-cols-[100px_1fr_40px_36px_20px] max-[480px]:grid-cols-[80px_1fr_36px_30px_16px]'}`}>
         <span className="font-mono text-[0.72rem] text-fabric-600">{name}</span>
         <div className="h-1.5 bg-fabric-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full signal-bar-fill ${barColor}`} style={{ width: `${pct}%` }} />
@@ -542,7 +542,7 @@ function SignalRow({ name, score, weight, detail, note, isSkill }: { name: strin
       </div>
       {/* Expandable detail for non-skills */}
       {!isSkill && open && (
-        <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 py-1.5">
+        <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 max-[480px]:grid-cols-[80px_1fr_36px_30px_16px] max-[480px]:gap-1.5 py-1.5">
           <div />
           <div className="text-[0.75rem] text-fabric-500 leading-normal">
             {detail}
@@ -655,7 +655,7 @@ export default function ProductPageClient({
 
       <div className="max-w-page mx-auto px-8 pt-7 pb-16 max-md:px-4 max-md:pt-4">
         {/* ═══ HERO ═══ */}
-        <div className="bg-white border border-fabric-200 rounded-2xl p-6 max-md:p-5 mb-5">
+        <div className="bg-white border border-fabric-200 rounded-2xl p-6 max-md:p-5 max-[480px]:p-4 mb-5">
           <div className="flex items-start justify-between gap-6 max-md:flex-col max-md:gap-4">
             <div className="flex items-start gap-5 flex-1 min-w-0 flex-wrap">
               <ServiceLogo logoUrl={service.logo_url} domain={service.domain} githubRepo={service.github_repo} name={service.name} size={56} className="rounded-[14px] max-md:!w-11 max-md:!h-11 max-md:!rounded-[11px]" />
@@ -701,7 +701,7 @@ export default function ProductPageClient({
                     target="_blank"
                     rel="noopener noreferrer"
                     title={link.title}
-                    className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-fabric-400 border border-fabric-200 bg-white cursor-pointer transition-all hover:border-blue hover:text-blue hover:bg-[rgba(61,138,247,0.06)] no-underline"
+                    className="w-[30px] h-[30px] max-[480px]:w-9 max-[480px]:h-9 rounded-lg flex items-center justify-center text-fabric-400 border border-fabric-200 bg-white cursor-pointer transition-all hover:border-blue hover:text-blue hover:bg-[rgba(61,138,247,0.06)] no-underline"
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill={link.fill ? 'currentColor' : 'none'} stroke={link.fill ? 'none' : 'currentColor'} strokeWidth={link.fill ? undefined : 2}>
                       <path d={link.d} />
@@ -729,7 +729,7 @@ export default function ProductPageClient({
                   i
                 </button>
                 {showThresholds && (
-                  <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-fabric-200 rounded-xl shadow-lg p-4 w-[280px]">
+                  <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-fabric-200 rounded-xl shadow-lg p-4 w-[280px] max-[480px]:w-[260px]">
                     <span className="font-mono text-[0.65rem] font-semibold text-fabric-600 uppercase tracking-wider">Score Thresholds</span>
                     <div className="flex flex-col gap-1 mt-2">
                       {[
@@ -797,7 +797,7 @@ export default function ProductPageClient({
           )}
 
           {/* Hero meta */}
-          <div className="flex gap-6 flex-wrap font-mono text-[0.68rem] text-fabric-400 mt-4 pt-4 border-t border-fabric-100">
+          <div className="flex gap-6 max-[480px]:gap-3 flex-wrap font-mono text-[0.68rem] text-fabric-400 mt-4 pt-4 border-t border-fabric-100">
             <span className="flex items-center gap-1">
               <svg className="w-3 h-3 text-fabric-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
               {service.updated}
@@ -820,7 +820,7 @@ export default function ProductPageClient({
         </div>
 
         {/* ═══ TRUST SIGNAL BREAKDOWN ═══ */}
-        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
           <div className="flex items-center justify-between mb-5">
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
@@ -861,7 +861,7 @@ export default function ProductPageClient({
 
         {/* ═══ SIGNAL DETAILS (skills only) ═══ */}
         {service.category === 'skill' && Object.keys(signalMetas).length > 0 && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Signal Details</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">from signal_history</span>
@@ -872,7 +872,7 @@ export default function ProductPageClient({
 
         {/* ═══ ABOUT THIS SERVICE ═══ */}
         <div className="bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
-          <div className="p-7 max-md:p-5">
+          <div className="p-7 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Assessment</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">AI Assessment</span>
@@ -917,9 +917,9 @@ export default function ProductPageClient({
         {(hasMetrics || hasDownloads) && (
           <div className="grid grid-cols-3 max-md:grid-cols-1 bg-white border border-fabric-200 rounded-xl mb-5 overflow-hidden">
             {service.uptime_30d && service.uptime_30d > 0 ? (
-              <div className="p-6">
+              <div className="p-6 max-[480px]:p-4">
                 <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">{service.endpoint_url ? 'Service Health' : 'Package Availability'} (30d)</div>
-                <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                <div className="text-[1.65rem] max-[480px]:text-[1.25rem] font-bold text-black tracking-tight leading-none">
                   {service.uptime_30d.toFixed(2)}<span className="text-base text-fabric-500 font-normal ml-0.5">%</span>
                 </div>
                 <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">
@@ -929,18 +929,18 @@ export default function ProductPageClient({
                 </div>
               </div>
             ) : (
-              <div className="p-6">
+              <div className="p-6 max-[480px]:p-4">
                 <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Uptime (30d)</div>
                 <div className="text-[1.1rem] font-medium text-fabric-300 tracking-tight leading-none">No endpoint monitored</div>
                 <div className="font-mono text-[0.68rem] text-fabric-400 mt-1">Health checks run when endpoint_url is set</div>
               </div>
             )}
 
-            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
+            <div className="p-6 max-[480px]:p-4 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
               <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Avg Latency</div>
               {service.avg_latency_ms && service.avg_latency_ms > 0 ? (
                 <>
-                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                  <div className="text-[1.65rem] max-[480px]:text-[1.25rem] font-bold text-black tracking-tight leading-none">
                     {service.avg_latency_ms < 1000
                       ? <>{service.avg_latency_ms}<span className="text-base text-fabric-500 font-normal ml-0.5">ms</span></>
                       : <>{(service.avg_latency_ms / 1000).toFixed(1)}<span className="text-base text-fabric-500 font-normal ml-0.5">s</span></>
@@ -956,11 +956,11 @@ export default function ProductPageClient({
               )}
             </div>
 
-            <div className="p-6 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
+            <div className="p-6 max-[480px]:p-4 border-l border-fabric-200 max-md:border-l-0 max-md:border-t">
               <div className="font-mono text-[0.68rem] uppercase tracking-wider text-fabric-400 mb-2.5">Weekly Downloads</div>
               {hasDownloads ? (
                 <>
-                  <div className="text-[1.65rem] font-bold text-black tracking-tight leading-none">
+                  <div className="text-[1.65rem] max-[480px]:text-[1.25rem] font-bold text-black tracking-tight leading-none">
                     {formatNumber(adoptionMeta!.weekly_downloads as number)}
                     {typeof adoptionMeta!.growth_rate === 'number' && (
                       <span className={`text-[0.88rem] font-normal ml-1 ${(adoptionMeta!.growth_rate as number) >= 0 ? 'text-[#0dc956]' : 'text-[#d03a3d]'}`}>
@@ -984,7 +984,7 @@ export default function ProductPageClient({
 
         {/* ═══ TRANSPARENCY & COMPLIANCE ═══ */}
         {hasTransparency && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Transparency & Compliance</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
@@ -1042,14 +1042,14 @@ export default function ProductPageClient({
 
         {/* ═══ INCIDENTS ═══ */}
         {incidents.length > 0 && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Incidents & Alerts</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">last 90 days</span>
             </div>
             <div className="flex flex-col max-h-[400px] overflow-y-auto no-scrollbar">
               {incidents.slice(0, incidentsCount).map((inc) => (
-                <div key={inc.id} className="flex gap-4 py-3 border-b border-fabric-100 last:border-b-0 items-start">
+                <div key={inc.id} className="flex gap-4 max-[480px]:gap-2 py-3 border-b border-fabric-100 last:border-b-0 items-start">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${incidentDotColor(inc.type, inc.severity)}`} />
                   <span className="font-mono text-[0.65rem] text-fabric-400 min-w-[56px] flex-shrink-0 mt-px">{formatDate(inc.created_at)}</span>
                   <span className="font-mono text-[0.72rem] text-fabric-700 leading-relaxed flex-1">{inc.title}</span>
@@ -1083,12 +1083,12 @@ export default function ProductPageClient({
 
         {/* ═══ SCORE HISTORY ═══ */}
         {hasScoreHistory && chartData && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Score History</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{signalHistory.length} snapshots</span>
             </div>
-            <div className="w-full h-40 relative mt-2 pr-10">
+            <div className="w-full h-40 relative mt-2 pr-10 max-[480px]:pr-6">
               <svg className="w-full h-full" viewBox="0 0 800 160" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1112,15 +1112,15 @@ export default function ProductPageClient({
               </svg>
               <div className="absolute top-0 right-0 h-40 flex flex-col justify-between">
                 {['5.00', '3.75', '2.50', '1.25', '0.00'].map(v => (
-                  <span key={v} className="font-mono text-[0.58rem] text-fabric-300 text-right leading-none">{v}</span>
+                  <span key={v} className="font-mono text-[0.62rem] text-fabric-300 text-right leading-none">{v}</span>
                 ))}
               </div>
             </div>
             <div className="flex justify-between mt-2">
               {signalHistory.length > 0 && (
                 <>
-                  <span className="font-mono text-[0.58rem] text-fabric-400">{formatDate(signalHistory[0].recorded_at)}</span>
-                  <span className="font-mono text-[0.58rem] text-blue">{formatDate(signalHistory[signalHistory.length - 1].recorded_at)}</span>
+                  <span className="font-mono text-[0.62rem] text-fabric-400">{formatDate(signalHistory[0].recorded_at)}</span>
+                  <span className="font-mono text-[0.62rem] text-blue">{formatDate(signalHistory[signalHistory.length - 1].recorded_at)}</span>
                 </>
               )}
             </div>
@@ -1129,12 +1129,12 @@ export default function ProductPageClient({
 
         {/* ═══ COMMUNITY & ECOSYSTEM ═══ */}
         {hasCommunity && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Community & Ecosystem</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">adoption signals</span>
             </div>
-            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-3">
+            <div className="grid grid-cols-3 gap-3 max-[480px]:grid-cols-1">
               {hasDownloads && (
                 <div className="p-4 bg-fabric-50 border border-fabric-100 rounded-lg text-center">
                   <div className="text-xl font-bold text-black tracking-tight">{formatNumber(adoptionMeta!.weekly_downloads as number)}</div>
@@ -1170,14 +1170,14 @@ export default function ProductPageClient({
 
         {/* ═══ SUPPLY CHAIN ═══ */}
         {supplyChain.length > 0 && (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Supply Chain & Dependencies</span>
               <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">trust chain</span>
             </div>
             <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto no-scrollbar">
               {supplyChain.slice(0, depsCount).map(dep => (
-                <div key={dep.dependency_name} className="flex items-center gap-2 p-2.5 bg-fabric-50 border border-fabric-100 rounded-lg">
+                <div key={dep.dependency_name} className="flex items-center gap-2 max-[480px]:gap-1 p-2.5 max-[480px]:p-2 bg-fabric-50 border border-fabric-100 rounded-lg">
                   <div className="w-[26px] h-[26px] flex items-center justify-center bg-white border border-fabric-200 rounded-md text-[0.72rem] flex-shrink-0">
                     {dep.dependency_type === 'npm' ? '⬡' : dep.dependency_type === 'pypi' ? '◈' : '◇'}
                   </div>
@@ -1229,7 +1229,7 @@ export default function ProductPageClient({
         )}
 
         {/* ═══ DATA SOURCES ═══ */}
-        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+        <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
           <div className="flex items-center justify-between mb-5">
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Data Sources</span>
             <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">{dataSources.length} indexed</span>
@@ -1267,7 +1267,7 @@ export default function ProductPageClient({
         {versions.length > 0 && (() => {
           const hasScoreData = versions.some(v => v.score_at_release != null)
           return (
-          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5">
+          <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
             <div className="flex items-center justify-between mb-5">
               <span className="text-[1.05rem] font-semibold text-black tracking-tight">Version History</span>
               {hasScoreData && <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">score per release</span>}
@@ -1327,16 +1327,16 @@ export default function ProductPageClient({
         })()}
 
         {/* ═══ CTA — Are you the publisher? ═══ */}
-        <div className="bg-black border border-fabric-700 rounded-xl p-8 flex flex-col gap-6 mt-4 relative overflow-hidden max-md:p-6">
+        <div className="bg-black border border-fabric-700 rounded-xl p-8 flex flex-col gap-6 mt-4 relative overflow-hidden max-md:p-6 max-[480px]:p-4 max-[480px]:gap-4">
           <div className="absolute -top-20 -right-20 w-[200px] h-[200px] bg-[radial-gradient(circle,rgba(61,138,247,0.15)_0%,transparent_70%)] pointer-events-none" />
 
           {/* Row 1: Publisher */}
-          <div className="flex items-center justify-between gap-8 flex-wrap relative z-10">
+          <div className="flex items-center justify-between gap-8 flex-wrap relative z-10 max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-3">
             <div>
               <h3 className="text-[1.15rem] font-semibold text-white tracking-tight mb-1.5">Are you the publisher?</h3>
               <p className="font-mono text-[0.72rem] text-fabric-400 leading-relaxed">Claim this profile to unlock deeper evaluation, real-time monitoring,<br className="max-md:hidden" />and trust signals that help agents discover your service.</p>
             </div>
-            <div className="flex gap-3 flex-shrink-0">
+            <div className="flex gap-3 flex-shrink-0 max-[480px]:w-full max-[480px]:flex-col">
               <button onClick={() => setShowClaimModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-blue border border-blue/40 rounded-lg cursor-pointer transition-all hover:!bg-blue hover:!text-white hover:!border-blue whitespace-nowrap">Claim Provider</button>
               <button onClick={() => setShowReportModal(true)} className="font-mono text-[0.72rem] py-2.5 px-5 bg-transparent text-blue border border-blue/40 rounded-lg cursor-pointer transition-all hover:!bg-blue hover:!text-white hover:!border-blue whitespace-nowrap">Report Issue</button>
             </div>
@@ -1346,7 +1346,7 @@ export default function ProductPageClient({
           <div className="border-t border-fabric-700" />
 
           {/* Row 2: Share */}
-          <div className="flex items-center justify-between gap-8 flex-wrap relative z-10">
+          <div className="flex items-center justify-between gap-8 flex-wrap relative z-10 max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-3">
             <div>
               <h3 className="text-[1.15rem] font-semibold text-white tracking-tight mb-1.5">Share this Trust Score</h3>
               <p className="font-mono text-[0.72rem] text-fabric-400 leading-relaxed">Generate a scorecard image optimised for X, LinkedIn and other social platforms.</p>
