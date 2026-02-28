@@ -176,37 +176,40 @@ export default function SearchToolbar(props: SearchToolbarProps) {
           )}
         </div>
 
-        {/* Status dropdown */}
-        <StatusDropdown
-          activeStatuses={props.activeStatuses}
-          onToggleStatus={props.onToggleStatus}
-        />
-
-        {/* Category dropdown */}
-        <Dropdown
-          label="Categories"
-          options={CATEGORIES}
-          value={props.activeCategory}
-          onChange={props.onCategoryChange}
-        />
-
-        {/* Sort dropdown */}
-        <Dropdown
-          label="Sort"
-          options={SORTS}
-          value={props.activeSort}
-          onChange={props.onSortChange}
-          defaultValue="score-desc"
-        />
-
-        {/* Alerts bell */}
-        {props.onToggleAlerts && (
-          <AlertsBellButton
-            criticalCount={props.criticalCount ?? 0}
-            onClick={props.onToggleAlerts}
-            active={props.alertsOpen ?? false}
+        {/* Filters row — spread full width on mobile */}
+        <div className="contents max-md:!flex max-md:w-full max-md:justify-between max-md:gap-2">
+          {/* Status dropdown */}
+          <StatusDropdown
+            activeStatuses={props.activeStatuses}
+            onToggleStatus={props.onToggleStatus}
           />
-        )}
+
+          {/* Category dropdown */}
+          <Dropdown
+            label="Categories"
+            options={CATEGORIES}
+            value={props.activeCategory}
+            onChange={props.onCategoryChange}
+          />
+
+          {/* Sort dropdown */}
+          <Dropdown
+            label="Sort"
+            options={SORTS}
+            value={props.activeSort}
+            onChange={props.onSortChange}
+            defaultValue="score-desc"
+          />
+
+          {/* Alerts bell */}
+          {props.onToggleAlerts && (
+            <AlertsBellButton
+              criticalCount={props.criticalCount ?? 0}
+              onClick={props.onToggleAlerts}
+              active={props.alertsOpen ?? false}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
