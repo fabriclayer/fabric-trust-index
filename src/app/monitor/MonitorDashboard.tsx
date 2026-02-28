@@ -1072,7 +1072,7 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
 }
 
 // ─── DISCOVERY TAB ────────────────────────────────────────────────
-function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => void; onRefresh: () => void }) {
+function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => Promise<boolean>; onRefresh: () => void }) {
   const [subTab, setSubTab] = useState<'pending' | 'approved'>('pending')
   const [filter, setFilter] = useState('all')
   const [acting, setActing] = useState<string | null>(null)
@@ -1088,9 +1088,12 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
   const allUnscoredSlugs = data.unscoredSlugs ?? []
   const unscoredCount = allUnscoredSlugs.length
 
+  const [actionError, setActionError] = useState<string | null>(null)
   const handleAction = async (id: string, action: 'approve' | 'dismiss') => {
     setActing(id)
-    await onAction(id, action)
+    setActionError(null)
+    const ok = await onAction(id, action)
+    if (!ok) setActionError(`Failed to ${action} — check console`)
     setActing(null)
   }
 
@@ -1143,15 +1146,20 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
   const handleBulkApprove = async () => {
     if (selected.size === 0) return
     setBulkApproving(true)
+    setActionError(null)
     const ids = Array.from(selected)
+    let failures = 0
     setBulkProgress({ done: 0, total: ids.length })
     for (let i = 0; i < ids.length; i++) {
-      await onAction(ids[i], 'approve')
+      const ok = await onAction(ids[i], 'approve')
+      if (!ok) failures++
       setBulkProgress({ done: i + 1, total: ids.length })
     }
     setSelected(new Set())
     setBulkApproving(false)
     setBulkProgress(null)
+    if (failures > 0) setActionError(`${failures}/${ids.length} approvals failed`)
+    onRefresh()
   }
 
   const statusColor = (s: string) => s === 'trusted' ? C.green : s === 'caution' ? C.orange : s === 'blocked' ? C.red : C.t3
@@ -1196,6 +1204,12 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
               <Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} />
             </div>
           </div>
+
+          {actionError && (
+            <div style={{ padding: '8px 16px', background: C.redDim, borderRadius: 8, border: `1px solid ${C.red}33` }}>
+              <Mono style={{ fontSize: 11, color: C.red }}>{actionError}</Mono>
+            </div>
+          )}
 
           {/* Pending review table */}
           <Card pad={false}>
@@ -2100,18 +2114,24 @@ export default function MonitorDashboard() {
     }
   }
 
-  const handleDiscoveryAction = async (id: string, action: 'approve' | 'dismiss') => {
+  const handleDiscoveryAction = async (id: string, action: 'approve' | 'dismiss'): Promise<boolean> => {
     try {
       const res = await fetch(`/api/monitor/discovery/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       })
-      if (res.ok && data) {
-        setData({ ...data, discoveryQueue: data.discoveryQueue.filter(d => d.id !== id) })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error(`Discovery ${action} failed for ${id}:`, err)
+        return false
       }
+      // Use functional updater to avoid stale closure during bulk operations
+      setData(prev => prev ? { ...prev, discoveryQueue: prev.discoveryQueue.filter(d => d.id !== id) } : prev)
+      return true
     } catch (err) {
       console.error('Discovery action failed:', err)
+      return false
     }
   }
 
