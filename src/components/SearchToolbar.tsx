@@ -200,16 +200,18 @@ export default function SearchToolbar(props: SearchToolbarProps) {
             onChange={props.onSortChange}
             defaultValue="score-desc"
           />
-        </div>
 
-        {/* Alerts bell */}
-        {props.onToggleAlerts && (
-          <AlertsBellButton
-            criticalCount={props.criticalCount ?? 0}
-            onClick={props.onToggleAlerts}
-            active={props.alertsOpen ?? false}
-          />
-        )}
+          {/* Alerts bell */}
+          {props.onToggleAlerts && (
+            <div className="max-md:!flex-none max-md:ml-0">
+              <AlertsBellButton
+                criticalCount={props.criticalCount ?? 0}
+                onClick={props.onToggleAlerts}
+                active={props.alertsOpen ?? false}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
