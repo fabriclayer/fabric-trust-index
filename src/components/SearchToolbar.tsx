@@ -55,7 +55,7 @@ function Dropdown({ label, options, value, onChange, badge, defaultValue }: {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
+        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 w-full ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
       >
         <span className="font-medium text-fabric-800">{displayLabel}</span>
         {badge && <span className="text-[0.6rem] text-fabric-400 bg-fabric-50 rounded px-1 py-px">{badge}</span>}
@@ -112,7 +112,7 @@ function StatusDropdown({ activeStatuses, onToggleStatus }: {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
+        className={`font-mono text-[0.68rem] text-fabric-600 bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer outline-none flex items-center gap-1.5 whitespace-nowrap transition-all select-none hover:border-fabric-300 w-full ${open ? 'border-blue shadow-[0_0_0_3px_rgba(61,138,247,0.1)]' : 'border-fabric-200'}`}
       >
         <span className="font-medium text-fabric-800">{label}</span>
         <svg className={`w-2.5 h-2.5 text-fabric-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -177,7 +177,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
         </div>
 
         {/* Filters row — spread full width on mobile */}
-        <div className="contents max-md:!flex max-md:w-full max-md:justify-between max-md:gap-2">
+        <div className="contents max-md:!flex max-md:w-full max-md:[&>*]:flex-1">
           {/* Status dropdown */}
           <StatusDropdown
             activeStatuses={props.activeStatuses}
