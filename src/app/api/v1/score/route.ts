@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAnonClient()
     const { data: service, error } = await supabase
       .from('services')
-      .select('name, slug, publisher, category, composite_score, status, signal_vulnerability, signal_operational, signal_maintenance, signal_adoption, signal_transparency, signal_publisher_trust, updated_at')
+      .select('name, slug, category, composite_score, status, signal_vulnerability, signal_operational, signal_maintenance, signal_adoption, signal_transparency, signal_publisher_trust, updated_at, publisher:publishers(name)')
       .eq('slug', slug)
       .single()
 
@@ -45,10 +45,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pub = service.publisher as any
     return NextResponse.json({
       name: service.name,
       slug: service.slug,
-      publisher: service.publisher,
+      publisher: pub?.name ?? 'Unknown',
       category: service.category,
       score: service.composite_score,
       status: service.status,
