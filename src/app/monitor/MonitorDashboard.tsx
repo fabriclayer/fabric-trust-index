@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import MarketingTab from './MarketingTab'
 import NetworkingTab from './NetworkingTab'
 import CostsTab from './CostsTab'
@@ -218,12 +218,88 @@ function HealthTab({ data }: { data: MonitorData }) {
 
   // Backfill state
   const [backfillState, setBackfillState] = useState<'idle' | 'confirm' | 'running'>('idle')
+  const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number; reCollected: number; purged: number; errors: number } | null>(null)
   const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Poll backfill status from server
+  const pollBackfillStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/monitor/backfill-status')
+      if (!res.ok) return
+      const status = await res.json()
+      setBackfillProgress({
+        processed: status.processed ?? 0,
+        total: status.total ?? 0,
+        reCollected: status.reCollected ?? 0,
+        purged: status.purged ?? 0,
+        errors: status.errors ?? 0,
+      })
+      if (!status.active) {
+        // Done or stale — stop polling
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+        setBackfillState('idle')
+        if (status.status === 'success') {
+          setBackfillResult({
+            ok: true,
+            message: `Done — ${status.reCollected} re-collected, ${status.purged} purged, ${status.errors} errors`,
+          })
+        } else if (status.status === 'stale') {
+          setBackfillResult({ ok: false, message: 'Backfill appears stalled (no update in 10 min)' })
+        }
+      }
+    } catch { /* ignore poll errors */ }
+  }, [])
+
+  // On mount: check if a backfill is already running
+  useEffect(() => {
+    pollBackfillStatus().then(() => {
+      // If it set running state, start the poll interval
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Start polling when state becomes 'running'
+  useEffect(() => {
+    if (backfillState === 'running' && !pollRef.current) {
+      pollRef.current = setInterval(pollBackfillStatus, 10_000)
+    }
+    return () => {
+      if (backfillState !== 'running' && pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [backfillState, pollBackfillStatus])
+
+  // Check on mount if backfill is active
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/monitor/backfill-status')
+        if (!res.ok || cancelled) return
+        const status = await res.json()
+        if (status.active) {
+          setBackfillState('running')
+          setBackfillProgress({
+            processed: status.processed ?? 0,
+            total: status.total ?? 0,
+            reCollected: status.reCollected ?? 0,
+            purged: status.purged ?? 0,
+            errors: status.errors ?? 0,
+          })
+        }
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const handleBackfill = async () => {
     if (backfillState === 'idle') {
       setBackfillState('confirm')
       setBackfillResult(null)
+      setBackfillProgress(null)
       return
     }
     if (backfillState === 'confirm') {
@@ -236,17 +312,21 @@ function HealthTab({ data }: { data: MonitorData }) {
         })
         const body = await res.json()
         if (res.ok) {
-          const msg = body.chaining
-            ? `Batch started — processing ${body.batch?.processed ?? 0} services, chaining next batch...`
-            : `Complete — re-collected: ${body.cumulative?.re_collected ?? body.batch?.processed ?? 0}, purged: ${body.cumulative?.purged ?? 0}`
-          setBackfillResult({ ok: true, message: msg })
+          setBackfillProgress({
+            processed: body.cumulative?.total_processed ?? 0,
+            total: body.total ?? 0,
+            reCollected: body.cumulative?.re_collected ?? 0,
+            purged: body.cumulative?.purged ?? 0,
+            errors: body.cumulative?.errors ?? 0,
+          })
         } else {
           setBackfillResult({ ok: false, message: body.error || `Failed (${res.status})` })
+          setBackfillState('idle')
         }
       } catch {
         setBackfillResult({ ok: false, message: 'Network error' })
+        setBackfillState('idle')
       }
-      setBackfillState('idle')
     }
   }
 
@@ -409,6 +489,11 @@ function HealthTab({ data }: { data: MonitorData }) {
           <Mono style={{ fontSize: 11, color: C.t3, flex: 1 }}>
             {(h.scoring.confidenceLow + h.scoring.confidenceMinimal).toLocaleString()} services with ≤3 signals — re-collect those with metadata, purge empty ones
           </Mono>
+          {backfillState === 'running' && backfillProgress && (
+            <Mono style={{ fontSize: 11, color: C.blue, whiteSpace: 'nowrap' }}>
+              {backfillProgress.processed.toLocaleString()}/{backfillProgress.total.toLocaleString()} processed
+            </Mono>
+          )}
           <button
             onClick={handleBackfill}
             disabled={backfillState === 'running'}
@@ -424,6 +509,13 @@ function HealthTab({ data }: { data: MonitorData }) {
             {backfillState === 'idle' ? 'Run Backfill' : backfillState === 'confirm' ? 'Confirm — this chains batches' : 'Running...'}
           </button>
         </div>
+        {backfillState === 'running' && backfillProgress && backfillProgress.processed > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
+            <Mono style={{ fontSize: 10, color: C.green }}>{backfillProgress.reCollected} re-collected</Mono>
+            <Mono style={{ fontSize: 10, color: C.orange }}>{backfillProgress.purged} purged</Mono>
+            {backfillProgress.errors > 0 && <Mono style={{ fontSize: 10, color: C.red }}>{backfillProgress.errors} errors</Mono>}
+          </div>
+        )}
         {backfillResult && (
           <div style={{ marginTop: 8 }}>
             <Mono style={{ fontSize: 11, color: backfillResult.ok ? C.green : C.red }}>{backfillResult.message}</Mono>
