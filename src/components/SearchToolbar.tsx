@@ -177,7 +177,7 @@ export default function SearchToolbar(props: SearchToolbarProps) {
         </div>
 
         {/* Filters row — spread full width on mobile */}
-        <div className="contents max-md:!flex max-md:w-full max-md:[&>*]:flex-1">
+        <div className="contents max-md:!flex max-md:w-full max-md:gap-2 max-md:[&>*]:flex-1">
           {/* Status dropdown */}
           <StatusDropdown
             activeStatuses={props.activeStatuses}
@@ -200,16 +200,16 @@ export default function SearchToolbar(props: SearchToolbarProps) {
             onChange={props.onSortChange}
             defaultValue="score-desc"
           />
-
-          {/* Alerts bell */}
-          {props.onToggleAlerts && (
-            <AlertsBellButton
-              criticalCount={props.criticalCount ?? 0}
-              onClick={props.onToggleAlerts}
-              active={props.alertsOpen ?? false}
-            />
-          )}
         </div>
+
+        {/* Alerts bell */}
+        {props.onToggleAlerts && (
+          <AlertsBellButton
+            criticalCount={props.criticalCount ?? 0}
+            onClick={props.onToggleAlerts}
+            active={props.alertsOpen ?? false}
+          />
+        )}
       </div>
     </div>
   )
