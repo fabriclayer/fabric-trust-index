@@ -78,9 +78,11 @@ export async function GET(request: NextRequest) {
     const hasMore = nextOffset < totalCount
 
     // Self-chain: trigger next batch (fire and forget)
+    // When unscored=1, always restart at offset 0 since scored services
+    // drop from the result set, making offset progression unreliable.
     if (hasMore) {
       const nextUrl = new URL(request.url)
-      nextUrl.searchParams.set('offset', nextOffset.toString())
+      nextUrl.searchParams.set('offset', unscoredOnly ? '0' : nextOffset.toString())
       nextUrl.searchParams.set('batch', batchSize.toString())
 
       fetch(nextUrl.toString(), {
