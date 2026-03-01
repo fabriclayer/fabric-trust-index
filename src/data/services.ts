@@ -44,6 +44,17 @@ export interface Service {
   // Score confidence
   score_confidence?: number | null
   signals_with_data?: number | null
+  // Sub-signal breakdown (from scoring engine)
+  signal_scores?: Record<string, {
+    score: number
+    sub_signals: Array<{
+      name: string
+      score: number
+      weight: number
+      has_data: boolean
+      detail?: string
+    }>
+  }> | null
   // Timestamps
   created_at?: string
   updated_at?: string

@@ -516,11 +516,190 @@ function SignalDetailCards({ signals, metas, homepageUrl }: { signals: number[];
 
 // ---------- Helper components ----------
 
+// ── Signal & sub-signal metadata ──
+
+const SIGNAL_META: Record<string, { name: string; icon: string; description: string }> = {
+  vulnerability: {
+    name: 'Vulnerability & Safety',
+    icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+    description: 'CVEs, dependency health, and supply chain integrity',
+  },
+  operational: {
+    name: 'Operational Reliability',
+    icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+    description: 'Uptime, latency, error rates, and incident history',
+  },
+  maintenance: {
+    name: 'Maintenance Activity',
+    icon: 'M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z',
+    description: 'Commit recency, release cadence, issue response, CI/CD',
+  },
+  adoption: {
+    name: 'Adoption',
+    icon: 'M23 6l-9.5 9.5-5-5L1 18',
+    description: 'Downloads, stars, dependents, and growth trajectory',
+  },
+  transparency: {
+    name: 'Transparency',
+    icon: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z',
+    description: 'License, documentation, security policy, changelog',
+  },
+  publisher_trust: {
+    name: 'Publisher Trust',
+    icon: 'M6 22V4a2 2 0 012-2h8a2 2 0 012 2v18zM6 12H2v10h4zM18 8h4v14h-4z',
+    description: 'Track record, org maturity, community standing',
+  },
+}
+
+const SUB_SIGNAL_META: Record<string, { name: string; source: string }> = {
+  known_cves: { name: 'Known CVEs', source: 'OSV.dev' },
+  dependency_health: { name: 'Dependency Health', source: 'npm / PyPI' },
+  supply_chain_basics: { name: 'Supply Chain', source: 'npm provenance' },
+  uptime: { name: 'Uptime', source: 'Health checks' },
+  response_latency: { name: 'Response Latency', source: 'Health checks' },
+  error_rate: { name: 'Error Rate', source: 'Health checks' },
+  incident_history: { name: 'Incident History', source: 'Incidents table' },
+  commit_recency: { name: 'Commit Recency', source: 'GitHub' },
+  release_cadence: { name: 'Release Cadence', source: 'GitHub' },
+  issue_responsiveness: { name: 'Issue Response', source: 'GitHub' },
+  ci_cd_presence: { name: 'CI/CD Presence', source: 'GitHub Actions' },
+  download_volume: { name: 'Download Volume', source: 'npm / PyPI' },
+  github_stars: { name: 'GitHub Stars', source: 'GitHub' },
+  dependent_packages: { name: 'Dependent Packages', source: 'npm' },
+  growth_trend: { name: 'Growth Trend', source: 'npm' },
+  open_source: { name: 'Open Source', source: 'GitHub' },
+  documentation: { name: 'Documentation', source: 'GitHub' },
+  security_policy: { name: 'Security Policy', source: 'GitHub' },
+  changelog: { name: 'Changelog', source: 'GitHub' },
+  track_record: { name: 'Track Record', source: 'Fabric index' },
+  org_maturity: { name: 'Org Maturity', source: 'GitHub' },
+  community_standing: { name: 'Community Standing', source: 'GitHub' },
+  cross_platform_presence: { name: 'Cross-Platform', source: 'Registry scan' },
+}
+
+function signalBarColor(score: number): string {
+  if (score >= 3.25) return 'bg-gradient-to-r from-[#0dc956] to-[#00E676]'
+  if (score >= 1.0) return 'bg-gradient-to-r from-[#f7931e] to-[#FFC107]'
+  return 'bg-gradient-to-r from-[#d03a3d] to-[#ef5350]'
+}
+
+function signalScoreColor(score: number): string {
+  if (score >= 3.25) return 'text-[#0dc956]'
+  if (score >= 1.0) return 'text-[#f7931e]'
+  return 'text-[#d03a3d]'
+}
+
+function SignalIcon({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0">
+      <path d={d} />
+    </svg>
+  )
+}
+
+interface SubSignal {
+  name: string
+  score: number
+  weight: number
+  has_data: boolean
+  detail?: string
+}
+
+function SignalCard({ signalKey, score, weight, subSignals, defaultExpanded }: {
+  signalKey: string
+  score: number
+  weight: string
+  subSignals: SubSignal[]
+  defaultExpanded: boolean
+}) {
+  const [open, setOpen] = useState(defaultExpanded)
+  const meta = SIGNAL_META[signalKey]
+  if (!meta) return null
+
+  const pct = (score / 5) * 100
+  const withData = subSignals.filter(s => s.has_data)
+  const totalDataWeight = withData.reduce((sum, s) => sum + s.weight, 0)
+
+  return (
+    <div className={`border rounded-lg transition-colors ${open ? 'border-fabric-200 bg-fabric-50/50' : 'border-transparent hover:border-fabric-100'}`}>
+      {/* Collapsed header — always visible */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 cursor-pointer max-[480px]:gap-2 max-[480px]:px-2.5"
+      >
+        <span className="font-mono text-[0.72rem] text-fabric-700 text-left flex-shrink-0 whitespace-nowrap w-[160px] max-md:w-[140px] max-[480px]:w-[120px]">{meta.name}</span>
+        <span className="font-mono text-[0.58rem] text-fabric-400 flex-shrink-0 max-[480px]:hidden">{weight}</span>
+        <div className="flex-1 h-1.5 bg-fabric-100 rounded-full overflow-hidden min-w-[40px]">
+          <div className={`h-full rounded-full signal-bar-fill ${signalBarColor(score)}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`font-mono text-[0.78rem] font-medium text-right w-[36px] flex-shrink-0 ${signalScoreColor(score)}`}>{score.toFixed(1)}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-fabric-400 flex-shrink-0 chevron-rotate" data-open={open}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {/* Expandable sub-signals */}
+      <div className="signal-card-expand" data-open={open}>
+        <div>
+          <div className="px-3.5 pb-3.5 pt-0.5 max-[480px]:px-2.5">
+            <p className="text-[0.72rem] text-fabric-500 mb-2">{meta.description}</p>
+            <p className="font-mono text-[0.6rem] text-fabric-400 mb-3">
+              {withData.length} of {subSignals.length} sub-signals with data
+            </p>
+            <div className="flex flex-col gap-2">
+              {subSignals.map(sub => {
+                const subMeta = SUB_SIGNAL_META[sub.name]
+                const displayName = subMeta?.name ?? sub.name.replace(/_/g, ' ')
+                const source = subMeta?.source ?? ''
+                const subPct = sub.has_data ? (sub.score / 5) * 100 : 0
+                const effectiveWeight = sub.has_data && totalDataWeight > 0
+                  ? Math.round((sub.weight / totalDataWeight) * 100)
+                  : 0
+
+                return (
+                  <div key={sub.name} className={`rounded-md px-2.5 py-2 ${sub.has_data ? 'bg-white border border-fabric-100' : 'bg-fabric-50 border border-dashed border-fabric-200'}`}>
+                    <div className="flex items-center gap-2 mb-1 max-[480px]:gap-1.5">
+                      <span className="font-mono text-[0.68rem] text-fabric-600 flex-1 truncate">{displayName}</span>
+                      {sub.has_data ? (
+                        <span className="font-mono text-[0.56rem] text-fabric-400 flex-shrink-0 max-[480px]:hidden">{effectiveWeight}%</span>
+                      ) : (
+                        <span className="font-mono text-[0.54rem] px-1.5 py-0.5 bg-fabric-100 text-fabric-400 rounded flex-shrink-0">no data</span>
+                      )}
+                      <span className={`font-mono text-[0.72rem] font-medium flex-shrink-0 w-[30px] text-right ${sub.has_data ? signalScoreColor(sub.score) : 'text-fabric-300'}`}>
+                        {sub.has_data ? sub.score.toFixed(1) : '—'}
+                      </span>
+                    </div>
+                    {sub.has_data ? (
+                      <>
+                        <div className="h-1 bg-fabric-100 rounded-full overflow-hidden mb-1.5">
+                          <div className={`h-full rounded-full ${signalBarColor(sub.score)}`} style={{ width: `${subPct}%` }} />
+                        </div>
+                        {sub.detail && (
+                          <p className="text-[0.66rem] text-fabric-500 leading-snug">{sub.detail}</p>
+                        )}
+                        {source && (
+                          <p className="font-mono text-[0.56rem] text-fabric-300 mt-0.5">via {source}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-[0.64rem] text-fabric-400 italic">Weight redistributed to sub-signals with data</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Legacy flat signal row for skills and services without signal_scores
 function SignalRow({ name, score, weight, detail, note, isSkill }: { name: string; score: number; weight: string; detail: string; note?: string; isSkill?: boolean }) {
   const [open, setOpen] = useState(false)
   const pct = (score / 5) * 100
-  const level = score >= 4 ? 'high' : score >= 3 ? 'medium' : 'low'
-  const barColor = level === 'high' ? 'bg-gradient-to-r from-[#0dc956] to-[#00E676]' : level === 'medium' ? 'bg-gradient-to-r from-[#f7931e] to-[#FFC107]' : 'bg-gradient-to-r from-[#d03a3d] to-[#ef5350]'
+  const barColor = signalBarColor(score)
 
   return (
     <div>
@@ -540,7 +719,6 @@ function SignalRow({ name, score, weight, detail, note, isSkill }: { name: strin
           </button>
         )}
       </div>
-      {/* Expandable detail for non-skills */}
       {!isSkill && open && (
         <div className="grid grid-cols-[180px_1fr_50px_42px_20px] gap-4 max-md:grid-cols-[100px_1fr_40px_36px_20px] max-md:gap-2 max-[480px]:grid-cols-[80px_1fr_36px_30px_16px] max-[480px]:gap-1.5 py-1.5">
           <div />
@@ -821,37 +999,89 @@ export default function ProductPageClient({
 
         {/* ═══ TRUST SIGNAL BREAKDOWN ═══ */}
         <div className="bg-white border border-fabric-200 rounded-xl p-7 mb-5 max-md:p-5 max-[480px]:p-4">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
-            <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
-              {service.signals_with_data != null
-                ? `${service.signals_with_data}/6 signals scored`
-                : '6 signals · weighted composite'}
-            </span>
+            <div className="flex items-center gap-2">
+              {service.signal_scores && service.category !== 'skill' && (() => {
+                const totalSubs = Object.values(service.signal_scores).reduce((sum, sig) => sum + (sig.sub_signals?.length ?? 0), 0)
+                const signalsWithData = service.signals_with_data ?? 0
+                const confidence = signalsWithData >= 5 ? 'high' : signalsWithData >= 3 ? 'medium' : signalsWithData >= 1 ? 'low' : 'unverified'
+                const confColor = confidence === 'high' ? 'bg-[rgba(13,201,86,0.1)] text-[#0dc956]' : confidence === 'medium' ? 'bg-[rgba(247,147,30,0.1)] text-[#f7931e]' : confidence === 'low' ? 'bg-[rgba(208,58,61,0.1)] text-[#d03a3d]' : 'bg-fabric-100 text-fabric-400'
+                return (
+                  <>
+                    <span className={`font-mono text-[0.58rem] py-0.5 px-2 rounded-full ${confColor}`}>
+                      {confidence}
+                    </span>
+                    <span className="font-mono text-[0.58rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full max-[480px]:hidden">
+                      {totalSubs} sub-signals across 6 dimensions
+                    </span>
+                  </>
+                )
+              })()}
+              {(!service.signal_scores || service.category === 'skill') && (
+                <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
+                  {service.signals_with_data != null
+                    ? `${service.signals_with_data}/6 signals scored`
+                    : '6 signals · weighted composite'}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex flex-col gap-3.5">
-            {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
-              const isSkill = service.category === 'skill'
-              const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : STANDARD_SIGNAL_KEYS[i]
-              const rawMeta = signalKey ? signalMetas[signalKey] : undefined
-              const detail = !isSkill && signalKey && rawMeta
-                ? getStandardSignalDetail(signalKey, rawMeta, service)
-                : signal.detail
-              return (
-                <SignalRow
-                  key={signal.name}
-                  name={signal.name}
-                  score={service.signals[i]}
-                  weight={signal.weight}
-                  detail={detail}
-                  note={isSkill && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
-                    ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
-                    : undefined}
-                  isSkill={isSkill}
-                />
-              )
-            })}
-          </div>
+
+          {/* Sub-signal cards (standard services with signal_scores) */}
+          {service.signal_scores && service.category !== 'skill' ? (
+            <div className="flex flex-col gap-1.5">
+              {STANDARD_SIGNAL_KEYS.map((key, i) => {
+                const signalData = service.signal_scores?.[key]
+                const isLowScore = service.signals[i] < 3.25
+                const isFirst = i === 0
+                return signalData?.sub_signals ? (
+                  <SignalCard
+                    key={key}
+                    signalKey={key}
+                    score={service.signals[i]}
+                    weight={SIGNAL_LABELS[i].weight}
+                    subSignals={signalData.sub_signals}
+                    defaultExpanded={isFirst || isLowScore}
+                  />
+                ) : (
+                  <SignalRow
+                    key={key}
+                    name={SIGNAL_LABELS[i].name}
+                    score={service.signals[i]}
+                    weight={SIGNAL_LABELS[i].weight}
+                    detail={SIGNAL_LABELS[i].detail}
+                  />
+                )
+              })}
+            </div>
+          ) : (
+            /* Legacy flat rows (skills or services without signal_scores) */
+            <div className="flex flex-col gap-3.5">
+              {(service.category === 'skill' ? SKILL_SIGNAL_LABELS : SIGNAL_LABELS).map((signal, i) => {
+                const isSkill = service.category === 'skill'
+                const signalKey = isSkill ? SKILL_SIGNAL_KEYS[i] : STANDARD_SIGNAL_KEYS[i]
+                const rawMeta = signalKey ? signalMetas[signalKey] : undefined
+                const detail = !isSkill && signalKey && rawMeta
+                  ? getStandardSignalDetail(signalKey, rawMeta, service)
+                  : signal.detail
+                return (
+                  <SignalRow
+                    key={signal.name}
+                    name={signal.name}
+                    score={service.signals[i]}
+                    weight={signal.weight}
+                    detail={detail}
+                    note={isSkill && signal.name === 'VirusTotal Scan' && (service.signals[i] === 2.5 || service.signals[i] === 3.0)
+                      ? 'Based on ClawHub moderation status — direct VirusTotal scan pending'
+                      : undefined}
+                    isSkill={isSkill}
+                  />
+                )
+              })}
+            </div>
+          )}
+
           {service.signals_with_data != null && service.signals_with_data < 4 && (
             <p className="font-mono text-[0.62rem] text-fabric-400 mt-3 pt-3 border-t border-fabric-100">
               Limited data available — {6 - service.signals_with_data} of 6 signals pending evaluation

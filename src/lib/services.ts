@@ -68,6 +68,7 @@ function dbToService(db: any): Service {
     ai_assessment_updated_at: db.ai_assessment_updated_at || null,
     score_confidence: db.score_confidence ?? null,
     signals_with_data: db.signals_with_data ?? null,
+    signal_scores: db.signal_scores || null,
     created_at: db.created_at || undefined,
     updated_at: db.updated_at || undefined,
   }

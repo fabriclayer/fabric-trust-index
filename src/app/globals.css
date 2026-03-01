@@ -54,6 +54,25 @@
   margin-right: 0.5rem;
 }
 
+/* ── Signal card expand/collapse ── */
+.signal-card-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.signal-card-expand[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.signal-card-expand > div {
+  overflow: hidden;
+}
+.chevron-rotate {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chevron-rotate[data-open="true"] {
+  transform: rotate(180deg);
+}
+
 /* ── Code syntax colors ── */
 .c-method { color: #f7931e; }
 .c-url { color: #ffffff; }
@@ -66,7 +85,9 @@
 /* ── Reduced motion preference ── */
 @media (prefers-reduced-motion: reduce) {
   .rating-fill,
-  .signal-bar-fill {
+  .signal-bar-fill,
+  .signal-card-expand,
+  .chevron-rotate {
     transition: none;
   }
   .spinner {

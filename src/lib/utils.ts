@@ -81,10 +81,10 @@ export const TAG_COLORS: Record<string, { text: string; border: string; bg: stri
 export const SIGNAL_LABELS = [
   { name: 'Vulnerability & Safety', weight: '×0.25', detail: 'Zero known CVEs across full dependency tree. No malware signatures detected. Clean install scripts. No typosquatting indicators. All dependencies scanned recursively.' },
   { name: 'Operational Health', weight: '×0.15', detail: 'Fabric Monitor active — 99.95% uptime over rolling 30d. Sub-200ms p50 latency. Consistent behavioral responses across identical checks. 15-minute ping cycle.' },
-  { name: 'Maintenance Activity', weight: '×0.20', detail: 'Active commits within last 7 days. Regular release cadence. Median issue response under 24h. Healthy open/closed issue ratio. Consistent PR merge velocity.' },
+  { name: 'Maintenance Activity', weight: '×0.15', detail: 'Active commits within last 7 days. Regular release cadence. Median issue response under 24h. Healthy open/closed issue ratio. Consistent PR merge velocity.' },
   { name: 'Adoption', weight: '×0.15', detail: 'Top-tier download volume normalised against category peers. Strong growth velocity. High unique caller count. Logarithmic scale — raw numbers weighted against ecosystem averages.' },
   { name: 'Transparency', weight: '×0.15', detail: 'Published model card and system card. SECURITY.md present. API documentation with input/output schemas. Research papers linked. Closed-weight model limits full source visibility.' },
-  { name: 'Publisher Trust', weight: '×0.10', detail: 'Verified organisation account. Consistent identity across npm, PyPI, and GitHub. Multiple maintained packages. Clean track record with no prior security incidents. Domain-verified.' },
+  { name: 'Publisher Trust', weight: '×0.15', detail: 'Verified organisation account. Consistent identity across npm, PyPI, and GitHub. Multiple maintained packages. Clean track record with no prior security incidents. Domain-verified.' },
 ]
 
 // Signal labels for skill category (ClawHub/OpenClaw skills)
