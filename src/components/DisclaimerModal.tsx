@@ -35,6 +35,7 @@ export default function DisclaimerModal({ onAccept, onDecline }: DisclaimerModal
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">You assume all risk.</strong> Any decision to use a service discovered through the Trust Index is made entirely at your own risk.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Scores may be incomplete or wrong.</strong> Automated scoring has inherent limitations. Always conduct your own due diligence.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Not professional advice.</strong> Nothing on the Trust Index constitutes a security audit, legal advice, or professional recommendation.</li>
+              <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Active beta.</strong> The Fabric Trust Index scoring engine is in active beta. Signals, sub-signal weights, and thresholds are being calibrated in real time as coverage expands across the index. Scores may shift between versions as new data sources come online and scoring logic is refined.</li>
             </ol>
           </div>
         </div>
