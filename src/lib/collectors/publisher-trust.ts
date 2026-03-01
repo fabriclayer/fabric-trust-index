@@ -8,10 +8,14 @@ import { githubGet } from './github'
  * Publisher Trust Collector (weight: 0.15)
  *
  * Sub-signals:
- *   track_record           (0.35) — avg composite of publisher's other services
- *   org_maturity            (0.25) — GitHub account age
+ *   track_record           (0.30) — max(internal sibling avg, external GitHub credibility)
+ *   org_maturity            (0.30) — GitHub account age
  *   community_standing      (0.20) — public repos count (proxy)
  *   cross_platform_presence (0.20) — registry presence count
+ *
+ * track_record uses external credibility (GitHub followers + total org stars) to
+ * avoid penalizing legitimate publishers with incomplete Fabric index coverage.
+ * verified_publisher flag floors track_record at 4.0.
  *
  * Also detects npm_deprecated, npm_maintainers (for owner change detection),
  * and computes first_published_at / project age metadata.
@@ -93,6 +97,24 @@ function scoreTrackRecord(serviceCount: number, avgComposite: number): number {
   return 1.0
 }
 
+function scoreExternalCredibility(followers: number, totalStars: number): number {
+  let followerScore: number
+  if (followers >= 10000) followerScore = 5.0
+  else if (followers >= 1000) followerScore = 4.0
+  else if (followers >= 100) followerScore = 3.0
+  else if (followers >= 10) followerScore = 2.0
+  else followerScore = 1.0
+
+  let starsScore: number
+  if (totalStars >= 50000) starsScore = 5.0
+  else if (totalStars >= 10000) starsScore = 4.0
+  else if (totalStars >= 1000) starsScore = 3.0
+  else if (totalStars >= 100) starsScore = 2.0
+  else starsScore = 1.0
+
+  return followerScore * 0.5 + starsScore * 0.5
+}
+
 export const publisherTrustCollector: Collector = {
   name: 'publisher_trust',
 
@@ -105,8 +127,8 @@ export const publisherTrustCollector: Collector = {
       signal_name: 'publisher_trust',
       score: 0,
       sub_signals: [
-        { name: 'track_record', score: 0, weight: 0.35, has_data: false },
-        { name: 'org_maturity', score: 0, weight: 0.25, has_data: false },
+        { name: 'track_record', score: 0, weight: 0.30, has_data: false },
+        { name: 'org_maturity', score: 0, weight: 0.30, has_data: false },
         { name: 'community_standing', score: 0, weight: 0.20, has_data: false },
         { name: 'cross_platform_presence', score: 0, weight: 0.20, has_data: false },
       ],
@@ -134,6 +156,7 @@ export const publisherTrustCollector: Collector = {
       created_at?: string
       type?: string
       public_repos?: number
+      followers?: number
     } | null
 
     if (!orgData) {
@@ -143,10 +166,11 @@ export const publisherTrustCollector: Collector = {
     // Track candidate dates for first_published_at
     const ageDates: string[] = []
 
-    // ── Sub-signal 1: track_record (0.35) ──
+    // ── Sub-signal 1: track_record (0.30) ──
     let trackRecordScore = 1.0
     let trackRecordDetail = 'First service for publisher'
 
+    // Internal score: sibling services in Fabric's index
     const { data: siblingServices } = await supabase
       .from('services')
       .select('composite_score, status')
@@ -154,17 +178,46 @@ export const publisherTrustCollector: Collector = {
       .neq('id', service.id)
       .gt('composite_score', 0)
 
-    if (siblingServices && siblingServices.length > 0) {
-      const avgComposite = siblingServices.reduce((sum, s) => sum + s.composite_score, 0) / siblingServices.length
-      metadata.sibling_count = siblingServices.length
+    const siblingCount = siblingServices?.length ?? 0
+    let internalScore = 1.0
+    if (siblingServices && siblingCount > 0) {
+      const avgComposite = siblingServices.reduce((sum, s) => sum + s.composite_score, 0) / siblingCount
+      metadata.sibling_count = siblingCount
       metadata.sibling_avg_composite = Math.round(avgComposite * 100) / 100
-      trackRecordScore = scoreTrackRecord(siblingServices.length, avgComposite)
-      trackRecordDetail = `${siblingServices.length} other services, avg composite ${avgComposite.toFixed(2)}`
+      internalScore = scoreTrackRecord(siblingCount, avgComposite)
     } else {
       metadata.sibling_count = 0
     }
 
-    // ── Sub-signal 2: org_maturity (0.25) ──
+    // External score: GitHub followers + total org stars
+    const followers = orgData.followers ?? 0
+    metadata.github_followers = followers
+
+    const orgRepos = await githubGet(
+      `/users/${ghOrg}/repos?per_page=100&sort=stars&direction=desc`
+    ) as Array<{ stargazers_count?: number }> | null
+
+    const totalOrgStars = orgRepos
+      ? orgRepos.reduce((sum, r) => sum + (r.stargazers_count ?? 0), 0)
+      : 0
+    metadata.total_org_stars = totalOrgStars
+
+    const externalScore = scoreExternalCredibility(followers, totalOrgStars)
+    metadata.track_record_internal = internalScore
+    metadata.track_record_external = externalScore
+
+    // Use the higher of internal vs external
+    trackRecordScore = Math.max(internalScore, externalScore)
+
+    // Verified publisher floor
+    if (publisher.verified_publisher) {
+      trackRecordScore = Math.max(trackRecordScore, 4.0)
+      metadata.verified_publisher = true
+    }
+
+    trackRecordDetail = `Internal: ${internalScore.toFixed(1)} (${siblingCount} services), External: ${externalScore.toFixed(1)} (${followers} followers, ${totalOrgStars} stars)${publisher.verified_publisher ? ', verified' : ''}`
+
+    // ── Sub-signal 2: org_maturity (0.30) ──
     let orgMaturityScore = 0
     let orgMaturityHasData = false
     let orgMaturityDetail = 'No account creation date'
@@ -303,14 +356,14 @@ export const publisherTrustCollector: Collector = {
       {
         name: 'track_record',
         score: trackRecordScore,
-        weight: 0.35,
+        weight: 0.30,
         has_data: true,
         detail: trackRecordDetail,
       },
       {
         name: 'org_maturity',
         score: orgMaturityScore,
-        weight: 0.25,
+        weight: 0.30,
         has_data: orgMaturityHasData,
         detail: orgMaturityDetail,
       },

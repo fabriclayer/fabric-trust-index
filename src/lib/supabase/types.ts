@@ -91,6 +91,7 @@ export interface DbPublisher {
   maintained_package_count: number
   security_incident_count: number
   identity_consistency_score: number
+  verified_publisher: boolean
   created_at: string
   updated_at: string
 }
