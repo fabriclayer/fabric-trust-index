@@ -30,12 +30,12 @@ export default function DisclaimerModal({ onAccept, onDecline }: DisclaimerModal
           </p>
           <div className="bg-fabric-50 border border-fabric-200 rounded-[10px] p-4 mt-4 max-h-[200px] overflow-y-auto modal-terms max-md:max-h-40">
             <ol className="pl-5 flex flex-col gap-2">
+              <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Active beta.</strong> The Fabric Trust Index scoring engine is in active beta. Signals, sub-signal weights, and thresholds are being calibrated in real time as coverage expands across the index. Scores may shift between versions as new data sources come online and scoring logic is refined.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Information only, not a guarantee.</strong> Trust scores are generated from publicly available data and reflect a point-in-time automated assessment.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">No endorsement of third-party services.</strong> Listing or scoring a service does not constitute an endorsement by Fabric Layer Technologies LTD or Motherbird.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">You assume all risk.</strong> Any decision to use a service discovered through the Trust Index is made entirely at your own risk.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Scores may be incomplete or wrong.</strong> Automated scoring has inherent limitations. Always conduct your own due diligence.</li>
               <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Not professional advice.</strong> Nothing on the Trust Index constitutes a security audit, legal advice, or professional recommendation.</li>
-              <li className="text-[12.5px] text-fabric-600 leading-relaxed"><strong className="text-fabric-800">Active beta.</strong> The Fabric Trust Index scoring engine is in active beta. Signals, sub-signal weights, and thresholds are being calibrated in real time as coverage expands across the index. Scores may shift between versions as new data sources come online and scoring logic is refined.</li>
             </ol>
           </div>
         </div>
