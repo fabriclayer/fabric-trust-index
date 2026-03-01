@@ -54,6 +54,7 @@ export default function ServiceCard({ service }: { service: Service }) {
         <span className={`font-mono text-[0.82rem] font-semibold tracking-tight ${scoreNumColor[service.status]}`}>
           {service.score.toFixed(2)}
         </span>
+        <span className="font-mono text-[0.45rem] font-semibold uppercase tracking-wider text-fabric-400 border border-fabric-200 rounded px-0.5 py-[0.5px] leading-tight ml-auto" title="The Fabric scoring engine is in active beta. Signals and thresholds are being calibrated as new data sources come online.">Beta</span>
       </div>
     </Link>
   )
