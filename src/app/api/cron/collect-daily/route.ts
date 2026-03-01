@@ -14,6 +14,7 @@ export const maxDuration = 300
  * offset=0 at 02:00 UTC; self-chaining handles the rest.
  *
  * GET /api/cron/collect-daily?offset=0&batch=50
+ * GET /api/cron/collect-daily?offset=0&batch=50&unscored=1  (skip already-scored)
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -23,14 +24,19 @@ export async function GET(request: NextRequest) {
 
   const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10)
   const batchSize = parseInt(request.nextUrl.searchParams.get('batch') ?? '50', 10)
+  const unscoredOnly = request.nextUrl.searchParams.get('unscored') === '1'
 
   try {
     const supabase = createServerClient()
 
-    const { data: services, count } = await supabase
+    let query = supabase
       .from('services')
       .select('*', { count: 'exact' })
       .neq('status', 'pending')
+    if (unscoredOnly) {
+      query = query.is('signal_scores', null)
+    }
+    const { data: services, count } = await query
       .order('id', { ascending: true })
       .range(offset, offset + batchSize - 1)
 
