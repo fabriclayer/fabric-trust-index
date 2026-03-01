@@ -578,13 +578,13 @@ const SUB_SIGNAL_META: Record<string, { name: string; source: string }> = {
 }
 
 function signalBarColor(score: number): string {
-  if (score >= 3.25) return 'bg-gradient-to-r from-[#0dc956] to-[#00E676]'
+  if (score >= 3.00) return 'bg-gradient-to-r from-[#0dc956] to-[#00E676]'
   if (score >= 1.0) return 'bg-gradient-to-r from-[#f7931e] to-[#FFC107]'
   return 'bg-gradient-to-r from-[#d03a3d] to-[#ef5350]'
 }
 
 function signalScoreColor(score: number): string {
-  if (score >= 3.25) return 'text-[#0dc956]'
+  if (score >= 3.00) return 'text-[#0dc956]'
   if (score >= 1.0) return 'text-[#f7931e]'
   return 'text-[#d03a3d]'
 }
@@ -761,7 +761,7 @@ function incidentDotColor(type: string, severity: string): string {
 
 function incidentScoreColor(score: number | undefined): string {
   if (score === undefined || score === null) return 'text-fabric-400'
-  if (score >= 3.25) return 'text-[#0dc956]'
+  if (score >= 3.00) return 'text-[#0dc956]'
   if (score >= 1.00) return 'text-[#f7931e]'
   return 'text-[#d03a3d]'
 }
@@ -900,6 +900,7 @@ export default function ProductPageClient({
               </div>
               <div className="relative flex items-center gap-1.5">
                 <ScoreStatus status={service.status} />
+                <span className="font-mono text-[0.5rem] font-semibold uppercase tracking-wider text-fabric-400 border border-fabric-200 rounded px-1 py-[1px] leading-tight cursor-default" title="The Fabric scoring engine is in active beta. Signals and thresholds are being calibrated as new data sources come online.">Beta</span>
                 <button
                   onClick={() => setShowThresholds(!showThresholds)}
                   className={`w-4 h-4 rounded-full flex items-center justify-center border text-fabric-400 font-mono text-[0.5rem] font-semibold cursor-pointer transition-all leading-none flex-shrink-0 ${showThresholds ? 'border-blue text-blue bg-[rgba(61,138,247,0.08)]' : 'border-fabric-200 bg-white hover:border-blue hover:text-blue'}`}
@@ -911,8 +912,8 @@ export default function ProductPageClient({
                     <span className="font-mono text-[0.65rem] font-semibold text-fabric-600 uppercase tracking-wider">Score Thresholds</span>
                     <div className="flex flex-col gap-1 mt-2">
                       {[
-                        { range: '3.25 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
-                        { range: '1.00 – 3.24', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
+                        { range: '3.00 – 5.00', label: 'Trusted · auto-approve', color: 'text-[#0dc956]' },
+                        { range: '1.00 – 2.99', label: 'Caution · human confirm', color: 'text-[#f7931e]' },
                         { range: '0.00 – 0.99', label: 'Blocked · deny by default', color: 'text-[#d03a3d]' },
                       ].map(t => (
                         <div key={t.range} className="flex justify-between items-center py-1 border-b border-fabric-100 last:border-b-0">
@@ -1033,7 +1034,7 @@ export default function ProductPageClient({
             <div className="flex flex-col gap-1.5">
               {STANDARD_SIGNAL_KEYS.map((key, i) => {
                 const signalData = service.signal_scores?.[key]
-                const isLowScore = service.signals[i] < 3.25
+                const isLowScore = service.signals[i] < 3.00
                 const isFirst = i === 0
                 return signalData?.sub_signals ? (
                   <SignalCard
@@ -1042,7 +1043,7 @@ export default function ProductPageClient({
                     score={service.signals[i]}
                     weight={SIGNAL_LABELS[i].weight}
                     subSignals={signalData.sub_signals}
-                    defaultExpanded={isFirst || isLowScore}
+                    defaultExpanded={false}
                   />
                 ) : (
                   <SignalRow
@@ -1087,6 +1088,22 @@ export default function ProductPageClient({
               Limited data available — {6 - service.signals_with_data} of 6 signals pending evaluation
             </p>
           )}
+
+          {/* About this score */}
+          <details className="mt-4 pt-4 border-t border-fabric-100 group">
+            <summary className="font-mono text-[0.62rem] text-fabric-400 cursor-pointer select-none list-none flex items-center gap-1.5 hover:text-fabric-600 transition-colors">
+              <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+              About this score
+            </summary>
+            <div className="mt-3 flex flex-col gap-1.5">
+              <span className="font-mono text-[0.58rem] text-fabric-500">
+                {service.signal_scores ? `Scored across ${Object.values(service.signal_scores).reduce((sum, sig) => sum + (sig.sub_signals?.length ?? 0), 0)} sub-signals in 6 dimensions` : 'Scored across 6 signal dimensions'}
+              </span>
+              <span className="font-mono text-[0.58rem] text-fabric-500">Scoring engine v1 (beta) — actively being expanded</span>
+              <span className="font-mono text-[0.58rem] text-fabric-400">Phase 1: Core sub-signal architecture (live)</span>
+              <span className="font-mono text-[0.58rem] text-fabric-400">Phase 2: Permission scope &amp; expanded collection (in progress)</span>
+            </div>
+          </details>
         </div>
 
         {/* ═══ SIGNAL DETAILS (skills only) ═══ */}
@@ -1430,7 +1447,7 @@ export default function ProductPageClient({
                   {dep.trust_score !== undefined && dep.trust_score !== null && (
                     <>
                       <span className="text-fabric-300 text-[0.72rem]">→</span>
-                      <div className={`font-mono text-[0.72rem] font-medium ${dep.trust_score >= 3.25 ? 'text-[#0dc956]' : dep.trust_score >= 1.00 ? 'text-[#f7931e]' : 'text-[#d03a3d]'}`}>
+                      <div className={`font-mono text-[0.72rem] font-medium ${dep.trust_score >= 3.00 ? 'text-[#0dc956]' : dep.trust_score >= 1.00 ? 'text-[#f7931e]' : 'text-[#d03a3d]'}`}>
                         {dep.trust_score.toFixed(1)}
                       </div>
                     </>
@@ -1520,7 +1537,7 @@ export default function ProductPageClient({
                 const scoreStr = v.score_at_release !== undefined && v.score_at_release !== null
                   ? v.score_at_release.toFixed(2)
                   : '—'
-                const scoreClass = v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 3.25
+                const scoreClass = v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 3.00
                   ? 'text-[#0dc956]'
                   : v.score_at_release !== undefined && v.score_at_release !== null && v.score_at_release >= 1.00
                     ? 'text-[#f7931e]'

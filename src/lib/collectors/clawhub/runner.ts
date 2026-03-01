@@ -215,7 +215,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
   if (modifiers.includes('vt_scan_override') || modifiers.includes('content_safety_override')) {
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('vt_suspicious_override') || modifiers.includes('content_safety_caution_override')) {
-    finalScore = Math.min(finalScore, 3.24)
+    finalScore = Math.min(finalScore, 2.99)
   }
 
   // Store owner handle for publisher link on product page

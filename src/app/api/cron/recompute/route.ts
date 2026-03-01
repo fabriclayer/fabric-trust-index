@@ -290,9 +290,9 @@ export async function POST(request: NextRequest) {
     if (modifiers.includes('vulnerability_zero_override')) {
       finalScore = Math.min(finalScore, 0.99)
     } else if (modifiers.includes('vulnerability_patch_available')) {
-      finalScore = Math.min(finalScore, 3.24)
+      finalScore = Math.min(finalScore, 2.99)
     } else if (modifiers.includes('zero_signal_override')) {
-      finalScore = Math.min(finalScore, 3.24)
+      finalScore = Math.min(finalScore, 2.99)
     }
 
     // Trusted gate: must have vuln data + 4 signals with data to be trusted

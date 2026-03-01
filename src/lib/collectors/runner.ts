@@ -527,23 +527,23 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('vulnerability_patch_available')) {
-    finalScore = Math.min(finalScore, 3.24)
+    finalScore = Math.min(finalScore, 2.99)
   } else if (modifiers.includes('zero_signal_override')) {
-    finalScore = Math.min(finalScore, 3.24)
+    finalScore = Math.min(finalScore, 2.99)
   }
 
   // Repo transfer penalty: freeze + apply -1.0
   if (modifiers.includes('repo_transferred')) {
     finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
     finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
-    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
   }
 
   // npm owner changed penalty
   if (modifiers.includes('npm_owner_changed')) {
     finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
     finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
-    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
   }
 
   // Trusted gate: must have vuln data + 4 signals with data to be trusted
@@ -835,23 +835,23 @@ export async function runCollectors(
   if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('vulnerability_patch_available')) {
-    finalScore = Math.min(finalScore, 3.24)
+    finalScore = Math.min(finalScore, 2.99)
   } else if (modifiers.includes('zero_signal_override')) {
-    finalScore = Math.min(finalScore, 3.24)
+    finalScore = Math.min(finalScore, 2.99)
   }
 
   // Repo transfer penalty: freeze + apply -1.0
   if (modifiers.includes('repo_transferred')) {
     finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
     finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
-    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
   }
 
   // npm owner changed penalty
   if (modifiers.includes('npm_owner_changed')) {
     finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
     finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
-    finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
+    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
   }
 
   // Trusted gate: must have vuln data + 4 signals with data to be trusted

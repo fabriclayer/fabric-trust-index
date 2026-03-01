@@ -75,7 +75,7 @@ export async function runHealthChecks(supabase: SupabaseClient): Promise<HealthR
       .from('services')
       .select('slug, name, signal_adoption, composite_score', { count: 'exact' })
       .gte('signal_adoption', 3.5)
-      .lt('composite_score', 3.25)
+      .lt('composite_score', 3.00)
       .neq('status', 'pending')
       .order('signal_adoption', { ascending: false })
       .limit(10)

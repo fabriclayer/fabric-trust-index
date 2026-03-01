@@ -4,7 +4,7 @@
  */
 
 export const THRESHOLDS = {
-  trusted: 3.25,
+  trusted: 3.00,
   caution: 1.00,
 } as const
 
@@ -94,7 +94,7 @@ export function applyTrustedGate(
 ): { score: number; status: string; gated: boolean } {
   if (status === 'trusted' && score >= THRESHOLDS.trusted) {
     if (!hasVulnData || signalsWithData < 4) {
-      return { score: Math.min(score, 3.24), status: 'caution', gated: true }
+      return { score: Math.min(score, 2.99), status: 'caution', gated: true }
     }
   }
   return { score, status, gated: false }
