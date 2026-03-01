@@ -1,17 +1,18 @@
 import type { DbService } from '@/lib/supabase/types'
-import type { Collector, CollectorResult } from './types'
-import { clampScore } from './types'
-import { createServerClient } from '@/lib/supabase/server'
+import type { Collector, CollectorResult, SubSignalScore } from './types'
+import { clampScore, computeSubSignalScore } from './types'
+import { githubGet } from './github'
 
 /**
  * Adoption Collector (weight: 0.15)
  *
- * Uses logarithmic scaling with category normalization.
- * Download velocity (growth trend) matters more than absolute count.
- * For categories with 10+ services, blends tier score (80%) with
- * within-category percentile (20%) to prevent niche tool penalization.
+ * Sub-signal architecture with 4 sub-signals:
+ *   1. download_volume    (0.30) — npm + PyPI weekly downloads, log-scale tiers
+ *   2. github_stars       (0.25) — stargazers count from GitHub API
+ *   3. dependent_packages (0.30) — phase 1: not available, weight redistributed
+ *   4. growth_trend       (0.15) — week-over-week download velocity
  *
- * Data sources: npm registry API, PyPI stats API
+ * Data sources: npm registry API, PyPI stats API, GitHub API
  */
 
 interface NpmDownloads {
@@ -60,15 +61,30 @@ async function getPyPIWeeklyDownloads(pkg: string): Promise<number | null> {
   }
 }
 
-/**
- * Map a percentile rank to a score.
- * top 10% = 5.0, top 25% = 4.0, top 50% = 3.0, bottom 25% = 2.0, bottom 10% = 1.0
- */
-function percentileToScore(percentile: number): number {
-  if (percentile >= 90) return 5.0
-  if (percentile >= 75) return 4.0
-  if (percentile >= 50) return 3.0
-  if (percentile >= 25) return 2.0
+function scoreDownloadVolume(weeklyDownloads: number): number {
+  if (weeklyDownloads >= 10_000_000) return 5.0
+  if (weeklyDownloads >= 1_000_000) return 4.5
+  if (weeklyDownloads >= 100_000) return 4.0
+  if (weeklyDownloads >= 10_000) return 3.5
+  if (weeklyDownloads >= 1_000) return 3.0
+  if (weeklyDownloads >= 100) return 2.0
+  return 1.0
+}
+
+function scoreGitHubStars(stars: number): number {
+  if (stars > 10_000) return 5.0
+  if (stars >= 5_000) return 4.0
+  if (stars >= 1_000) return 3.0
+  if (stars >= 100) return 2.0
+  if (stars >= 10) return 1.0
+  return 0.0
+}
+
+function scoreGrowthTrend(growthRate: number): number {
+  if (growthRate > 0.20) return 5.0
+  if (growthRate > 0.05) return 4.0
+  if (growthRate >= -0.05) return 3.0
+  if (growthRate >= -0.20) return 2.0
   return 1.0
 }
 
@@ -79,9 +95,8 @@ export const adoptionCollector: Collector = {
     const sources: string[] = []
     let weeklyDownloads = 0
     let priorWeekDownloads = 0
-    let hasData = false
+    let hasDownloadData = false
 
-    // npm downloads
     if (service.npm_package) {
       const [current, prior] = await Promise.all([
         getNpmWeeklyDownloads(service.npm_package),
@@ -89,7 +104,7 @@ export const adoptionCollector: Collector = {
       ])
       if (current !== null) {
         weeklyDownloads += current
-        hasData = true
+        hasDownloadData = true
         sources.push(`npm:${service.npm_package}`)
       }
       if (prior !== null) {
@@ -97,90 +112,127 @@ export const adoptionCollector: Collector = {
       }
     }
 
-    // PyPI downloads
     if (service.pypi_package) {
       const pypi = await getPyPIWeeklyDownloads(service.pypi_package)
       if (pypi !== null) {
         weeklyDownloads += pypi
-        hasData = true
+        hasDownloadData = true
         sources.push(`pypi:${service.pypi_package}`)
       }
     }
 
-    if (!hasData) {
+    // Fetch GitHub stars
+    let githubStars: number | null = null
+    let hasGitHubData = false
+
+    if (service.github_repo) {
+      const repoData = (await githubGet(`/repos/${service.github_repo}`)) as { stargazers_count?: number } | null
+      if (repoData && typeof repoData.stargazers_count === 'number') {
+        githubStars = repoData.stargazers_count
+        hasGitHubData = true
+        sources.push(`github:${service.github_repo}`)
+      }
+    }
+
+    if (!hasDownloadData && !hasGitHubData) {
       return {
         signal_name: 'adoption',
-        score: 3.0,
+        score: 0,
+        sub_signals: [
+          { name: 'download_volume', score: 0, weight: 0.30, has_data: false },
+          { name: 'github_stars', score: 0, weight: 0.25, has_data: false },
+          { name: 'dependent_packages', score: 0, weight: 0.30, has_data: false },
+          { name: 'growth_trend', score: 0, weight: 0.15, has_data: false },
+        ],
         metadata: { reason: 'no_download_data' },
         sources: [],
       }
     }
 
-    // Logarithmic tier scoring based on weekly downloads
-    let tierScore: number
-    if (weeklyDownloads >= 10_000_000) tierScore = 5.0
-    else if (weeklyDownloads >= 1_000_000) tierScore = 4.5
-    else if (weeklyDownloads >= 100_000) tierScore = 4.0
-    else if (weeklyDownloads >= 10_000) tierScore = 3.5
-    else if (weeklyDownloads >= 1_000) tierScore = 3.0
-    else if (weeklyDownloads >= 100) tierScore = 2.0
-    else tierScore = 1.0
+    // 1. Download volume (weight: 0.30)
+    const downloadVolumeScore = hasDownloadData ? scoreDownloadVolume(weeklyDownloads) : 0
+    const downloadVolume: SubSignalScore = {
+      name: 'download_volume',
+      score: downloadVolumeScore,
+      weight: 0.30,
+      has_data: weeklyDownloads > 0,
+      detail: hasDownloadData
+        ? `${weeklyDownloads.toLocaleString()} weekly downloads`
+        : 'No download data available',
+    }
 
-    // Velocity bonus/penalty
+    // 2. GitHub stars (weight: 0.25)
+    const gitHubStarsSubSignal: SubSignalScore = {
+      name: 'github_stars',
+      score: hasGitHubData ? scoreGitHubStars(githubStars!) : 0,
+      weight: 0.25,
+      has_data: hasGitHubData,
+      detail: hasGitHubData
+        ? `${githubStars!.toLocaleString()} stars`
+        : 'No GitHub repo configured',
+    }
+
+    // 3. Dependent packages (weight: 0.30) — Phase 1: not available
+    const dependentPackages: SubSignalScore = {
+      name: 'dependent_packages',
+      score: 0,
+      weight: 0.30,
+      has_data: false,
+      detail: 'Not available in phase 1 — weight redistributed',
+    }
+
+    // 4. Growth trend (weight: 0.15)
+    const hasGrowthData = priorWeekDownloads > 0 && weeklyDownloads > 0
+    let growthRate: number | null = null
+    let growthTrendScore = 0
+
+    if (hasGrowthData) {
+      growthRate = (weeklyDownloads - priorWeekDownloads) / priorWeekDownloads
+      growthTrendScore = scoreGrowthTrend(growthRate)
+    }
+
+    const growthTrend: SubSignalScore = {
+      name: 'growth_trend',
+      score: growthTrendScore,
+      weight: 0.15,
+      has_data: hasGrowthData,
+      detail: hasGrowthData
+        ? `${growthRate! >= 0 ? '+' : ''}${(growthRate! * 100).toFixed(1)}% week-over-week`
+        : 'Insufficient data for growth calculation',
+    }
+
+    const sub_signals: SubSignalScore[] = [
+      downloadVolume,
+      gitHubStarsSubSignal,
+      dependentPackages,
+      growthTrend,
+    ]
+
+    const finalScore = computeSubSignalScore(sub_signals)
+
+    // Backward-compatible velocity adjustment (metadata only)
     let velocityAdj = 0
-    if (priorWeekDownloads > 0 && weeklyDownloads > 0) {
-      const growthRate = (weeklyDownloads - priorWeekDownloads) / priorWeekDownloads
+    if (hasGrowthData && growthRate !== null) {
       if (growthRate > 0.20) velocityAdj = 0.5
       else if (growthRate > 0.05) velocityAdj = 0.25
       else if (growthRate < -0.20) velocityAdj = -0.5
       else if (growthRate < -0.05) velocityAdj = -0.25
     }
 
-    tierScore += velocityAdj
-
-    // Category normalization: blend tier score with within-category percentile
-    let finalScore = tierScore
-    let percentile: number | null = null
-    let categoryCount = 0
-
-    if (service.category) {
-      try {
-        const supabase = createServerClient()
-        const { data: peers } = await supabase
-          .from('services')
-          .select('signal_adoption')
-          .eq('category', service.category)
-          .not('signal_adoption', 'is', null)
-
-        if (peers && peers.length >= 10) {
-          categoryCount = peers.length
-          const peerScores = peers.map(p => p.signal_adoption as number).sort((a, b) => a - b)
-          // Calculate percentile rank of this service's tier score
-          const belowCount = peerScores.filter(s => s < tierScore).length
-          percentile = (belowCount / peerScores.length) * 100
-          const percentileScore = percentileToScore(percentile)
-
-          // Blend: 80% tier, 20% percentile
-          finalScore = (tierScore * 0.8) + (percentileScore * 0.2)
-        }
-      } catch (err) {
-        console.error(`Category normalization failed for ${service.name}:`, err)
-      }
-    }
-
     return {
       signal_name: 'adoption',
       score: clampScore(finalScore),
+      sub_signals,
       metadata: {
         weekly_downloads: weeklyDownloads,
         prior_week_downloads: priorWeekDownloads,
-        growth_rate: priorWeekDownloads > 0
-          ? Math.min(999, Math.max(-999, Math.round(((weeklyDownloads - priorWeekDownloads) / priorWeekDownloads) * 10000) / 100))
+        growth_rate: hasGrowthData && growthRate !== null
+          ? Math.min(999, Math.max(-999, Math.round(growthRate * 10000) / 100))
           : null,
-        tier_score: tierScore,
+        tier_score: downloadVolumeScore,
         velocity_adjustment: velocityAdj,
-        category_percentile: percentile,
-        category_peer_count: categoryCount,
+        github_stars: githubStars,
+        dependent_packages_status: 'not_available_phase1',
       },
       sources,
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnonClient } from '@/lib/supabase/server'
+import { getConfidenceLevel } from '@/lib/scoring/thresholds'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAnonClient()
     const { data: service, error } = await supabase
       .from('services')
-      .select('name, slug, category, composite_score, status, signal_vulnerability, signal_operational, signal_maintenance, signal_adoption, signal_transparency, signal_publisher_trust, updated_at, publisher:publishers(name)')
+      .select('name, slug, category, composite_score, status, signal_vulnerability, signal_operational, signal_maintenance, signal_adoption, signal_transparency, signal_publisher_trust, signal_scores, signals_with_data, updated_at, publisher:publishers(name)')
       .eq('slug', slug)
       .single()
 
@@ -47,6 +48,19 @@ export async function GET(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pub = service.publisher as any
+    const signalScores = service.signal_scores as Record<string, unknown> | null
+    const signalsWithData = (service.signals_with_data as number) ?? 0
+
+    // Build signals response: use signal_scores if available, fall back to flat scores
+    const signals = signalScores ?? {
+      vulnerability: { score: service.signal_vulnerability },
+      operational: { score: service.signal_operational },
+      maintenance: { score: service.signal_maintenance },
+      adoption: { score: service.signal_adoption },
+      transparency: { score: service.signal_transparency },
+      publisher_trust: { score: service.signal_publisher_trust },
+    }
+
     return NextResponse.json({
       name: service.name,
       slug: service.slug,
@@ -54,20 +68,14 @@ export async function GET(request: NextRequest) {
       category: service.category,
       score: service.composite_score,
       status: service.status,
-      signals: {
-        vulnerability: service.signal_vulnerability,
-        operational: service.signal_operational,
-        maintenance: service.signal_maintenance,
-        adoption: service.signal_adoption,
-        transparency: service.signal_transparency,
-        publisher_trust: service.signal_publisher_trust,
-      },
+      confidence: getConfidenceLevel(signalsWithData),
+      signals,
       updated_at: service.updated_at,
     }, {
       status: 200,
       headers: {
         ...CORS_HEADERS,
-        'Cache-Control': 'public, max-age=300, s-maxage=300',
+        'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=600',
       },
     })
   } catch {

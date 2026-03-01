@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
+import { SIGNAL_ORDER, computeComposite, computeCompositeWithRedistribution, getStatus, applyTrustedGate } from '@/lib/scoring/thresholds'
 
 export const maxDuration = 300
 
@@ -8,20 +8,14 @@ export const maxDuration = 300
  * Recompute composite scores from existing signal values in the database.
  * Does NOT re-run collectors — just recalculates composite + status.
  *
- * Rules applied:
- * 1. Staleness: if a signal is 0.0 but the data source exists (github_repo for
- *    transparency/maintenance, publisher.github_org for publisher_trust), treat
- *    as failed collection and substitute the fallback default.
- * 2. No-data fallback: if a service has no data source for a signal, substitute
- *    the fallback default (2.5 for publisher_trust, 2.0 for transparency, etc.).
- * 3. Pending: services with no npm_package, no pypi_package, and no github_repo
- *    are set to status='pending', composite_score=0.
- * 4. Zero signal override only triggers for genuinely evaluated zeros.
+ * Two paths:
+ * - New path (signal_scores JSONB present): uses weight redistribution from sub-signals
+ * - Legacy path (signal_scores null): uses SIGNAL_DEFAULTS fallback logic
  *
  * POST body: { ids?: string[] }  (omit ids to recompute all)
  */
 
-/** Default fallback values for each signal when data is unavailable */
+/** Default fallback values for legacy services without signal_scores */
 const SIGNAL_DEFAULTS: Record<string, number> = {
   vulnerability: 3.0,
   operational: 2.5,
@@ -62,7 +56,6 @@ export async function POST(request: NextRequest) {
   const publisherIds = [...new Set(services.map(s => s.publisher_id).filter(Boolean))]
   const publisherOrgMap = new Map<string, string | null>()
   if (publisherIds.length > 0) {
-    // Supabase .in() has a limit, batch if needed
     for (let i = 0; i < publisherIds.length; i += 200) {
       const batch = publisherIds.slice(i, i + 200)
       const { data: pubs } = await supabase
@@ -78,10 +71,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Pre-fetch vulnerability CVE status from latest signal_history for tiered overrides
-  // Tier 1 (no_patch): critical/high unpatched → signal=0, blocked
-  // Tier 2 (patch_available): critical/high with fix → signal≤1.5, caution
-  const vulnUnpatchedSet = new Set<string>()   // Tier 1
-  const vulnPatchAvailSet = new Set<string>()   // Tier 2
+  const vulnUnpatchedSet = new Set<string>()
+  const vulnPatchAvailSet = new Set<string>()
   const lowVulnServices = services.filter(s => (s.signal_vulnerability ?? 0) <= 2.0)
   for (let i = 0; i < lowVulnServices.length; i += 50) {
     const batch = lowVulnServices.slice(i, i + 50)
@@ -163,67 +154,86 @@ export async function POST(request: NextRequest) {
     }
 
     const publisherGithubOrg = publisherOrgMap.get(service.publisher_id) ?? null
+    const serviceSignalScores = service.signal_scores as Record<string, { sub_signals?: Array<{ has_data: boolean }> }> | null
 
-    // Build signal array with staleness + fallback checks
+    // Build signal array
     const signalUpdates: Record<string, number> = {}
     const signals: number[] = []
+    const signalHasData: boolean[] = []
     const fallbackSignals = new Set<string>()
 
-    for (const key of SIGNAL_ORDER) {
-      let value = (service[`signal_${key}` as keyof typeof service] as number) ?? 0
-      const fallbackDefault = SIGNAL_DEFAULTS[key] ?? 3.0
+    if (serviceSignalScores) {
+      // ── New path: use signal_scores sub-signal data for weight redistribution ──
+      for (const key of SIGNAL_ORDER) {
+        const value = (service[`signal_${key}` as keyof typeof service] as number) ?? 0
+        const entry = serviceSignalScores[key]
+        const hasData = entry?.sub_signals?.some(s => s.has_data) ?? false
 
-      // Determine if this signal is a fallback or stale
-      let isFallback = false
-
-      if (key === 'publisher_trust') {
-        // Fallback: no publisher github_org at all
-        if (!publisherGithubOrg) {
-          isFallback = true
-        }
-        // Stale: publisher HAS github_org but score is 0 (rate limit failure)
-        else if (value === 0) {
-          isFallback = true
-          modifiers.push('stale_publisher_trust')
-        }
-      } else if (key === 'transparency') {
-        // Fallback: no github_repo
-        if (!service.github_repo) {
-          isFallback = true
-        }
-        // Stale: HAS github_repo but score is 0 (rate limit failure)
-        else if (value === 0) {
-          isFallback = true
-          modifiers.push('stale_transparency')
-        }
-      } else if (key === 'maintenance') {
-        if (!service.github_repo) {
-          isFallback = true
-        }
-      } else if (key === 'vulnerability') {
-        if (!service.npm_package && !service.pypi_package) {
-          isFallback = true
-        }
-      } else if (key === 'adoption') {
-        if (!service.npm_package && !service.pypi_package) {
-          isFallback = true
-        }
+        signals.push(value)
+        signalHasData.push(hasData)
+        if (!hasData) fallbackSignals.add(key)
       }
+    } else {
+      // ── Legacy path: use SIGNAL_DEFAULTS fallback logic ──
+      for (const key of SIGNAL_ORDER) {
+        let value = (service[`signal_${key}` as keyof typeof service] as number) ?? 0
+        const fallbackDefault = SIGNAL_DEFAULTS[key] ?? 3.0
 
-      if (isFallback) {
-        fallbackSignals.add(key)
-        if (value < fallbackDefault) {
-          adjustments.push(`${key}: ${value}→${fallbackDefault}`)
-          value = fallbackDefault
-          signalUpdates[`signal_${key}`] = value
+        let isFallback = false
+
+        if (key === 'publisher_trust') {
+          if (!publisherGithubOrg) {
+            isFallback = true
+          } else if (value === 0) {
+            isFallback = true
+            modifiers.push('stale_publisher_trust')
+          }
+        } else if (key === 'transparency') {
+          if (!service.github_repo) {
+            isFallback = true
+          } else if (value === 0) {
+            isFallback = true
+            modifiers.push('stale_transparency')
+          }
+        } else if (key === 'maintenance') {
+          if (!service.github_repo) {
+            isFallback = true
+          }
+        } else if (key === 'vulnerability') {
+          if (!service.npm_package && !service.pypi_package) {
+            isFallback = true
+          }
+        } else if (key === 'adoption') {
+          if (!service.npm_package && !service.pypi_package) {
+            isFallback = true
+          }
         }
-      }
 
-      signals.push(value)
+        if (isFallback) {
+          fallbackSignals.add(key)
+          signalHasData.push(false)
+          if (value < fallbackDefault) {
+            adjustments.push(`${key}: ${value}→${fallbackDefault}`)
+            value = fallbackDefault
+            signalUpdates[`signal_${key}`] = value
+          }
+        } else {
+          signalHasData.push(true)
+        }
+
+        signals.push(value)
+      }
     }
 
     // Store pre-override composite for raw_composite_score
-    const rawComposite = computeComposite(signals)
+    let rawComposite: number
+    if (serviceSignalScores) {
+      rawComposite = computeCompositeWithRedistribution(
+        signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
+      ).score
+    } else {
+      rawComposite = computeComposite(signals)
+    }
 
     // Vulnerability tiered overrides — modify signals BEFORE final composite
     if (!fallbackSignals.has('vulnerability')) {
@@ -233,12 +243,10 @@ export async function POST(request: NextRequest) {
         (service.active_modifiers ?? []).includes('vulnerability_patch_available')
 
       if (hasUnpatched) {
-        // Tier 1: force signal to 0
         signals[0] = 0
         signalUpdates.signal_vulnerability = 0
         modifiers.push('vulnerability_zero_override')
       } else if (hasPatchAvail) {
-        // Tier 2: cap signal at 1.5
         if (signals[0] > 1.5) {
           signals[0] = 1.5
           signalUpdates.signal_vulnerability = 1.5
@@ -248,7 +256,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Recompute composite with any signal overrides applied
-    const compositeScore = computeComposite(signals)
+    let compositeScore: number
+    if (serviceSignalScores) {
+      compositeScore = computeCompositeWithRedistribution(
+        signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
+      ).score
+    } else {
+      compositeScore = computeComposite(signals)
+    }
     let status = getStatus(compositeScore)
 
     // Zero signal override — only for genuinely evaluated zeros (not fallbacks/stale)
@@ -280,6 +295,15 @@ export async function POST(request: NextRequest) {
       finalScore = Math.min(finalScore, 3.24)
     }
 
+    // Trusted gate: must have vuln data + 4 signals with data to be trusted
+    const signalsWithData = signalHasData.filter(Boolean).length
+    const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithData)
+    if (gateResult.gated) {
+      finalScore = gateResult.score
+      status = gateResult.status as 'trusted' | 'caution' | 'blocked'
+      modifiers.push('trusted_gate')
+    }
+
     // Update the service
     await supabase
       .from('services')
@@ -289,6 +313,8 @@ export async function POST(request: NextRequest) {
         composite_score: finalScore,
         status,
         active_modifiers: modifiers,
+        score_confidence: signalsWithData / SIGNAL_ORDER.length,
+        signals_with_data: signalsWithData,
       })
       .eq('id', service.id)
 

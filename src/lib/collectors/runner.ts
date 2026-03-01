@@ -8,19 +8,17 @@ import { adoptionCollector } from './adoption'
 import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
-import { SIGNAL_ORDER, computeComposite, getStatus } from '@/lib/scoring/thresholds'
+import { SIGNAL_ORDER, computeCompositeWithRedistribution, getStatus, getConfidenceLevel, applyTrustedGate } from '@/lib/scoring/thresholds'
 import { generateAssessment } from '@/lib/assessment-generator'
 import { resolveGitHubRepo } from '@/lib/discovery/github-resolver'
-import { FALLBACK_REASONS } from '@/lib/validation/constants'
 import { sendTelegramAlert } from '@/lib/alerts/telegram'
 
 /** Check if a collector result represents a genuine zero (not a default/fallback) */
 function isGenuineZero(cr: { key: string; result: CollectorResult } | null): boolean {
   if (!cr) return false
   if (cr.result.score !== 0) return false
-  const reason = cr.result.metadata?.reason as string | undefined
-  if (reason && FALLBACK_REASONS.has(reason)) return false
-  return true
+  // A zero is genuine if at least one sub-signal has real data
+  return cr.result.sub_signals?.some(s => s.has_data) ?? false
 }
 
 const COLLECTORS = [
@@ -411,6 +409,8 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   const success: string[] = []
   const failed: string[] = []
   const collectorResults: Array<{ key: string; result: CollectorResult } | null> = []
+  const signalHasData: boolean[] = []
+  const signalScores: Record<string, unknown> = {}
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i]
@@ -420,20 +420,25 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
       const cr: CollectorResult = result.value
       updates[`signal_${signalKey}`] = cr.score
       signals.push(cr.score)
+      signalHasData.push(cr.sub_signals?.some(s => s.has_data) ?? false)
+      signalScores[signalKey] = { score: cr.score, sub_signals: cr.sub_signals ?? [] }
       success.push(signalKey)
       collectorResults.push({ key: signalKey, result: cr })
 
-      // Record signal history
+      // Record signal history with sub-signal breakdown
       await supabase.from('signal_history').insert({
         service_id: service.id,
         signal_name: signalKey,
         score: cr.score,
-        metadata: cr.metadata,
+        metadata: { ...cr.metadata, sub_signals: cr.sub_signals },
       })
     } else {
       // Keep existing score on failure
       const existing = service[`signal_${signalKey}` as keyof DbService] as number
       signals.push(existing)
+      // Determine has_data from existing signal_scores if available
+      const existingSS = service.signal_scores as Record<string, { sub_signals?: Array<{ has_data: boolean }> }> | null
+      signalHasData.push(existingSS?.[signalKey]?.sub_signals?.some(s => s.has_data) ?? false)
       failed.push(signalKey)
       collectorResults.push(null)
       console.error(`Collector ${signalKey} failed for ${service.name}:`, result.reason)
@@ -463,8 +468,9 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_patch_available')
   }
 
-  // Recompute composite score (uses overridden signal values)
-  const compositeScore = computeComposite(signals)
+  // Recompute composite score with weight redistribution
+  const signalInputs = signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
+  const { score: compositeScore } = computeCompositeWithRedistribution(signalInputs)
 
   // Override rules
   let status = getStatus(compositeScore)
@@ -540,12 +546,14 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
   }
 
-  // Compute score confidence (how many signals used real data vs fallbacks)
-  const signalsWithRealData = collectorResults.filter(cr => {
-    if (!cr) return false
-    const reason = cr.result.metadata?.reason as string | undefined
-    return !reason || !FALLBACK_REASONS.has(reason)
-  }).length
+  // Trusted gate: must have vuln data + 4 signals with data to be trusted
+  const signalsWithRealData = signalHasData.filter(Boolean).length
+  const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithRealData)
+  if (gateResult.gated) {
+    finalScore = gateResult.score
+    status = gateResult.status as 'trusted' | 'caution' | 'blocked'
+    modifiers.push('trusted_gate')
+  }
 
   updates.raw_composite_score = compositeScore
   updates.composite_score = finalScore
@@ -553,6 +561,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   updates.active_modifiers = modifiers
   updates.score_confidence = signalsWithRealData / SIGNAL_ORDER.length
   updates.signals_with_data = signalsWithRealData
+  updates.signal_scores = signalScores
 
   // Update service
   await supabase
@@ -565,7 +574,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     service_id: service.id,
     signal_name: 'composite',
     score: finalScore,
-    metadata: { modifiers },
+    metadata: { modifiers, signals_with_data: signalsWithRealData },
   })
 
   // Detect and create incidents (pass pre-fetched publisher_trust metadata to avoid race)
@@ -654,7 +663,7 @@ export async function runCollectors(
         service_id: service.id,
         signal_name: signalKey,
         score: result.score,
-        metadata: result.metadata,
+        metadata: { ...result.metadata, sub_signals: result.sub_signals },
       })
 
       collectorResults.push({ key: signalKey, result })
@@ -673,6 +682,21 @@ export async function runCollectors(
     .single()
 
   if (!freshService) return
+
+  // Merge signal_scores: start with existing, update for re-run collectors
+  const existingSignalScores = (freshService.signal_scores as Record<string, unknown>) ?? {}
+  const signalScoresPartial: Record<string, unknown> = { ...existingSignalScores }
+  for (const cr of collectorResults) {
+    if (cr) {
+      signalScoresPartial[cr.key] = { score: cr.result.score, sub_signals: cr.result.sub_signals }
+    }
+  }
+
+  // Build has_data from merged signal_scores
+  const signalHasDataPartial = SIGNAL_ORDER.map(key => {
+    const entry = signalScoresPartial[key] as { sub_signals?: Array<{ has_data: boolean }> } | undefined
+    return entry?.sub_signals?.some(s => s.has_data) ?? false
+  })
 
   // Build signals array from fresh DB values
   const signals = SIGNAL_ORDER.map(
@@ -723,8 +747,9 @@ export async function runCollectors(
     if (signals[0] > 1.5) signals[0] = 1.5
   }
 
-  // Recompute composite with overridden signal values
-  const compositeScore = computeComposite(signals)
+  // Recompute composite with weight redistribution
+  const signalInputsPartial = signals.map((score, i) => ({ score, has_data: signalHasDataPartial[i] }))
+  const { score: compositeScore } = computeCompositeWithRedistribution(signalInputsPartial)
   const oldComposite = freshService.composite_score
 
   // Override rules
@@ -829,12 +854,22 @@ export async function runCollectors(
     finalScore = Math.min(finalScore, 3.24)          // Cap at caution range
   }
 
+  // Trusted gate: must have vuln data + 4 signals with data to be trusted
+  const signalsWithDataPartial = signalHasDataPartial.filter(Boolean).length
+  const gateResultPartial = applyTrustedGate(finalScore, status, signalHasDataPartial[0], signalsWithDataPartial)
+  if (gateResultPartial.gated) {
+    finalScore = gateResultPartial.score
+    status = gateResultPartial.status as 'trusted' | 'caution' | 'blocked'
+    if (!modifiers.includes('trusted_gate')) modifiers.push('trusted_gate')
+  }
+
   // Update composite, status, modifiers, and overridden signal values
   const partialUpdate: Record<string, unknown> = {
     raw_composite_score: compositeScore,
     composite_score: finalScore,
     status,
     active_modifiers: modifiers,
+    signal_scores: signalScoresPartial,
   }
   // Persist overridden vulnerability signal value
   if (modifiers.includes('vulnerability_zero_override')) {
@@ -853,7 +888,7 @@ export async function runCollectors(
     service_id: service.id,
     signal_name: 'composite',
     score: finalScore,
-    metadata: { modifiers, partial_run: updatedKeys },
+    metadata: { modifiers, partial_run: updatedKeys, signals_with_data: signalsWithDataPartial },
   })
 
   // Detect incidents (M1: always call, internal thresholds handle filtering)

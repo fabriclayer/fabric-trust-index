@@ -1,9 +1,18 @@
 import type { DbService } from '@/lib/supabase/types'
 import semver from 'semver'
 
+export interface SubSignalScore {
+  name: string        // e.g. 'known_cves'
+  score: number       // 0.0-5.0
+  weight: number      // sums to 1.0 within signal
+  has_data: boolean   // real data evaluated?
+  detail?: string     // human-readable explanation
+}
+
 export interface CollectorResult {
   signal_name: string
   score: number // 0.0–5.0
+  sub_signals?: SubSignalScore[]
   metadata: Record<string, unknown>
   sources: string[]
 }
@@ -16,6 +25,19 @@ export interface Collector {
 /** Clamp a value between 0 and 5 */
 export function clampScore(score: number): number {
   return Math.max(0, Math.min(5, Math.round(score * 100) / 100))
+}
+
+/**
+ * Compute a signal score from sub-signals with weight redistribution.
+ * Sub-signals without data have their weight redistributed proportionally
+ * to sub-signals that do have data.
+ */
+export function computeSubSignalScore(subSignals: SubSignalScore[]): number {
+  const withData = subSignals.filter(s => s.has_data)
+  if (withData.length === 0) return 0
+  const totalWeight = withData.reduce((sum, s) => sum + s.weight, 0)
+  if (totalWeight === 0) return 0
+  return clampScore(withData.reduce((sum, s) => sum + s.score * (s.weight / totalWeight), 0))
 }
 
 // ─── Shared OSV types ───

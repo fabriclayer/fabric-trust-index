@@ -1,31 +1,28 @@
 import type { DbService } from '@/lib/supabase/types'
-import type { Collector, CollectorResult } from './types'
-import { clampScore } from './types'
+import type { Collector, CollectorResult, SubSignalScore } from './types'
+import { clampScore, computeSubSignalScore } from './types'
 import { createServerClient } from '@/lib/supabase/server'
+import { githubGet } from './github'
 
 /**
- * Publisher Trust Collector (weight: 0.10)
+ * Publisher Trust Collector (weight: 0.15)
  *
- * Assesses account age, organizational membership, maintained package count,
- * identity consistency across registries, and project/package age.
+ * Sub-signals:
+ *   track_record           (0.35) — avg composite of publisher's other services
+ *   org_maturity            (0.25) — GitHub account age
+ *   community_standing      (0.20) — public repos count (proxy)
+ *   cross_platform_presence (0.20) — registry presence count
  *
- * Components: account_age (1.5), org_type (0.75), maintained_packages (0.75),
- *             identity (0.75), project_age (1.0)
- * Max raw: 4.75, scaled to 0-5
- *
- * Data sources: GitHub API, npm registry, PyPI API
+ * Also detects npm_deprecated, npm_maintainers (for owner change detection),
+ * and computes first_published_at / project age metadata.
  */
-
-const MAX_RAW = 4.75
-
-import { githubGet } from './github'
 
 interface NpmPackageInfo {
   maintainers?: Array<{ name: string }>
   deprecated?: string
   'dist-tags'?: Record<string, string>
   versions?: Record<string, { deprecated?: string }>
-  time?: Record<string, string> // { created: "...", modified: "...", "1.0.0": "..." }
+  time?: Record<string, string>
 }
 
 async function getNpmPackageInfo(pkg: string): Promise<NpmPackageInfo | null> {
@@ -44,7 +41,6 @@ async function getPypiFirstRelease(pkg: string): Promise<string | null> {
     if (!res.ok) return null
     const data = await res.json() as { releases?: Record<string, Array<{ upload_time_iso_8601?: string }>> }
     if (!data.releases) return null
-    // Find the earliest upload_time across all releases
     let earliest: string | null = null
     for (const version of Object.values(data.releases)) {
       for (const file of version) {
@@ -58,30 +54,43 @@ async function getPypiFirstRelease(pkg: string): Promise<string | null> {
   }
 }
 
-/**
- * Score project/package age based on how long the project has existed.
- * Addresses typosquatting and supply chain attacks from new packages.
- *
- * 30 days = neutral (0.5). Curve extends both directions:
- *   0 days:   0.0   (brand new — maximum penalty)
- *   7 days:   0.15  (very new)
- *   30 days:  0.5   (neutral baseline)
- *   180 days: 0.7   (moderate bonus)
- *   1 year:   0.8   (solid track record)
- *   3+ years: 1.0   (fully established)
- *
- * Uses smooth logarithmic curve so there are no harsh step changes.
- */
 function scoreProjectAge(ageDays: number): number {
   if (ageDays <= 0) return 0
-  // ln(31) ≈ 3.43, ln(1096) ≈ 7.0 — maps 30d→0.5, 1095d→1.0
-  // Below 30d: linear ramp 0→0.5
   if (ageDays < 30) return (ageDays / 30) * 0.5
-  // 30d+: logarithmic curve from 0.5 to 1.0, saturating around 3 years
   const maxDays = 365 * 3
   if (ageDays >= maxDays) return 1.0
   const t = Math.log(ageDays / 30) / Math.log(maxDays / 30)
   return 0.5 + t * 0.5
+}
+
+function scoreAccountAge(ageYears: number): number {
+  if (ageYears >= 5) return 5.0
+  if (ageYears >= 2) return 4.0
+  if (ageYears >= 1) return 3.0
+  if (ageYears >= 0.5) return 2.0
+  return 1.0
+}
+
+function scoreCommunityStanding(publicRepos: number): number {
+  if (publicRepos > 100) return 5.0
+  if (publicRepos >= 50) return 4.0
+  if (publicRepos >= 10) return 3.0
+  if (publicRepos >= 3) return 2.0
+  return 1.0
+}
+
+function scoreCrossPlatformPresence(platforms: number): number {
+  if (platforms >= 3) return 5.0
+  if (platforms >= 2) return 3.0
+  return 1.0
+}
+
+function scoreTrackRecord(serviceCount: number, avgComposite: number): number {
+  if (serviceCount >= 10 && avgComposite > 4.0) return 5.0
+  if (serviceCount >= 5 && avgComposite > 3.5) return 4.0
+  if (serviceCount >= 3) return 3.0
+  if (serviceCount >= 1) return 2.0
+  return 1.0
 }
 
 export const publisherTrustCollector: Collector = {
@@ -90,8 +99,20 @@ export const publisherTrustCollector: Collector = {
   async collect(service: DbService): Promise<CollectorResult> {
     const supabase = createServerClient()
     const sources: string[] = []
-    let score = 0
     const metadata: Record<string, unknown> = {}
+
+    const noDataResult: CollectorResult = {
+      signal_name: 'publisher_trust',
+      score: 0,
+      sub_signals: [
+        { name: 'track_record', score: 0, weight: 0.35, has_data: false },
+        { name: 'org_maturity', score: 0, weight: 0.25, has_data: false },
+        { name: 'community_standing', score: 0, weight: 0.20, has_data: false },
+        { name: 'cross_platform_presence', score: 0, weight: 0.20, has_data: false },
+      ],
+      metadata: {},
+      sources: [],
+    }
 
     // Get publisher info
     const { data: publisher } = await supabase
@@ -101,24 +122,14 @@ export const publisherTrustCollector: Collector = {
       .single()
 
     if (!publisher) {
-      return {
-        signal_name: 'publisher_trust',
-        score: 2.5,
-        metadata: { reason: 'publisher_not_found' },
-        sources: [],
-      }
+      return { ...noDataResult, metadata: { reason: 'publisher_not_found' } }
     }
 
-    // 1. Account age (via GitHub org/user) — up to 1.5
     const ghOrg = publisher.github_org
     if (!ghOrg) {
-      return {
-        signal_name: 'publisher_trust',
-        score: 2.5,
-        metadata: { reason: 'no_publisher_github' },
-        sources: [],
-      }
+      return { ...noDataResult, metadata: { reason: 'no_publisher_github' } }
     }
+
     const orgData = await githubGet(`/users/${ghOrg}`) as {
       created_at?: string
       type?: string
@@ -126,75 +137,89 @@ export const publisherTrustCollector: Collector = {
     } | null
 
     if (!orgData) {
-      return {
-        signal_name: 'publisher_trust',
-        score: 2.5,
-        metadata: { reason: 'github_api_failed', github_org: ghOrg },
-        sources: [],
-      }
+      return { ...noDataResult, metadata: { reason: 'github_api_failed', github_org: ghOrg } }
     }
 
     // Track candidate dates for first_published_at
     const ageDates: string[] = []
 
+    // ── Sub-signal 1: track_record (0.35) ──
+    let trackRecordScore = 1.0
+    let trackRecordDetail = 'First service for publisher'
+
+    const { data: siblingServices } = await supabase
+      .from('services')
+      .select('composite_score, status')
+      .eq('publisher_id', service.publisher_id)
+      .neq('id', service.id)
+      .gt('composite_score', 0)
+
+    if (siblingServices && siblingServices.length > 0) {
+      const avgComposite = siblingServices.reduce((sum, s) => sum + s.composite_score, 0) / siblingServices.length
+      metadata.sibling_count = siblingServices.length
+      metadata.sibling_avg_composite = Math.round(avgComposite * 100) / 100
+      trackRecordScore = scoreTrackRecord(siblingServices.length, avgComposite)
+      trackRecordDetail = `${siblingServices.length} other services, avg composite ${avgComposite.toFixed(2)}`
+    } else {
+      metadata.sibling_count = 0
+    }
+
+    // ── Sub-signal 2: org_maturity (0.25) ──
+    let orgMaturityScore = 0
+    let orgMaturityHasData = false
+    let orgMaturityDetail = 'No account creation date'
+
     if (orgData.created_at) {
       const ageYears = (Date.now() - new Date(orgData.created_at).getTime()) / (365.25 * 86400000)
       metadata.account_age_years = Math.round(ageYears * 10) / 10
+      metadata.is_organization = orgData.type === 'Organization'
+      orgMaturityScore = scoreAccountAge(ageYears)
+      orgMaturityHasData = true
 
-      if (ageYears >= 5) score += 1.5
-      else if (ageYears >= 2) score += 1.2
-      else if (ageYears >= 1) score += 0.8
-      else score += 0.4
-
-      // 2. Organization type — up to 0.75
+      // Bonus for being an org (add 0.5, capped at 5.0)
       if (orgData.type === 'Organization') {
-        score += 0.75
-        metadata.is_organization = true
+        orgMaturityScore = Math.min(5.0, orgMaturityScore + 0.5)
+        orgMaturityDetail = `Organization, ${ageYears.toFixed(1)} years old`
       } else {
-        metadata.is_organization = false
+        orgMaturityDetail = `User account, ${ageYears.toFixed(1)} years old`
       }
-
-      // 3. Maintained package count — up to 0.75
-      const repoCount = orgData.public_repos ?? 0
-      metadata.public_repos = repoCount
-      if (repoCount > 20) score += 0.75
-      else if (repoCount > 10) score += 0.5
-      else if (repoCount > 5) score += 0.35
-      else if (repoCount > 0) score += 0.15
 
       sources.push(`github:${ghOrg}`)
     }
 
-    // 4. Identity consistency across registries — up to 0.75
-    let identityPoints = 0
-    const identityChecks: string[] = []
+    // ── Sub-signal 3: community_standing (0.20) ──
+    const publicRepos = orgData.public_repos ?? 0
+    metadata.public_repos = publicRepos
 
-    // Count registry presence from both publisher fields AND service package refs
+    // ── Sub-signal 4: cross_platform_presence (0.20) ──
+    const identityChecks: string[] = []
     if (publisher.github_org) identityChecks.push('github')
     if (publisher.npm_org || service.npm_package) identityChecks.push('npm')
     if (publisher.pypi_org || service.pypi_package) identityChecks.push('pypi')
 
-    // Cross-check npm identity matches GitHub org
+    metadata.identity_registries = identityChecks
+
+    // Cross-check npm identity matches GitHub org + detect deprecated/maintainers
     let npmInfo: NpmPackageInfo | null = null
-    if (service.npm_package && publisher.github_org) {
+    if (service.npm_package) {
       npmInfo = await getNpmPackageInfo(service.npm_package)
 
-      // Check maintainer names OR scoped package scope against github org
-      const ghOrgLower = publisher.github_org.toLowerCase()
-      const npmOrgLower = publisher.npm_org?.toLowerCase()
-      const npmScope = service.npm_package.startsWith('@')
-        ? service.npm_package.split('/')[0].slice(1).toLowerCase()
-        : null
+      if (npmInfo && publisher.github_org) {
+        const ghOrgLower = publisher.github_org.toLowerCase()
+        const npmOrgLower = publisher.npm_org?.toLowerCase()
+        const npmScope = service.npm_package.startsWith('@')
+          ? service.npm_package.split('/')[0].slice(1).toLowerCase()
+          : null
 
-      const maintainerMatch = npmInfo?.maintainers?.some(m => {
-        const name = m.name.toLowerCase()
-        return name === ghOrgLower || (npmOrgLower && name === npmOrgLower)
-      })
-      const scopeMatch = npmScope && (npmScope === ghOrgLower || npmScope === npmOrgLower)
+        const maintainerMatch = npmInfo.maintainers?.some(m => {
+          const name = m.name.toLowerCase()
+          return name === ghOrgLower || (npmOrgLower && name === npmOrgLower)
+        })
+        const scopeMatch = npmScope && (npmScope === ghOrgLower || npmScope === npmOrgLower)
 
-      if (maintainerMatch || scopeMatch) {
-        identityPoints += 0.375
-        sources.push(`npm:${service.npm_package}`)
+        if (maintainerMatch || scopeMatch) {
+          sources.push(`npm:${service.npm_package}`)
+        }
       }
 
       // Store npm maintainers list for owner change detection
@@ -220,24 +245,9 @@ export const publisherTrustCollector: Collector = {
         ageDates.push(npmInfo.time.created)
         metadata.npm_created_at = npmInfo.time.created
       }
-    } else if (service.npm_package) {
-      // Fetch npm info even without publisher github_org for age data
-      npmInfo = await getNpmPackageInfo(service.npm_package)
-      if (npmInfo?.time?.created) {
-        ageDates.push(npmInfo.time.created)
-        metadata.npm_created_at = npmInfo.time.created
-      }
     }
 
-    if (identityChecks.length >= 2) identityPoints += 0.375
-    score += Math.min(identityPoints, 0.75)
-    metadata.identity_registries = identityChecks
-    metadata.identity_score = identityPoints
-
-    // 5. Project/package age — up to 1.0 (can be negative for very new packages)
-    //    Addresses typosquatting & supply chain attacks from new packages.
-
-    // GitHub repo created_at
+    // ── Project age computation (metadata, not a sub-signal) ──
     if (service.github_repo) {
       const repoData = await githubGet(`/repos/${service.github_repo}`) as {
         created_at?: string
@@ -248,7 +258,6 @@ export const publisherTrustCollector: Collector = {
       }
     }
 
-    // PyPI first release date
     if (service.pypi_package) {
       const pypiDate = await getPypiFirstRelease(service.pypi_package)
       if (pypiDate) {
@@ -258,7 +267,6 @@ export const publisherTrustCollector: Collector = {
       }
     }
 
-    // Determine first_published_at as the earliest date found
     let firstPublishedAt: string | null = null
     if (ageDates.length > 0) {
       ageDates.sort()
@@ -266,22 +274,19 @@ export const publisherTrustCollector: Collector = {
       const ageDays = (Date.now() - new Date(firstPublishedAt).getTime()) / 86400000
       metadata.project_age_days = Math.round(ageDays)
       metadata.first_published_at = firstPublishedAt
-
-      const ageScore = scoreProjectAge(ageDays)
-      score += ageScore
-      metadata.project_age_score = ageScore
-
+      metadata.project_age_score = scoreProjectAge(ageDays)
       if (ageDays < 30) {
         metadata.project_age_warning = 'new_package'
       }
     }
 
     // Update publisher identity_consistency_score
+    const identityScore = identityChecks.length >= 3 ? 5.0 : identityChecks.length >= 2 ? 3.0 : 1.0
     await supabase
       .from('publishers')
       .update({
-        identity_consistency_score: Math.min(identityPoints / 0.75, 1) * 5,
-        maintained_package_count: metadata.public_repos as number ?? publisher.maintained_package_count,
+        identity_consistency_score: identityScore,
+        maintained_package_count: publicRepos ?? publisher.maintained_package_count,
       })
       .eq('id', publisher.id)
 
@@ -293,12 +298,44 @@ export const publisherTrustCollector: Collector = {
         .eq('id', service.id)
     }
 
-    // Scale: raw score is 0-4.75 (can go slightly negative with age penalty), map to 0-5
-    const scaledScore = (Math.max(0, score) / MAX_RAW) * 5
+    // ── Compute final score ──
+    const sub_signals: SubSignalScore[] = [
+      {
+        name: 'track_record',
+        score: trackRecordScore,
+        weight: 0.35,
+        has_data: true,
+        detail: trackRecordDetail,
+      },
+      {
+        name: 'org_maturity',
+        score: orgMaturityScore,
+        weight: 0.25,
+        has_data: orgMaturityHasData,
+        detail: orgMaturityDetail,
+      },
+      {
+        name: 'community_standing',
+        score: scoreCommunityStanding(publicRepos),
+        weight: 0.20,
+        has_data: true,
+        detail: `${publicRepos} public repositories`,
+      },
+      {
+        name: 'cross_platform_presence',
+        score: scoreCrossPlatformPresence(identityChecks.length),
+        weight: 0.20,
+        has_data: identityChecks.length > 0,
+        detail: `Present on ${identityChecks.length} platform(s): ${identityChecks.join(', ')}`,
+      },
+    ]
+
+    const score = computeSubSignalScore(sub_signals)
 
     return {
       signal_name: 'publisher_trust',
-      score: clampScore(scaledScore),
+      score: clampScore(score),
+      sub_signals,
       metadata,
       sources,
     }

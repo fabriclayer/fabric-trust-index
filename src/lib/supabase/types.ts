@@ -158,6 +158,9 @@ export interface DbService {
   // Project age
   first_published_at: string | null
 
+  // Sub-signal breakdown (JSONB)
+  signal_scores: Record<string, unknown> | null
+
   // AI assessment
   ai_assessment: string | null
   ai_assessment_updated_at: string | null

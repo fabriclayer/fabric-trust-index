@@ -1,19 +1,38 @@
 import type { DbService } from '@/lib/supabase/types'
-import type { Collector, CollectorResult } from './types'
-import { clampScore } from './types'
+import type { Collector, CollectorResult, SubSignalScore } from './types'
+import { clampScore, computeSubSignalScore } from './types'
 import { createServerClient } from '@/lib/supabase/server'
-import { githubGet } from './github'
+import { githubGet, githubExists } from './github'
 
 /**
- * Maintenance Activity Collector (weight: 0.20)
+ * Maintenance Activity Collector (weight: 0.15)
  *
- * Evaluates last commit recency, 90-day commit frequency,
- * median issue response time, open-to-closed issue ratio,
- * PR merge velocity, and release consistency.
- * No commits in 12+ months drops the score to 1.0 or below.
+ * Sub-signals:
+ *   commit_recency       (0.30) — days since last commit
+ *   release_cadence      (0.25) — days since last release
+ *   issue_responsiveness (0.20) — median time to close issues
+ *   ci_cd_presence       (0.25) — GitHub Actions workflows present
  *
- * Data source: GitHub REST API
+ * Also detects override conditions (repo_archived, repo_transferred,
+ * repo_renamed, pypi_yanked, smithery_scan) as metadata flags for runner.ts.
  */
+
+function scoreDaysTier(days: number): number {
+  if (days < 7) return 5.0
+  if (days < 30) return 4.0
+  if (days < 90) return 3.0
+  if (days < 180) return 2.0
+  if (days < 365) return 1.0
+  return 0.0
+}
+
+function scoreResponseTime(medianHours: number): number {
+  if (medianHours < 24) return 5.0
+  if (medianHours < 72) return 4.0
+  if (medianHours < 168) return 3.0
+  if (medianHours < 720) return 2.0
+  return 1.0
+}
 
 export const maintenanceCollector: Collector = {
   name: 'maintenance',
@@ -22,7 +41,13 @@ export const maintenanceCollector: Collector = {
     if (!service.github_repo) {
       return {
         signal_name: 'maintenance',
-        score: 3.0,
+        score: 0,
+        sub_signals: [
+          { name: 'commit_recency', score: 0, weight: 0.30, has_data: false },
+          { name: 'release_cadence', score: 0, weight: 0.25, has_data: false },
+          { name: 'issue_responsiveness', score: 0, weight: 0.20, has_data: false },
+          { name: 'ci_cd_presence', score: 0, weight: 0.25, has_data: false },
+        ],
         metadata: { reason: 'no_github_repo' },
         sources: [],
       }
@@ -30,8 +55,8 @@ export const maintenanceCollector: Collector = {
 
     const repo = service.github_repo
     const sources = [`github:${repo}`]
+    const metadata: Record<string, unknown> = {}
 
-    // Fetch repo info
     const repoData = await githubGet(`/repos/${repo}`) as {
       pushed_at?: string
       open_issues_count?: number
@@ -42,30 +67,29 @@ export const maintenanceCollector: Collector = {
     if (!repoData) {
       return {
         signal_name: 'maintenance',
-        score: 2.0,
+        score: 0,
+        sub_signals: [
+          { name: 'commit_recency', score: 0, weight: 0.30, has_data: false },
+          { name: 'release_cadence', score: 0, weight: 0.25, has_data: false },
+          { name: 'issue_responsiveness', score: 0, weight: 0.20, has_data: false },
+          { name: 'ci_cd_presence', score: 0, weight: 0.25, has_data: false },
+        ],
         metadata: { reason: 'repo_not_accessible' },
         sources,
       }
     }
 
-    let score = 3.0 // Start at midpoint, adjust up/down
-    const metadata: Record<string, unknown> = {}
-
-    // Detect repo_archived
+    // Override detection
     if (repoData.archived) {
       metadata.repo_archived = true
-      score = 0.5
     }
 
-    // Detect repo_transferred (full_name no longer matches expected owner/repo)
     if (repoData.full_name && repoData.full_name.toLowerCase() !== repo.toLowerCase()) {
       const oldOwner = repo.split('/')[0].toLowerCase()
       const newOwner = repoData.full_name.split('/')[0].toLowerCase()
       if (oldOwner === newOwner) {
-        // Same owner — just a rename, not a supply chain risk
         metadata.repo_renamed = true
       } else {
-        // Different owner — actual ownership transfer
         metadata.repo_transferred = true
       }
       metadata.old_owner = repo.split('/')[0]
@@ -74,30 +98,52 @@ export const maintenanceCollector: Collector = {
       metadata.new_repo_name = repoData.full_name
     }
 
-    // 1. Last commit recency
+    // ── Sub-signal 1: commit_recency (0.30) ──
+    let commitRecencyScore = 0
+    let commitRecencyHasData = false
+
     const lastPush = repoData.pushed_at ? new Date(repoData.pushed_at) : null
     if (lastPush) {
       const daysSinceLastPush = (Date.now() - lastPush.getTime()) / 86400000
       metadata.days_since_last_push = Math.round(daysSinceLastPush)
-
-      if (daysSinceLastPush <= 7) score = 5.0
-      else if (daysSinceLastPush <= 30) score = 4.0
-      else if (daysSinceLastPush <= 90) score = 3.0
-      else if (daysSinceLastPush <= 365) score = 2.0
-      else score = 1.0 // 12+ months = hard floor
+      commitRecencyScore = scoreDaysTier(daysSinceLastPush)
+      commitRecencyHasData = true
     }
 
-    // 2. Recent commit frequency (90 days)
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
-    const commitList = await githubGet(`/repos/${repo}/commits?since=${ninetyDaysAgo}&per_page=100`) as unknown[] | null
-    const commitCount = commitList?.length ?? 0
-    metadata.commits_90d = commitCount
+    // ── Sub-signal 2: release_cadence (0.25) ──
+    let releaseCadenceScore = 2.0
+    let releaseCadenceHasData = false
 
-    if (commitCount >= 50) score = Math.max(score, 4.5)
-    else if (commitCount >= 20) score = Math.max(score, 4.0)
-    else if (commitCount >= 5) score = Math.max(score, 3.0)
+    const releases = await githubGet(`/repos/${repo}/releases?per_page=10`) as Array<{
+      tag_name?: string
+      published_at?: string
+      prerelease?: boolean
+      draft?: boolean
+    }> | null
 
-    // 3. Issue response time (sample recent closed issues)
+    if (releases) {
+      releaseCadenceHasData = true
+
+      if (releases.length > 0) {
+        const releaseDates = releases
+          .filter(r => r.published_at)
+          .map(r => new Date(r.published_at!).getTime())
+          .sort((a, b) => b - a)
+
+        if (releaseDates.length > 0) {
+          const daysSinceLastRelease = (Date.now() - releaseDates[0]) / 86400000
+          metadata.days_since_last_release = Math.round(daysSinceLastRelease)
+          releaseCadenceScore = scoreDaysTier(daysSinceLastRelease)
+        }
+
+        metadata.total_releases = releases.length
+      }
+    }
+
+    // ── Sub-signal 3: issue_responsiveness (0.20) ──
+    let issueResponsivenessScore = 0
+    let issueResponsivenessHasData = false
+
     const closedIssues = await githubGet(`/repos/${repo}/issues?state=closed&sort=updated&per_page=10&direction=desc`) as Array<{
       created_at?: string
       closed_at?: string
@@ -112,63 +158,40 @@ export const maintenanceCollector: Collector = {
           .map(i => {
             const created = new Date(i.created_at!).getTime()
             const closed = new Date(i.closed_at!).getTime()
-            return (closed - created) / 3600000 // hours
+            return (closed - created) / 3600000
           })
           .sort((a, b) => a - b)
 
         if (responseTimes.length > 0) {
           const median = responseTimes[Math.floor(responseTimes.length / 2)]
           metadata.median_issue_response_hours = Math.round(median)
-          if (median < 24) score += 0.5
-          else if (median < 72) score += 0.25
-          else if (median >= 720) score -= 0.5  // 30+ days
-          else if (median >= 168) score -= 0.25 // 7+ days
+          issueResponsivenessScore = scoreResponseTime(median)
+          issueResponsivenessHasData = true
         }
       }
     }
 
-    // 4. Open issue count (from repo metadata, no extra API call)
-    const openCount = repoData.open_issues_count ?? 0
-    metadata.open_issues = openCount
+    // ── Sub-signal 4: ci_cd_presence (0.25) ──
+    const hasWorkflows = await githubExists(`/repos/${repo}/contents/.github/workflows`)
+    metadata.ci_cd_present = hasWorkflows
 
-    // 5. Release cadence
-    const releases = await githubGet(`/repos/${repo}/releases?per_page=10`) as Array<{
-      tag_name?: string
-      published_at?: string
-      prerelease?: boolean
-      draft?: boolean
-    }> | null
+    const sub_signals: SubSignalScore[] = [
+      { name: 'commit_recency', score: commitRecencyScore, weight: 0.30, has_data: commitRecencyHasData },
+      { name: 'release_cadence', score: releaseCadenceScore, weight: 0.25, has_data: releaseCadenceHasData },
+      { name: 'issue_responsiveness', score: issueResponsivenessScore, weight: 0.20, has_data: issueResponsivenessHasData },
+      { name: 'ci_cd_presence', score: hasWorkflows ? 5.0 : 2.0, weight: 0.25, has_data: true },
+    ]
 
-    if (releases && releases.length >= 2) {
-      const releaseDates = releases
-        .filter(r => r.published_at)
-        .map(r => new Date(r.published_at!).getTime())
-        .sort((a, b) => b - a)
+    const score = computeSubSignalScore(sub_signals)
 
-      if (releaseDates.length >= 2) {
-        const intervals = []
-        for (let i = 0; i < releaseDates.length - 1; i++) {
-          intervals.push((releaseDates[i] - releaseDates[i + 1]) / 86400000) // days
-        }
-        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
-        metadata.avg_release_interval_days = Math.round(avgInterval)
-        metadata.total_releases = releases.length
+    metadata.open_issues = repoData.open_issues_count ?? 0
 
-        // Monthly releases = good cadence
-        if (avgInterval <= 30) score += 0.3
-        else if (avgInterval <= 90) score += 0.1
-      }
-    }
-
-    // Insert version records from GitHub releases with historical scores
+    // Insert version records from GitHub releases
     if (releases && releases.length > 0) {
       const supabase = createServerClient()
-      const validReleases = releases.filter(
-        r => r.tag_name && r.published_at && !r.draft
-      )
+      const validReleases = releases.filter(r => r.tag_name && r.published_at && !r.draft)
       const top10 = validReleases.slice(0, 10)
 
-      // Fetch composite signal_history to match scores to release dates
       const { data: compositeHistory } = await supabase
         .from('signal_history')
         .select('score, recorded_at')
@@ -178,7 +201,6 @@ export const maintenanceCollector: Collector = {
 
       const history = compositeHistory ?? []
 
-      // Find the closest composite score on or before a given date
       function scoreAtDate(dateStr: string): number | null {
         if (history.length === 0) return null
         const target = new Date(dateStr).getTime()
@@ -186,8 +208,6 @@ export const maintenanceCollector: Collector = {
         for (const h of history) {
           const t = new Date(h.recorded_at).getTime()
           const diff = target - t
-          // Prefer scores recorded on or before the release date (diff >= 0)
-          // but accept up to 1 day after if nothing else
           if (diff >= -86400000) {
             if (!best || (diff >= 0 && best.diff < 0) || Math.abs(diff) < Math.abs(best.diff)) {
               best = { score: h.score, diff }
@@ -197,7 +217,6 @@ export const maintenanceCollector: Collector = {
         return best?.score ?? null
       }
 
-      // Sort releases oldest-first for delta calculation
       const sorted = [...top10].sort((a, b) =>
         new Date(a.published_at!).getTime() - new Date(b.published_at!).getTime()
       )
@@ -228,7 +247,7 @@ export const maintenanceCollector: Collector = {
       }
     }
 
-    // Check for PyPI yanked releases
+    // PyPI yanked check
     if (service.pypi_package) {
       try {
         const pypiRes = await fetch(`https://pypi.org/pypi/${service.pypi_package}/json`)
@@ -237,16 +256,13 @@ export const maintenanceCollector: Collector = {
           if (pypiData.info?.yanked) {
             metadata.pypi_yanked = true
             metadata.pypi_yanked_reason = pypiData.info.yanked_reason || 'unknown'
-            score = Math.min(score, 1.0)
           }
           sources.push(`pypi:${service.pypi_package}`)
         }
-      } catch {
-        // PyPI check is best-effort
-      }
+      } catch { /* best-effort */ }
     }
 
-    // Check Smithery security scan for MCP servers
+    // Smithery security scan for MCP servers
     if (service.discovered_from === 'smithery' && service.github_repo) {
       try {
         const smitheryRes = await fetch(
@@ -258,18 +274,16 @@ export const maintenanceCollector: Collector = {
           if (smitheryData.security && smitheryData.security.scanPassed === false) {
             metadata.smithery_scan_failed = true
             metadata.smithery_scan_issues = smitheryData.security.issues ?? []
-            score = Math.min(score, 1.5)
           }
           sources.push(`smithery:${service.github_repo}`)
         }
-      } catch {
-        // Smithery check is best-effort
-      }
+      } catch { /* best-effort */ }
     }
 
     return {
       signal_name: 'maintenance',
       score: clampScore(score),
+      sub_signals,
       metadata,
       sources,
     }
