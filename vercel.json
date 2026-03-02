@@ -21,6 +21,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/collect-catchup",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/collect-cve-fast",
       "schedule": "*/5 * * * *"
     },
