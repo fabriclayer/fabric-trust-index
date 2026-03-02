@@ -59,21 +59,24 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!service) return { title: 'Not Found — Fabric Trust Index' }
   const statusLabel = service.status === 'trusted' ? 'Trusted' : service.status === 'caution' ? 'Caution' : 'Blocked'
   const description = `Trust score and safety analysis for ${service.name} by ${service.publisher}. Score: ${service.score.toFixed(2)}/5.00 — ${statusLabel}.`
+  const ogTitle = `${service.name} Trust Score: ${service.score.toFixed(2)}/5.00 — Is It Safe?`
+  const ogDescription = `${service.name} scored ${service.score.toFixed(2)}/5.00 on Fabric Layer's trust index. See the full breakdown across 6 safety signals.`
   return {
-    title: `${service.name} Trust Score — Fabric Trust Index`,
+    title: `${service.name} Trust Score: ${service.score.toFixed(2)}/5.00 — Safety Rating | Fabric Layer`,
     description,
+    robots: { index: true, follow: true },
     alternates: {
-      canonical: `/${slug}`,
+      canonical: `https://trust.fabriclayer.ai/${slug}`,
     },
     openGraph: {
-      title: `${service.name} Trust Score — Fabric Trust Index`,
-      description,
+      title: ogTitle,
+      description: ogDescription,
       url: `https://trust.fabriclayer.ai/${slug}`,
-      siteName: 'Fabric Trust Index',
-      type: 'website',
+      siteName: 'Fabric Layer',
+      type: 'article',
       images: [
         {
-          url: 'https://trust.fabriclayer.ai/og-home.png',
+          url: `https://trust.fabriclayer.ai/api/og/${slug}`,
           width: 1200,
           height: 630,
         },
@@ -81,9 +84,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${service.name} Trust Score — Fabric Trust Index`,
-      description,
-      images: ['https://trust.fabriclayer.ai/og-home.png'],
+      site: '@fabriclayer',
+      title: `${service.name} Trust Score: ${service.score.toFixed(2)}/5.00`,
+      description: ogDescription,
+      images: [`https://trust.fabriclayer.ai/api/og/${slug}`],
     },
   }
 }
@@ -97,13 +101,21 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const detailData = service.id ? await loadDetailData(service.id) : null
 
   const statusLabel = service.status === 'trusted' ? 'Trusted' : service.status === 'caution' ? 'Caution' : 'Blocked'
+  const signals = service.signals as Record<string, number> | undefined
+  const vulnScore = signals?.vulnerability?.toFixed(2) ?? 'N/A'
+  const opsScore = signals?.operational?.toFixed(2) ?? 'N/A'
+  const maintScore = signals?.maintenance?.toFixed(2) ?? 'N/A'
+  const adoptScore = signals?.adoption?.toFixed(2) ?? 'N/A'
+  const transScore = signals?.transparency?.toFixed(2) ?? 'N/A'
+  const pubScore = signals?.publisher_trust?.toFixed(2) ?? 'N/A'
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: service.name,
     description: service.description,
     url: `https://trust.fabriclayer.ai/${slug}`,
-    applicationCategory: 'AI Service',
+    applicationCategory: 'DeveloperApplication',
     author: {
       '@type': 'Organization',
       name: service.publisher,
@@ -114,13 +126,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       ratingValue: service.score.toFixed(2),
       bestRating: '5',
       worstRating: '0',
-      ratingCount: 1,
+      ratingCount: 6,
       reviewCount: 1,
     },
-    additionalProperty: {
-      '@type': 'PropertyValue',
-      name: 'Trust Status',
-      value: statusLabel,
+    review: {
+      '@type': 'Review',
+      author: { '@type': 'Organization', name: 'Fabric Layer' },
+      reviewRating: {
+        '@type': 'Rating',
+        ratingValue: service.score.toFixed(2),
+        bestRating: '5',
+        worstRating: '0',
+      },
+      reviewBody: `Fabric Layer trust score for ${service.name}: ${service.score.toFixed(2)}/5.00. Vulnerability & Safety: ${vulnScore}, Operational Health: ${opsScore}, Maintenance: ${maintScore}, Adoption: ${adoptScore}, Transparency: ${transScore}, Publisher Trust: ${pubScore}.`,
     },
   }
 

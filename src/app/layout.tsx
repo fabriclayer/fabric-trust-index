@@ -17,10 +17,12 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://trust.fabriclayer.ai'),
-  title: 'Trust Index — Fabric',
-  description: 'Discover and verify trust scores for AI services, models, and MCP tools. The trust layer for the agent economy.',
+  title: 'AI Trust Index — Search Safety Scores for 5,800+ AI Tools & MCP Servers | Fabric Layer',
+  description: 'Search trust scores for any AI tool, agent, or MCP server. Free safety ratings from 0–5 across vulnerability, uptime, maintenance, adoption, transparency, and publisher trust.',
+  keywords: 'AI trust score, MCP server safety, AI tool safety rating, AI agent security, MCP security check, AI risk assessment, trust scoring, fabric layer',
+  authors: [{ name: 'Fabric Layer Technologies LTD' }],
   alternates: {
-    canonical: '/',
+    canonical: 'https://trust.fabriclayer.ai/',
   },
   icons: {
     icon: [
@@ -30,11 +32,12 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: 'Trust Index — Fabric',
-    description: 'Discover and verify trust scores for AI services, models, and MCP tools.',
+    title: 'AI Trust Index — Safety Scores for 5,800+ AI Tools & MCP Servers',
+    description: 'Search trust scores for any AI tool, agent, or MCP server. Free safety ratings powered by Fabric Layer.',
     url: 'https://trust.fabriclayer.ai',
-    siteName: 'Fabric Trust Index',
+    siteName: 'Fabric Layer',
     type: 'website',
+    locale: 'en_US',
     images: [
       {
         url: 'https://trust.fabriclayer.ai/og-home.png',
@@ -45,13 +48,20 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trust Index — Fabric',
-    description: 'Discover and verify trust scores for AI services, models, and MCP tools.',
+    site: '@fabriclayer',
+    title: 'AI Trust Index — Safety Scores for 5,800+ AI Tools & MCP Servers',
+    description: 'Search trust scores for any AI tool, agent, or MCP server. Free safety ratings powered by Fabric Layer.',
     images: ['https://trust.fabriclayer.ai/og-home.png'],
   },
   robots: {
     index: true,
     follow: true,
+    'max-image-preview': 'large' as const,
+    'max-snippet': -1,
+    'max-video-preview': -1,
+  },
+  other: {
+    'theme-color': '#000000',
   },
 }
 

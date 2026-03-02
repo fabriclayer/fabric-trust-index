@@ -177,24 +177,37 @@ export async function checkCronHealth(supabase: ReturnType<typeof createServerCl
 }
 
 export function deriveSystemStatus(
-  endpoints: Array<{ status: string; endpoint?: string }>,
+  endpoints: Array<{ status: string; endpoint?: string; uptime_24h?: number }>,
   cronHealth: CronHealthItem[],
   githubRateRemaining: number,
 ): 'nominal' | 'degraded' | 'outage' {
-  const downEndpoints = endpoints.filter(e => e.status === 'down')
-  const degradedEndpoints = endpoints.filter(e => e.status === 'degraded')
   const missedCrons = cronHealth.filter(c => c.status === 'missed')
   const overdueCrons = cronHealth.filter(c => c.status === 'overdue')
+  const downEndpoints = endpoints.filter(e => e.status === 'down')
 
-  // Critical endpoint down = outage
-  const criticalDown = downEndpoints.some(e => e.endpoint?.includes('trust.fabriclayer'))
-  if (criticalDown) return 'outage'
+  // Any cron missed = outage
+  if (missedCrons.length > 0) return 'outage'
 
-  // 2+ endpoints down or any missed cron = outage
-  if (downEndpoints.length >= 2 || missedCrons.length > 0) return 'outage'
+  // Any endpoint <80% uptime AND currently down = outage
+  const criticallyLow = endpoints.some(e =>
+    e.uptime_24h !== undefined && e.uptime_24h < 80 && e.status === 'down'
+  )
+  if (criticallyLow) return 'outage'
 
-  // Any degraded/down endpoint, overdue cron, or low GitHub rate = degraded
-  if (degradedEndpoints.length > 0 || overdueCrons.length > 0 || downEndpoints.length > 0) return 'degraded'
+  // 2+ endpoints simultaneously down = outage
+  if (downEndpoints.length >= 2) return 'outage'
+
+  // Any endpoint 80–95% uptime = degraded
+  const hasDegraded = endpoints.some(e =>
+    e.uptime_24h !== undefined && e.uptime_24h >= 80 && e.uptime_24h < 95
+  )
+  if (hasDegraded) return 'degraded'
+
+  // Single endpoint currently down (transient) = degraded
+  if (downEndpoints.length > 0) return 'degraded'
+
+  // Any cron overdue or low GitHub rate = degraded
+  if (overdueCrons.length > 0) return 'degraded'
   if (githubRateRemaining < 100) return 'degraded'
 
   return 'nominal'
