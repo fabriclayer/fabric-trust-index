@@ -69,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${dmSans.variable} ${dmMono.variable}`}>
       <head>
+        <link rel="alternate" type="application/rss+xml" title="Fabric Trust Index — Latest Scores" href="https://trust.fabriclayer.ai/feed.xml" />
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-H8SQL9NJCY"></script>
         <script dangerouslySetInnerHTML={{ __html: `
           window.dataLayer = window.dataLayer || [];
