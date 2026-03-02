@@ -223,10 +223,32 @@ export async function runClawHubScoring(service: DbService): Promise<{
     updates.publisher_id = await ensureClawHubPublisher(ownerHandle, apiData?.owner?.displayName ?? ownerHandle)
   }
 
+  // Build signal_scores JSONB using standard signal keys
+  // Maps ClawHub signals → standard keys so the product page can render them
+  const CLAWHUB_TO_STANDARD: Record<string, string> = {
+    virustotal_scan: 'vulnerability',
+    content_safety: 'operational',
+    publisher_reputation: 'publisher_trust',
+    adoption: 'adoption',
+    freshness: 'maintenance',
+    transparency: 'transparency',
+  }
+  const signalScores: Record<string, { score: number; sub_signals: Array<{ name: string; score: number; weight: number; has_data: boolean; detail?: string }> }> = {}
+  for (const name of CLAWHUB_SIGNAL_ORDER) {
+    const stdKey = CLAWHUB_TO_STANDARD[name]
+    signalScores[stdKey] = {
+      score: signals[name] ?? 0,
+      sub_signals: [{ name, score: signals[name] ?? 0, weight: 1, has_data: true }],
+    }
+  }
+
   updates.raw_composite_score = compositeScore
   updates.composite_score = finalScore
   updates.status = status
   updates.active_modifiers = modifiers
+  updates.signal_scores = signalScores
+  updates.signals_with_data = Object.keys(signals).length
+  updates.score_confidence = Object.keys(signals).length / 6
 
   // 5. Update service
   await supabase.from('services').update(updates).eq('id', service.id)
