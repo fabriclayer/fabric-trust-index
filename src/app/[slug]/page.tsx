@@ -101,13 +101,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const detailData = service.id ? await loadDetailData(service.id) : null
 
   const statusLabel = service.status === 'trusted' ? 'Trusted' : service.status === 'caution' ? 'Caution' : 'Blocked'
-  const signals = service.signals as Record<string, number> | undefined
-  const vulnScore = signals?.vulnerability?.toFixed(2) ?? 'N/A'
-  const opsScore = signals?.operational?.toFixed(2) ?? 'N/A'
-  const maintScore = signals?.maintenance?.toFixed(2) ?? 'N/A'
-  const adoptScore = signals?.adoption?.toFixed(2) ?? 'N/A'
-  const transScore = signals?.transparency?.toFixed(2) ?? 'N/A'
-  const pubScore = signals?.publisher_trust?.toFixed(2) ?? 'N/A'
+  // signals is number[] in order: [vulnerability, operational, maintenance, adoption, transparency, publisher_trust]
+  const s = service.signals ?? []
+  const vulnScore = s[0]?.toFixed(2) ?? 'N/A'
+  const opsScore = s[1]?.toFixed(2) ?? 'N/A'
+  const maintScore = s[2]?.toFixed(2) ?? 'N/A'
+  const adoptScore = s[3]?.toFixed(2) ?? 'N/A'
+  const transScore = s[4]?.toFixed(2) ?? 'N/A'
+  const pubScore = s[5]?.toFixed(2) ?? 'N/A'
 
   const jsonLd = {
     '@context': 'https://schema.org',
