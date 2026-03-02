@@ -6,6 +6,17 @@ import { logCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 300
 
+/** Wrap a promise with a timeout (ms). Rejects if it takes too long. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 /**
  * Daily scoring cron — processes services in batches with self-chaining.
  *
@@ -13,8 +24,12 @@ export const maxDuration = 300
  * fires a fetch() to itself with the next offset. Vercel Cron triggers
  * offset=0 at 02:00 UTC; self-chaining handles the rest.
  *
- * GET /api/cron/collect-daily?offset=0&batch=50
- * GET /api/cron/collect-daily?offset=0&batch=50&unscored=1  (skip already-scored)
+ * Key reliability features:
+ * - Self-chain fires BEFORE processing so the chain survives timeouts
+ * - Each service has a 45s timeout so one slow service can't kill the batch
+ *
+ * GET /api/cron/collect-daily?offset=0&batch=10
+ * GET /api/cron/collect-daily?offset=0&batch=10&unscored=1  (skip already-scored)
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -23,7 +38,7 @@ export async function GET(request: NextRequest) {
   }
 
   const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10)
-  const batchSize = parseInt(request.nextUrl.searchParams.get('batch') ?? '50', 10)
+  const batchSize = parseInt(request.nextUrl.searchParams.get('batch') ?? '10', 10)
   const unscoredOnly = request.nextUrl.searchParams.get('unscored') === '1'
 
   try {
@@ -53,33 +68,12 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let processed = 0
-    let errors = 0
-    const errorDetails: string[] = []
-
-    for (const service of services) {
-      try {
-        if (service.discovered_from === 'clawhub') {
-          await runClawHubScoring(service)
-        } else {
-          await runAllCollectors(service)
-        }
-        processed++
-      } catch (err) {
-        errors++
-        if (errorDetails.length < 10) {
-          errorDetails.push(`${service.slug}: ${err instanceof Error ? err.message : 'Unknown'}`)
-        }
-      }
-    }
-
     const totalCount = count ?? 0
     const nextOffset = offset + services.length
     const hasMore = nextOffset < totalCount
 
-    // Self-chain: trigger next batch (fire and forget)
-    // When unscored=1, always restart at offset 0 since scored services
-    // drop from the result set, making offset progression unreliable.
+    // Self-chain FIRST: trigger next batch before processing so the chain
+    // survives even if this invocation times out or crashes.
     if (hasMore) {
       const nextUrl = new URL(request.url)
       nextUrl.searchParams.set('offset', unscoredOnly ? '0' : nextOffset.toString())
@@ -88,6 +82,25 @@ export async function GET(request: NextRequest) {
       fetch(nextUrl.toString(), {
         headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
       }).catch(() => {})
+    }
+
+    let processed = 0
+    let errors = 0
+    const errorDetails: string[] = []
+
+    for (const service of services) {
+      try {
+        const scoring = service.discovered_from === 'clawhub'
+          ? runClawHubScoring(service)
+          : runAllCollectors(service)
+        await withTimeout(scoring, 45_000, service.slug)
+        processed++
+      } catch (err) {
+        errors++
+        if (errorDetails.length < 10) {
+          errorDetails.push(`${service.slug}: ${err instanceof Error ? err.message : 'Unknown'}`)
+        }
+      }
     }
 
     const result = {
