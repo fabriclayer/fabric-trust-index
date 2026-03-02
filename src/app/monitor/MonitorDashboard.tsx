@@ -2211,7 +2211,7 @@ export default function MonitorDashboard() {
       </div>
 
       {/* TABS */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, padding: '0 40px', background: 'rgba(255,255,255,0.01)' }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, padding: '0 40px', background: 'rgba(255,255,255,0.01)', maxWidth: 1400, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             fontFamily: F.mono, fontSize: 12, color: tab === t.id ? C.pink : C.t3,
