@@ -2138,6 +2138,8 @@ export default function MonitorDashboard() {
       incidents: data.incidents,
       schedule: data.schedule,
       unscoredCount: data.unscoredSlugs.length,
+      discoveryQueuePending: data.health.supabase?.rowsDiscoveryPending ?? 0,
+      costs: data.health.costs ? { todayUsd: data.health.costs.today?.cost_usd ?? 0, monthUsd: data.health.costs.month?.cost_usd ?? 0, monthCalls: data.health.costs.month?.calls ?? 0 } : null,
       timestamp: data.timestamp,
     }
     const text = `Review my Fabric Trust Index monitor dashboard data. Flag critical issues, warnings, and recommendations with specific actions.\n\n` + JSON.stringify(summary, null, 2)

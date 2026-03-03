@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
     const endpoints = Array.isArray(fullData.health?.endpoints) ? fullData.health.endpoints : []
     const crons = Array.isArray(fullData.health?.cronHealth) ? fullData.health.cronHealth : []
 
+    const costs = fullData.health?.costs
     dashboardData = {
       overview: fullData.overview,
       systemStatus: fullData.health?.systemStatus,
@@ -68,6 +69,8 @@ export async function GET(request: NextRequest) {
       incidents: fullData.incidents,
       schedule: fullData.schedule,
       unscoredCount: Array.isArray(fullData.unscoredSlugs) ? fullData.unscoredSlugs.length : 0,
+      discoveryQueuePending: fullData.health?.supabase?.rowsDiscoveryPending ?? 0,
+      costs: costs ? { todayUsd: costs.today?.cost_usd ?? 0, monthUsd: costs.month?.cost_usd ?? 0, monthCalls: costs.month?.calls ?? 0 } : null,
       timestamp: fullData.timestamp,
     }
   } catch (err) {
