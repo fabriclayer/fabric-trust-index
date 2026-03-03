@@ -181,12 +181,15 @@ export function deriveSystemStatus(
   cronHealth: CronHealthItem[],
   githubRateRemaining: number,
 ): 'nominal' | 'degraded' | 'outage' {
+  const CRITICAL_CRONS = new Set(['collect-daily', 'collect-cve', 'collect-cve-fast', 'health-check'])
   const missedCrons = cronHealth.filter(c => c.status === 'missed')
+  const missedCritical = missedCrons.filter(c => CRITICAL_CRONS.has(c.cronId))
+  const missedNonCritical = missedCrons.filter(c => !CRITICAL_CRONS.has(c.cronId))
   const overdueCrons = cronHealth.filter(c => c.status === 'overdue')
   const downEndpoints = endpoints.filter(e => e.status === 'down')
 
-  // Any cron missed = outage
-  if (missedCrons.length > 0) return 'outage'
+  // Critical cron missed = outage
+  if (missedCritical.length > 0) return 'outage'
 
   // Any endpoint <80% uptime AND currently down = outage
   const criticallyLow = endpoints.some(e =>
@@ -206,7 +209,8 @@ export function deriveSystemStatus(
   // Single endpoint currently down (transient) = degraded
   if (downEndpoints.length > 0) return 'degraded'
 
-  // Any cron overdue or low GitHub rate = degraded
+  // Non-critical cron missed, any cron overdue, or low GitHub rate = degraded
+  if (missedNonCritical.length > 0) return 'degraded'
   if (overdueCrons.length > 0) return 'degraded'
   if (githubRateRemaining < 100) return 'degraded'
 
