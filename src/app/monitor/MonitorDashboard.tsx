@@ -217,6 +217,8 @@ function HealthTab({ data }: { data: MonitorData }) {
   const cronStatusBg = (s: string) => s === 'on_schedule' ? C.greenDim : s === 'overdue' ? C.orangeDim : C.redDim
 
   // Backfill state
+  const [assessmentState, setAssessmentState] = useState<'idle' | 'confirm' | 'running'>('idle')
+  const [assessmentResult, setAssessmentResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [backfillState, setBackfillState] = useState<'idle' | 'confirm' | 'running' | 'stopped'>('idle')
   const [backfillProgress, setBackfillProgress] = useState<{
     processed: number; total: number; reCollected: number; purged: number; skipped: number; errors: number; batchNumber: number
@@ -358,6 +360,40 @@ function HealthTab({ data }: { data: MonitorData }) {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleRunAssessments = async () => {
+    if (assessmentState === 'idle') {
+      setAssessmentState('confirm')
+      setAssessmentResult(null)
+      return
+    }
+    if (assessmentState === 'confirm') {
+      setAssessmentState('running')
+      try {
+        const res = await fetch('/api/monitor/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: 'generate-assessments' }),
+        })
+        const body = await res.json()
+        if (!res.ok) {
+          setAssessmentResult({ ok: false, message: body.error || `Failed (${res.status})` })
+        } else if (body.status === 'triggered') {
+          setAssessmentResult({ ok: true, message: 'Triggered — generating in background, refresh to see progress' })
+        } else {
+          const r = body.result ?? body
+          setAssessmentResult({
+            ok: true,
+            message: `${r.succeeded ?? r.processed ?? 0} generated, ${r.failed ?? 0} failed, ${r.remaining ?? '?'} remaining`,
+          })
+          fetchData()
+        }
+      } catch {
+        setAssessmentResult({ ok: false, message: 'Network error' })
+      }
+      setAssessmentState('idle')
+    }
+  }
 
   const handleBackfill = () => {
     if (backfillState === 'idle') {
@@ -641,6 +677,32 @@ function HealthTab({ data }: { data: MonitorData }) {
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>Total generated</Mono><Mono style={{ fontSize: 12, color: C.text }}>{h.assessments.total.toLocaleString()}</Mono></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><Mono style={{ fontSize: 12, color: C.t2 }}>Pending</Mono><Mono style={{ fontSize: 12, color: h.assessments.pending > 100 ? C.orange : C.text }}>{h.assessments.pending}</Mono></div>
           </div>
+          {h.assessments.pending > 0 && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Mono style={{ fontSize: 11, color: C.t3, flex: 1, minWidth: 200 }}>
+                {h.assessments.pending} services need assessments — generates up to 25 per run
+              </Mono>
+              <button
+                onClick={handleRunAssessments}
+                disabled={assessmentState === 'running'}
+                style={{
+                  fontFamily: F.mono, fontSize: 11, fontWeight: 500,
+                  color: assessmentState === 'running' ? C.t3 : assessmentState === 'confirm' ? C.orange : C.purple,
+                  background: assessmentState === 'running' ? 'rgba(255,255,255,0.02)' : assessmentState === 'confirm' ? C.orangeDim : C.purpleDim,
+                  border: `1px solid ${assessmentState === 'running' ? C.border : assessmentState === 'confirm' ? C.orange + '33' : C.purple + '33'}`,
+                  borderRadius: 8, padding: '6px 16px', cursor: assessmentState === 'running' ? 'wait' : 'pointer',
+                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                }}
+              >
+                {assessmentState === 'running' ? 'Running…' : assessmentState === 'confirm' ? 'Confirm' : 'Run Assessments'}
+              </button>
+            </div>
+          )}
+          {assessmentResult && (
+            <div style={{ marginTop: 8 }}>
+              <Mono style={{ fontSize: 11, color: assessmentResult.ok ? C.green : C.orange }}>{assessmentResult.message}</Mono>
+            </div>
+          )}
         </Card>
         <Card title="Quick Numbers">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
