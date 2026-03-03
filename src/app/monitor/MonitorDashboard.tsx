@@ -28,7 +28,7 @@ interface MonitorData {
     todayDiscovered: number; todayScored: number
   }
   health: {
-    supabase: { rowsServices: number; rowsSignalHistory: number; rowsIncidents: number; rowsCveRecords: number; rowsDiscoveryQueue: number }
+    supabase: { rowsServices: number; rowsSignalHistory: number; rowsIncidents: number; rowsCveRecords: number; rowsDiscoveryQueue: number; rowsDiscoveryPending?: number }
     github: { rateRemaining: number; rateLimit: number; resetsAt: string | null }
     vercel: { functionsInvoked: number; errors: number; avgLatency: number; p99Latency: number } | null
     endpoints?: EndpointHealth[]
@@ -1834,7 +1834,6 @@ function ReviewTab() {
   }
 
   const latest = reviews.find(r => r.status === 'completed')
-  const previousReviews = reviews.filter(r => r !== latest)
 
   const formatReviewTime = (iso: string) => {
     const d = new Date(iso)
@@ -1858,6 +1857,8 @@ function ReviewTab() {
   }
 
   const latestProgress = latest ? getActionProgress(latest.id, latest.analysis) : null
+  const latestAllDone = latestProgress && latestProgress.total > 0 && latestProgress.completed === latestProgress.total
+  const previousReviewsList = latestAllDone ? reviews : reviews.filter(r => r !== latest)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1916,8 +1917,8 @@ function ReviewTab() {
         <StatBox label="Cost This Month" value={`$${totalCostMonth.toFixed(2)}`} color={totalCostMonth > 15 ? C.orange : C.text} />
       </div>
 
-      {/* Latest review */}
-      {latest ? (
+      {/* Latest review — collapses into previous list when all actions are done */}
+      {latest && !latestAllDone ? (
         <Card title="Latest Review" right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {latestProgress && latestProgress.total > 0 && (
@@ -1946,19 +1947,19 @@ function ReviewTab() {
             (hash, text, completed) => handleToggleAction(latest.id, hash, text, completed),
           ) : <Mono style={{ fontSize: 12, color: C.t3 }}>No analysis available</Mono>}</div>
         </Card>
-      ) : (
+      ) : !latest ? (
         <Card>
           <div style={{ padding: 40, textAlign: 'center' }}>
             <Mono style={{ fontSize: 13, color: C.t3 }}>No reviews yet. Click "Run Review" to generate the first one.</Mono>
           </div>
         </Card>
-      )}
+      ) : null}
 
       {/* Previous reviews */}
-      {previousReviews.length > 0 && (
-        <Card title="Previous Reviews" pad={false}>
+      {previousReviewsList.length > 0 && (
+        <Card title={latestAllDone ? 'Reviews' : 'Previous Reviews'} pad={false}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {previousReviews.map((review, i) => {
+            {previousReviewsList.map((review, i) => {
               const progress = review.action_total ? { total: review.action_total, completed: review.action_completed ?? 0 } : null
               return (
                 <div key={review.id}>

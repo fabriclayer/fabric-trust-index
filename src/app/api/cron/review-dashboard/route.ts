@@ -30,6 +30,16 @@ For every issue in Critical and Warnings above, provide a ready-to-paste Claude 
 
 The codebase is at ~/Desktop/fabric-trust-index (Next.js 15, TypeScript, Supabase). The operator pastes these prompts directly into Claude Code which has full access to the repo. Write prompts that are self-contained — include the "why" and "what" so Claude Code can implement the fix autonomously.
 
+If a section has no items (e.g., no critical issues, no warnings), write "None" for that section. Do not invent issues to fill sections. A clean report is a good report.
+
+## Known Acceptable States — Do NOT Flag
+The following are normal operating conditions. Do NOT list these as issues or generate fix prompts for them:
+- **Operational fallback rate ~15-25%**: Most services have no npm/pypi/github/endpoint configured. Score 0 with reason "no_endpoint_configured" is correct — not a bug.
+- **Unscored services**: Services pending initial scoring or blocked from scoring are expected. Only flag if the count is growing abnormally (>10% increase week-over-week).
+- **Empty endpoints/crons arrays**: These are filtered to only show non-healthy items. Empty arrays mean everything is healthy.
+- **Discovery queue items**: A non-zero pending count is normal — items are processed on the next discovery run.
+- **AI assessments pending**: Some services may not have assessments yet. Only flag if the pending count is >20% of total services.
+
 Be specific with numbers from the data. Reference service slugs, override names, signal values.`
 
 export async function GET(request: NextRequest) {
