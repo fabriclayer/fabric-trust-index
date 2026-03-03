@@ -2065,7 +2065,21 @@ export default function MonitorDashboard() {
 
   const handleCopyJson = () => {
     if (!data) return
-    const text = `Review my Fabric Trust Index monitor dashboard data. Flag critical issues, warnings, and recommendations with specific actions.\n\n` + JSON.stringify(data, null, 2)
+    const summary = {
+      overview: data.overview,
+      systemStatus: data.health.systemStatus,
+      scoring: data.health.scoring,
+      github: data.health.github,
+      assessments: data.health.assessments,
+      endpoints: (data.health.endpoints ?? []).filter(e => e.status !== 'up'),
+      crons: (data.health.cronHealth ?? []).filter(c => c.status !== 'on_schedule'),
+      cves: data.cves,
+      incidents: data.incidents,
+      schedule: data.schedule,
+      unscoredCount: data.unscoredSlugs.length,
+      timestamp: data.timestamp,
+    }
+    const text = `Review my Fabric Trust Index monitor dashboard data. Flag critical issues, warnings, and recommendations with specific actions.\n\n` + JSON.stringify(summary, null, 2)
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
