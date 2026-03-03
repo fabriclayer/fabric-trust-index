@@ -8,7 +8,7 @@ import { collectPublisherReputation } from './publisher'
 import { collectAdoption } from './adoption'
 import { collectFreshness } from './freshness'
 import { collectTransparency } from './transparency'
-import { generateAssessment } from '@/lib/assessment-generator'
+
 
 const CLAWHUB_WEIGHTS = {
   virustotal_scan: 0.30,
@@ -264,18 +264,7 @@ export async function runClawHubScoring(service: DbService): Promise<{
   // 7. Create incidents
   await detectClawHubIncidents(service, oldComposite, finalScore, signals)
 
-  // 8. Generate AI assessment if needed (non-blocking)
-  const needsAssessment =
-    !service.ai_assessment ||
-    Math.abs(finalScore - oldComposite) > 0.25 ||
-    service.status !== status
-  if (needsAssessment) {
-    try {
-      await generateAssessment(service.id)
-    } catch (err) {
-      console.error(`Assessment generation failed for ${service.name}:`, err)
-    }
-  }
+  // AI assessments are regenerated weekly via manual trigger on the monitor dashboard.
 
   return { success, failed }
 }
