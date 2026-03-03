@@ -2,11 +2,9 @@ import { createServerClient } from '@/lib/supabase/server'
 
 export const INFRA_ENDPOINTS = [
   { url: 'https://trust.fabriclayer.ai', label: 'Trust Index' },
-  { url: 'https://trust.fabriclayer.ai/api/v1/score?slug=openai', label: 'Score API' },
   { url: 'https://fabriclayer.ai', label: 'Fabric Site' },
   { url: 'https://motherbird.au', label: 'Motherbird' },
   { url: 'https://api.github.com/rate_limit', label: 'GitHub API' },
-  { url: 'https://osv.dev/v1/query', label: 'OSV.dev' },
   { url: 'https://registry.npmjs.org/express', label: 'npm Registry' },
 ] as const
 
