@@ -52,19 +52,23 @@ export async function GET(request: NextRequest) {
     if (!res.ok) throw new Error(`Monitor API returned ${res.status}`)
     const fullData = await res.json()
 
-    // Trim bulky arrays to reduce token count (~36k → ~3-4k)
-    const events = Array.isArray(fullData.events) ? fullData.events : []
-    const timeline = Array.isArray(fullData.timeline) ? fullData.timeline : []
-    const discoveryQueue = Array.isArray(fullData.discoveryQueue) ? fullData.discoveryQueue : []
+    // Lean summary — same shape as the Copy JSON button
+    const endpoints = Array.isArray(fullData.health?.endpoints) ? fullData.health.endpoints : []
+    const crons = Array.isArray(fullData.health?.cronHealth) ? fullData.health.cronHealth : []
 
     dashboardData = {
-      ...fullData,
-      discoveryQueue: undefined,
-      discoveryPending: discoveryQueue.length,
-      events: events.slice(0, 5),
-      eventsTotal: events.length,
-      timeline: timeline.slice(0, 5),
-      timelineTotal: timeline.length,
+      overview: fullData.overview,
+      systemStatus: fullData.health?.systemStatus,
+      scoring: fullData.health?.scoring,
+      github: fullData.health?.github,
+      assessments: fullData.health?.assessments,
+      endpoints: endpoints.filter((e: Record<string, unknown>) => e.status !== 'up'),
+      crons: crons.filter((c: Record<string, unknown>) => c.status !== 'on_schedule'),
+      cves: fullData.cves,
+      incidents: fullData.incidents,
+      schedule: fullData.schedule,
+      unscoredCount: Array.isArray(fullData.unscoredSlugs) ? fullData.unscoredSlugs.length : 0,
+      timestamp: fullData.timestamp,
     }
   } catch (err) {
     await logCronRun('review-dashboard', {}, 'failed', `Dashboard fetch: ${err instanceof Error ? err.message : 'Unknown'}`)
