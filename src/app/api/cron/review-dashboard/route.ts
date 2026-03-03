@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   try {
     const origin = request.nextUrl.origin
     const res = await fetch(`${origin}/api/monitor`, {
-      headers: { Cookie: `fabric_monitor_auth=${process.env.CRON_SECRET}` },
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
       signal: AbortSignal.timeout(15000),
     })
     if (!res.ok) throw new Error(`Monitor API returned ${res.status}`)

@@ -14,8 +14,9 @@ let cachedAt = 0
 const CACHE_TTL_MS = 60_000 // 60 seconds
 
 export async function GET(request: NextRequest) {
-  const auth = request.cookies.get('fabric_monitor_auth')?.value
-  if (auth !== process.env.CRON_SECRET) {
+  const cookieAuth = request.cookies.get('fabric_monitor_auth')?.value
+  const bearerAuth = request.headers.get('authorization')?.replace('Bearer ', '')
+  if (cookieAuth !== process.env.CRON_SECRET && bearerAuth !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
