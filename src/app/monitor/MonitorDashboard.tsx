@@ -369,26 +369,54 @@ function HealthTab({ data }: { data: MonitorData }) {
     }
     if (assessmentState === 'confirm') {
       setAssessmentState('running')
+      const runStartedAt = new Date().toISOString()
+      let totalSucceeded = 0
+      let totalFailed = 0
+      let remaining = 0
+
       try {
-        const res = await fetch('/api/monitor/trigger', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: 'generate-assessments' }),
-        })
-        const body = await res.json()
-        if (!res.ok) {
-          setAssessmentResult({ ok: false, message: body.error || `Failed (${res.status})` })
-        } else if (body.status === 'triggered') {
-          setAssessmentResult({ ok: true, message: 'Triggered — generating in background, refresh to see progress' })
-        } else {
+        // Auto-chain batches until all assessments are regenerated
+        let hasMore = true
+        while (hasMore) {
+          const res = await fetch('/api/monitor/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: 'generate-assessments', params: { run_started_at: runStartedAt } }),
+          })
+          const body = await res.json()
+
+          if (!res.ok) {
+            setAssessmentResult({ ok: false, message: body.error || `Failed (${res.status})` })
+            setAssessmentState('idle')
+            return
+          }
+
+          if (body.status === 'triggered') {
+            // Function timed out (>10s) — it's still running server-side, stop chaining
+            setAssessmentResult({ ok: true, message: `${totalSucceeded} generated so far — batch running in background, click again to continue` })
+            setAssessmentState('idle')
+            return
+          }
+
           const r = body.result ?? body
+          totalSucceeded += r.succeeded ?? 0
+          totalFailed += r.failed ?? 0
+          remaining = r.remaining ?? 0
+
           setAssessmentResult({
             ok: true,
-            message: `${r.succeeded ?? r.processed ?? 0} generated, ${r.failed ?? 0} failed, ${r.remaining ?? '?'} remaining`,
+            message: `${totalSucceeded} generated, ${totalFailed} failed, ${remaining} remaining...`,
           })
+
+          hasMore = remaining > 0 && (r.processed ?? 0) > 0
         }
+
+        setAssessmentResult({
+          ok: totalFailed === 0,
+          message: `Done — ${totalSucceeded} generated${totalFailed > 0 ? `, ${totalFailed} failed` : ''}`,
+        })
       } catch {
-        setAssessmentResult({ ok: false, message: 'Network error' })
+        setAssessmentResult({ ok: false, message: `Network error after ${totalSucceeded} generated` })
       }
       setAssessmentState('idle')
     }
