@@ -8,7 +8,6 @@ const ALLOWED_ENDPOINTS: Record<string, { method: 'GET' | 'POST'; defaultParams?
   'collect-cve-fast':     { method: 'GET' },
   'collect-clawhub':      { method: 'GET' },
   'discover':             { method: 'GET' },
-  'discover-ai-news':     { method: 'GET' },
   'discover-clawhub':     { method: 'GET' },
   'discover-mcp':         { method: 'GET' },
   'watchdog':             { method: 'GET' },

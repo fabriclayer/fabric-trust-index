@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     }
     discoveryQueue = (discoveryPending.data ?? []).map((d: Record<string, unknown>) => ({
       id: d.id,
-      source: typeof d.source === 'string' ? d.source.replace('ai-news:', '') : d.source,
+      source: d.source,
       created_at: d.created_at,
       ...(d.result as Record<string, unknown> ?? {}),
     }))
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
           id: d.id as string,
           name: (r.name as string) ?? slug,
           slug,
-          source: typeof d.source === 'string' ? (d.source as string).replace('ai-news:', '').replace('monitor:', '') : (d.source as string),
+          source: typeof d.source === 'string' ? (d.source as string).replace('monitor:', '') : (d.source as string),
           approved_at: (d.processed_at as string) ?? '',
           score: svc?.composite_score ?? null,
           status: svc?.status ?? 'pending',

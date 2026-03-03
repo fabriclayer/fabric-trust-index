@@ -151,7 +151,6 @@ const PIPELINES = [
   { id: 'collect-daily', name: 'Daily 6-Signal Scoring', freq: 'daily 2am', schedule: '0 2 * * *', step: 'collection' },
   { id: 'watchdog', name: 'Watchdog QA', freq: 'daily 3am', schedule: '0 3 * * *', step: 'watchdog' },
   { id: 'discover', name: 'Registry Discovery', freq: 'daily 4am', schedule: '0 4 * * *', step: 'discovery' },
-  { id: 'discover-ai-news', name: 'AI News Scanner', freq: 'daily 4:30am', schedule: '30 4 * * *', step: 'discovery' },
   { id: 'discover-clawhub', name: 'ClawHub Discovery', freq: 'daily 5am', schedule: '0 5 * * *', step: 'discovery' },
   { id: 'discover-mcp', name: 'MCP Discovery', freq: 'daily 6am', schedule: '0 6 * * *', step: 'discovery' },
   { id: 'enrich-metadata', name: 'Metadata Enrichment', freq: 'on-demand', schedule: 'manual', step: 'enrichment' },
@@ -888,15 +887,6 @@ const SCHEDULED_CRONS: CronDef[] = [
     getNextRun: () => nextCronUTC(4),
   },
   {
-    id: 'discover-ai-news', name: 'AI News Scanner', schedule: '4:30 AM UTC', color: C.blue,
-    getProgress: (d) => {
-      const n = d.discoveryQueue.length
-      return { pct: 100, label: n > 0 ? `${n} pending review` : 'Queue clear' }
-    },
-    getLastRun: (d) => d.schedule.lastDiscoveredAt,
-    getNextRun: () => nextCronUTC(4, 30),
-  },
-  {
     id: 'discover-clawhub', name: 'ClawHub Discovery', schedule: '5:00 AM UTC', color: C.blue,
     getProgress: () => ({ pct: 100, label: 'Daily scan' }),
     getLastRun: (d) => d.schedule.lastDiscoveredAt,
@@ -1078,7 +1068,7 @@ const EVENT_CONFIG: Record<string, { color: string; dimColor: string; label: str
 
 // ─── MANUAL ENTRY FORM ───────────────────────────────────────────
 function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [form, setForm] = useState({ name: '', github_repo: '', homepage_url: '' })
@@ -1272,16 +1262,10 @@ function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onActi
           {/* Manual Entry */}
           <ManualEntryForm onAdded={() => onRefresh()} />
 
-          {/* Filter bar */}
+          {/* Actions bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Mono style={{ fontSize: 11, color: C.t3 }}>Filter:</Mono>
-            {['all', 'producthunt', 'github-trending', 'hackernews', 'yc-launches'].map(f => (
-              <button key={f} onClick={() => setFilter(f)} style={{
-                fontFamily: F.mono, fontSize: 10, color: filter === f ? C.pink : C.t3, background: filter === f ? 'rgba(254,131,224,0.08)' : 'transparent',
-                border: `1px solid ${filter === f ? C.pink + '33' : C.border}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
-              }}>{f === 'all' ? 'All' : srcLabel(f)}</button>
-            ))}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {selected.size > 0 && (
                 <button onClick={handleBulkApprove} disabled={bulkApproving} style={{
                   fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: bulkApproving ? C.t3 : C.green,

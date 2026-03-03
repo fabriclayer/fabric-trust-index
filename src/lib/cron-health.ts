@@ -70,16 +70,6 @@ const CRON_DEFS: CronDef[] = [
     },
   },
   {
-    id: 'discover-ai-news',
-    name: 'AI News Scanner',
-    schedule: '30 4 * * *',
-    expectedIntervalMs: 26 * 3600000,
-    fallbackDetect: async (sb) => {
-      const { data } = await sb.from('discovery_queue').select('created_at').order('created_at', { ascending: false }).limit(1)
-      return data?.[0]?.created_at ?? null
-    },
-  },
-  {
     id: 'watchdog',
     name: 'Watchdog QA',
     schedule: '0 3 * * *',

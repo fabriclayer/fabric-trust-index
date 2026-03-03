@@ -27,10 +27,6 @@
     {
       "path": "/api/cron/collect-cve-fast",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/discover-ai-news",
-      "schedule": "30 4 * * *"
     }
   ]
 }
