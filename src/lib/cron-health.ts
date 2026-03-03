@@ -89,16 +89,6 @@ const CRON_DEFS: CronDef[] = [
       return data?.[0]?.created_at ?? null
     },
   },
-  {
-    id: 'review-dashboard',
-    name: 'AI Review',
-    schedule: '0 10,22 * * *',
-    expectedIntervalMs: 14 * 3600000, // 14h grace
-    fallbackDetect: async (sb) => {
-      const { data } = await sb.from('monitor_reviews').select('created_at').order('created_at', { ascending: false }).limit(1)
-      return data?.[0]?.created_at ?? null
-    },
-  },
 ]
 
 export async function checkCronHealth(supabase: ReturnType<typeof createServerClient>): Promise<CronHealthItem[]> {
