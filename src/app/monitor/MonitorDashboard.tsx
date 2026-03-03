@@ -386,7 +386,6 @@ function HealthTab({ data }: { data: MonitorData }) {
             ok: true,
             message: `${r.succeeded ?? r.processed ?? 0} generated, ${r.failed ?? 0} failed, ${r.remaining ?? '?'} remaining`,
           })
-          fetchData()
         }
       } catch {
         setAssessmentResult({ ok: false, message: 'Network error' })
