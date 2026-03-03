@@ -111,6 +111,7 @@ export default function CostsTab({ githubRate, vercelData }: {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editFields, setEditFields] = useState<Partial<CostItem>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
 
   // Add form
   const [newCat, setNewCat] = useState('infrastructure')
@@ -201,13 +202,14 @@ export default function CostsTab({ githubRate, vercelData }: {
     return { ...cat, total: fixed + metered, count: catItems.length, providers: [...new Set(catItems.map(i => i.provider))] }
   }).filter(c => c.total > 0 || c.count > 0)
 
-  // Upcoming renewals (60 days)
+  // Upcoming renewals (60 days ahead, 30 days back for recently overdue)
   const now = new Date()
   const in60 = new Date(now.getTime() + 60 * 86400000)
+  const past30 = new Date(now.getTime() - 30 * 86400000)
   const renewals = activeItems
-    .filter(i => i.renewal_date)
+    .filter(i => i.renewal_date && i.billing_cycle !== 'one-time')
     .map(i => ({ ...i, rd: new Date(i.renewal_date! + 'T00:00:00') }))
-    .filter(i => i.rd <= in60)
+    .filter(i => i.rd >= past30 && i.rd <= in60)
     .sort((a, b) => a.rd.getTime() - b.rd.getTime())
 
   // Daily chart
@@ -347,7 +349,7 @@ export default function CostsTab({ githubRate, vercelData }: {
                 {/* Expand icon */}
                 <span
                   onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                  style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
+                  style={{ fontFamily: F.mono, fontSize: 14, color: C.t3, cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
                 >{isExpanded ? '▾' : '▸'}</span>
                 {/* Category */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
@@ -379,16 +381,31 @@ export default function CostsTab({ githubRate, vercelData }: {
                 )}
                 {/* Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span
-                    onClick={() => { setEditingId(item.id); setExpandedId(item.id); setEditFields({ category: item.category, provider: item.provider, item: item.item, cost_type: item.cost_type, amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date, notes: item.notes, is_active: item.is_active }) }}
-                    style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
-                    onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
-                  >Edit</span>
-                  <span
-                    onClick={() => handleToggleActive(item)}
-                    style={{ fontFamily: F.mono, fontSize: 10, color: item.is_active ? C.t4 : C.green, cursor: 'pointer' }}
-                  >{item.is_active ? '×' : '✓'}</span>
+                  {deactivatingId === item.id ? (
+                    <>
+                      <span
+                        onClick={() => { handleToggleActive(item); setDeactivatingId(null) }}
+                        style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: C.green, cursor: 'pointer' }}
+                      >Yes</span>
+                      <span
+                        onClick={() => setDeactivatingId(null)}
+                        style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, cursor: 'pointer' }}
+                      >No</span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        onClick={() => { setEditingId(item.id); setExpandedId(item.id); setEditFields({ category: item.category, provider: item.provider, item: item.item, cost_type: item.cost_type, amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date, notes: item.notes, is_active: item.is_active }) }}
+                        style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
+                        onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
+                      >Edit</span>
+                      <span
+                        onClick={() => item.is_active ? setDeactivatingId(item.id) : handleToggleActive(item)}
+                        style={{ fontFamily: F.mono, fontSize: 16, color: item.is_active ? C.t3 : C.green, cursor: 'pointer', lineHeight: 1 }}
+                      >{item.is_active ? '×' : '✓'}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -562,7 +579,7 @@ export default function CostsTab({ githubRate, vercelData }: {
                 }}>
                   <span
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
+                    style={{ fontFamily: F.mono, fontSize: 14, color: C.t3, cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
                   >{isExpanded ? '▾' : '▸'}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
                     <span style={{ fontSize: 11, flexShrink: 0 }}>{catIcon(item.category)}</span>
@@ -577,16 +594,31 @@ export default function CostsTab({ githubRate, vercelData }: {
                     {item.renewal_date ? new Date(item.renewal_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                   </Mono>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span
-                      onClick={() => { setEditingId(item.id); setExpandedId(item.id); setEditFields({ category: item.category, provider: item.provider, item: item.item, cost_type: item.cost_type, amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date, notes: item.notes, is_active: item.is_active }) }}
-                      style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
-                      onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
-                    >Edit</span>
-                    <span
-                      onClick={() => handleToggleActive(item)}
-                      style={{ fontFamily: F.mono, fontSize: 10, color: item.is_active ? C.t4 : C.green, cursor: 'pointer' }}
-                    >{item.is_active ? '×' : '✓'}</span>
+                    {deactivatingId === item.id ? (
+                      <>
+                        <span
+                          onClick={() => { handleToggleActive(item); setDeactivatingId(null) }}
+                          style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: C.green, cursor: 'pointer' }}
+                        >Yes</span>
+                        <span
+                          onClick={() => setDeactivatingId(null)}
+                          style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, cursor: 'pointer' }}
+                        >No</span>
+                      </>
+                    ) : (
+                      <>
+                        <span
+                          onClick={() => { setEditingId(item.id); setExpandedId(item.id); setEditFields({ category: item.category, provider: item.provider, item: item.item, cost_type: item.cost_type, amount_usd: item.amount_usd, billing_cycle: item.billing_cycle, renewal_date: item.renewal_date, notes: item.notes, is_active: item.is_active }) }}
+                          style={{ fontFamily: F.mono, fontSize: 11, color: C.t3, cursor: 'pointer', transition: 'color 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = C.blue)}
+                          onMouseLeave={e => (e.currentTarget.style.color = C.t3)}
+                        >Edit</span>
+                        <span
+                          onClick={() => item.is_active ? setDeactivatingId(item.id) : handleToggleActive(item)}
+                          style={{ fontFamily: F.mono, fontSize: 16, color: item.is_active ? C.t3 : C.green, cursor: 'pointer', lineHeight: 1 }}
+                        >{item.is_active ? '×' : '✓'}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 {isExpanded && (
@@ -760,7 +792,7 @@ export default function CostsTab({ githubRate, vercelData }: {
               const daysUntil = Math.ceil((item.rd.getTime() - now.getTime()) / 86400000)
               const overdue = daysUntil < 0
               const dotColor = overdue ? C.red : daysUntil <= 30 ? C.orange : C.green
-              const cycleLabel = item.billing_cycle === 'annual' ? '/yr' : '/mo'
+              const cycleLabel = item.billing_cycle === 'annual' ? '/yr' : item.billing_cycle === 'per-use' ? '' : '/mo'
               return (
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
                   <Dot color={dotColor} pulse={overdue} />
