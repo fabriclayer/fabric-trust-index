@@ -50,6 +50,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  try {
   const { slug } = await params
 
   // Load fonts in parallel with the data query
@@ -459,4 +460,10 @@ export async function GET(
       },
     }
   )
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 }
