@@ -70,6 +70,17 @@ export async function POST(request: NextRequest) {
     }
     isRescore = true
 
+    // Update existing service metadata with any new values from the form + enrichment
+    const updates: Record<string, string | null> = {}
+    if (github_repo) updates.github_repo = github_repo
+    if (homepage_url) updates.homepage_url = homepage_url
+    if (enriched.npm_package && !existing.npm_package) updates.npm_package = enriched.npm_package
+    if (enriched.pypi_package && !existing.pypi_package) updates.pypi_package = enriched.pypi_package
+    if (enriched.github_repo && !existing.github_repo && !github_repo) updates.github_repo = enriched.github_repo
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('services').update(updates).eq('slug', slug)
+    }
+
     // Log re-score to discovery_queue so it appears in Added Services list
     await supabase.from('discovery_queue').insert({
       source: 'monitor:manual',
