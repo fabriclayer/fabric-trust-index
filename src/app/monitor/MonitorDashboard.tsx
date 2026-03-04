@@ -1152,225 +1152,40 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
 }
 
 // ─── DISCOVERY TAB ────────────────────────────────────────────────
-function DiscoveryTab({ data, onAction, onRefresh }: { data: MonitorData; onAction: (id: string, action: 'approve' | 'dismiss') => Promise<boolean>; onRefresh: () => void }) {
-  const [subTab, setSubTab] = useState<'pending' | 'approved'>('pending')
-  const [filter, setFilter] = useState('all')
-  const [acting, setActing] = useState<string | null>(null)
-  const [scoring, setScoring] = useState(false)
-  const [scoreResult, setScoreResult] = useState<{ scored: number; failed: number } | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [bulkApproving, setBulkApproving] = useState(false)
-  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
-
-  const items = data.discoveryQueue
-  const filtered = filter === 'all' ? items : items.filter(i => i.source === filter)
+function DiscoveryTab({ data, onRefresh }: { data: MonitorData; onRefresh: () => void }) {
   const approved = data.approvedDiscoveries ?? []
-  const allUnscoredSlugs = data.unscoredSlugs ?? []
-  const unscoredCount = allUnscoredSlugs.length
-
-  const [actionError, setActionError] = useState<string | null>(null)
-  const handleAction = async (id: string, action: 'approve' | 'dismiss') => {
-    setActing(id)
-    setActionError(null)
-    const ok = await onAction(id, action)
-    if (!ok) setActionError(`Failed to ${action} — check console`)
-    setActing(null)
-  }
-
-  const handleBatchScore = async () => {
-    if (allUnscoredSlugs.length === 0) return
-    setScoring(true)
-    setScoreResult(null)
-    try {
-      // collect-sample endpoint handles max 50 at a time
-      let scored = 0
-      let failed = 0
-      for (let i = 0; i < allUnscoredSlugs.length; i += 50) {
-        const batch = allUnscoredSlugs.slice(i, i + 50)
-        const authCookie = document.cookie.split('fabric_monitor_auth=')[1]?.split(';')[0] ?? ''
-        const res = await fetch('/api/cron/collect-sample', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authCookie}` },
-          body: JSON.stringify({ slugs: batch }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          scored += (data.results ?? []).filter((r: { composite_score: number }) => r.composite_score > 0).length
-          failed += (data.results ?? []).filter((r: { composite_score: number }) => r.composite_score === 0).length
-        } else {
-          failed += batch.length
-        }
-      }
-      setScoreResult({ scored, failed })
-      onRefresh()
-    } catch {
-      setScoreResult({ scored: 0, failed: allUnscoredSlugs.length })
-    } finally {
-      setScoring(false)
-    }
-  }
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  const toggleSelectAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set())
-    else setSelected(new Set(filtered.map(i => i.id)))
-  }
-
-  const handleBulkApprove = async () => {
-    if (selected.size === 0) return
-    setBulkApproving(true)
-    setActionError(null)
-    const ids = Array.from(selected)
-    let failures = 0
-    setBulkProgress({ done: 0, total: ids.length })
-    for (let i = 0; i < ids.length; i++) {
-      const ok = await onAction(ids[i], 'approve')
-      if (!ok) failures++
-      setBulkProgress({ done: i + 1, total: ids.length })
-    }
-    setSelected(new Set())
-    setBulkApproving(false)
-    setBulkProgress(null)
-    if (failures > 0) setActionError(`${failures}/${ids.length} approvals failed`)
-    onRefresh()
-  }
-
   const statusColor = (s: string) => s === 'trusted' ? C.green : s === 'caution' ? C.orange : s === 'blocked' ? C.red : C.t3
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Sub-tab toggle */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}` }}>
-        {([['pending', `Pending (${items.length})`], ['approved', `Approved (${approved.length})`]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setSubTab(id)} style={{
-            fontFamily: F.mono, fontSize: 11, color: subTab === id ? C.pink : C.t3,
-            background: 'none', border: 'none', cursor: 'pointer', padding: '10px 18px',
-            borderBottom: subTab === id ? `2px solid ${C.pink}` : '2px solid transparent',
-            transition: 'all 0.15s', letterSpacing: 0.3,
-          }}>{label}</button>
-        ))}
-      </div>
+      {/* Manual Entry */}
+      <ManualEntryForm onAdded={() => onRefresh()} />
 
-      {subTab === 'pending' && (
-        <>
-          {/* Manual Entry */}
-          <ManualEntryForm onAdded={() => onRefresh()} />
-
-          {/* Actions bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {selected.size > 0 && (
-                <button onClick={handleBulkApprove} disabled={bulkApproving} style={{
-                  fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: bulkApproving ? C.t3 : C.green,
-                  background: bulkApproving ? C.surface : C.greenDim,
-                  border: `1px solid ${bulkApproving ? C.border : C.green + '33'}`, borderRadius: 6,
-                  padding: '5px 14px', cursor: bulkApproving ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
-                }}>{bulkApproving && bulkProgress ? `Approving ${bulkProgress.done}/${bulkProgress.total}...` : `Approve ${selected.size} Selected`}</button>
-              )}
-              <Badge text={`${items.length} pending review`} color={C.orange} bg={C.orangeDim} />
-            </div>
-          </div>
-
-          {actionError && (
-            <div style={{ padding: '8px 16px', background: C.redDim, borderRadius: 8, border: `1px solid ${C.red}33` }}>
-              <Mono style={{ fontSize: 11, color: C.red }}>{actionError}</Mono>
-            </div>
-          )}
-
-          {/* Pending review table */}
-          <Card pad={false}>
-            <div style={{ display: 'grid', gridTemplateColumns: '28px 24px 180px 1fr 90px 70px 120px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
-              <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleSelectAll} style={{ width: 14, height: 14, cursor: 'pointer', accentColor: C.pink }} />
-              {['', 'Service', 'Description', 'Source', 'Stars', 'Actions'].map(h => (
-                <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
-              ))}
-            </div>
-            {filtered.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No pending discoveries{filter !== 'all' ? ` from ${srcLabel(filter)}` : ''}</Mono></div>
-            ) : filtered.map(item => (
-              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '28px 24px 180px 1fr 90px 70px 120px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center', opacity: acting === item.id ? 0.5 : 1 }}>
-                <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelect(item.id)} disabled={bulkApproving} style={{ width: 14, height: 14, cursor: bulkApproving ? 'not-allowed' : 'pointer', accentColor: C.pink }} />
-                <span style={{ fontSize: 14 }}>{srcIcon(item.source)}</span>
-                <div>
-                  {item.homepage_url ? (
-                    <a href={item.homepage_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none' }}>{item.name || item.slug}</a>
-                  ) : (
-                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name || item.slug}</span>
-                  )}
-                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3 }}>{item.publisher || '—'}</div>
-                </div>
-                <span style={{ fontSize: 12, color: C.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{item.description || '—'}</span>
-                <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
-                <Mono style={{ fontSize: 11, color: item.stars ? C.text : C.t4 }}>{item.stars ? item.stars.toLocaleString() : '—'}</Mono>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => handleAction(item.id, 'approve')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.green, background: C.greenDim, border: `1px solid ${C.green}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Approve</button>
-                  <button onClick={() => handleAction(item.id, 'dismiss')} disabled={!!acting} style={{ fontFamily: F.mono, fontSize: 10, color: C.red, background: C.redDim, border: `1px solid ${C.red}22`, borderRadius: 6, padding: '4px 10px', cursor: acting ? 'not-allowed' : 'pointer' }}>Dismiss</button>
-                  {item.github_repo && <a href={`https://github.com/${item.github_repo}`} target="_blank" rel="noreferrer" style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', textDecoration: 'none' }}>GH</a>}
-                </div>
-              </div>
-            ))}
-          </Card>
-        </>
-      )}
-
-      {subTab === 'approved' && (
-        <>
-        {unscoredCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={handleBatchScore} disabled={scoring} style={{
-              fontFamily: F.mono, fontSize: 11, color: scoring ? C.t3 : C.blue,
-              background: scoring ? C.surface : 'rgba(6,140,255,0.08)',
-              border: `1px solid ${scoring ? C.border : C.blue + '33'}`, borderRadius: 8,
-              padding: '6px 16px', cursor: scoring ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
-            }}>{scoring ? 'Scoring...' : `Score ${unscoredCount} Unscored Services`}</button>
-            {scoreResult && (
-              <Mono style={{ fontSize: 11, color: scoreResult.failed > 0 ? C.orange : C.green }}>
-                {scoreResult.scored} scored{scoreResult.failed > 0 ? `, ${scoreResult.failed} failed` : ''}
-              </Mono>
+      {/* Manually added services */}
+      <Card pad={false} title={`Added Services (${approved.length})`}>
+        <div style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
+          {['Service', 'Source', 'Added', 'Score', 'Status'].map(h => (
+            <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
+          ))}
+        </div>
+        {approved.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No services added yet</Mono></div>
+        ) : approved.map(item => (
+          <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
+            <a href={`https://trust.fabriclayer.ai/${item.slug}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</a>
+            <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
+            <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(item.approved_at)}</Mono>
+            <Mono style={{ fontSize: 13, fontWeight: 600, color: item.score != null ? statusColor(item.status) : C.t4 }}>
+              {item.score != null ? item.score.toFixed(2) : '—'}
+            </Mono>
+            {item.status !== 'pending' ? (
+              <Badge text={item.status} color={statusColor(item.status)} bg={item.status === 'trusted' ? C.greenDim : item.status === 'caution' ? C.orangeDim : item.status === 'blocked' ? C.redDim : C.surface} />
+            ) : (
+              <Badge text="pending" color={C.t3} bg={C.surface} />
             )}
           </div>
-        )}
-        <Card pad={false}>
-          <div style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px 70px', gap: 0, padding: '10px 24px', borderBottom: `1px solid ${C.border}` }}>
-            {['Service', 'Source', 'Approved', 'Score', 'Status', 'Scored'].map(h => (
-              <Mono key={h} style={{ fontSize: 9, color: C.t3, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</Mono>
-            ))}
-          </div>
-          {approved.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><Mono style={{ fontSize: 13, color: C.t3 }}>No approved discoveries yet</Mono></div>
-          ) : approved.map(item => (
-            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '200px 90px 120px 80px 100px 70px', gap: 0, padding: '12px 24px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
-              <a href={`https://trust.fabriclayer.ai/${item.slug}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: C.blue, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</a>
-              <Badge text={srcLabel(item.source).split(' ')[0]} color={C.t2} bg={C.surface} />
-              <Mono style={{ fontSize: 11, color: C.t3 }}>{timeAgo(item.approved_at)}</Mono>
-              <Mono style={{ fontSize: 13, fontWeight: 600, color: item.score != null ? statusColor(item.status) : C.t4 }}>
-                {item.score != null ? item.score.toFixed(2) : '—'}
-              </Mono>
-              {item.status !== 'pending' ? (
-                <Badge text={item.status} color={statusColor(item.status)} bg={item.status === 'trusted' ? C.greenDim : item.status === 'caution' ? C.orangeDim : item.status === 'blocked' ? C.redDim : C.surface} />
-              ) : (
-                <Badge text="pending" color={C.t3} bg={C.surface} />
-              )}
-              <span style={{ fontSize: 14, textAlign: 'center' }}>
-                {item.scored ? (
-                  <span style={{ color: C.green }}>&#10003;</span>
-                ) : (
-                  <span style={{ color: C.orange }}>&#9679;</span>
-                )}
-              </span>
-            </div>
-          ))}
-        </Card>
-        </>
-      )}
+        ))}
+      </Card>
     </div>
   )
 }
@@ -2318,7 +2133,7 @@ export default function MonitorDashboard() {
         {tab === 'health' && <HealthTab data={data} />}
         {tab === 'activity' && <ActivityTab data={data} />}
         {tab === 'review' && <ReviewTab />}
-        {tab === 'discovery' && <DiscoveryTab data={data} onAction={handleDiscoveryAction} onRefresh={fetchData} />}
+        {tab === 'discovery' && <DiscoveryTab data={data} onRefresh={fetchData} />}
         {tab === 'marketing' && <MarketingTab />}
         {tab === 'networking' && <NetworkingTab />}
         {tab === 'costs' && <CostsTab githubRate={data.health.github} vercelData={data.health.vercel} />}
