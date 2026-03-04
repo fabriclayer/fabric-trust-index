@@ -97,8 +97,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const service = await loadService(slug)
   if (!service) notFound()
 
-  // Pass service.id directly — no extra getServiceId query needed
-  const detailData = service.id ? await loadDetailData(service.id) : null
+  // Fetch detail data and rank in parallel
+  const { getServiceRank } = await import('@/lib/services')
+  const [detailData, rank] = await Promise.all([
+    service.id ? loadDetailData(service.id) : Promise.resolve(null),
+    getServiceRank(slug),
+  ])
+  if (rank) service.rank = rank
 
   const statusLabel = service.status === 'trusted' ? 'Trusted' : service.status === 'caution' ? 'Caution' : 'Blocked'
   // signals is number[] in order: [vulnerability, operational, maintenance, adoption, transparency, publisher_trust]

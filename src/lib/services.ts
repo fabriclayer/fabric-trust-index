@@ -126,7 +126,7 @@ export async function getServicesForDirectory(): Promise<Service[]> {
     from += PAGE
   }
 
-  return all.map(db => ({
+  return all.map((db, i) => ({
     name: db.name,
     slug: db.slug,
     publisher: db.publisher?.name ?? 'Unknown',
@@ -144,6 +144,7 @@ export async function getServicesForDirectory(): Promise<Service[]> {
     github_repo: db.github_repo || undefined,
     created_at: db.created_at || undefined,
     updated_at: db.updated_at || undefined,
+    rank: i + 1,
   }))
 }
 
@@ -182,6 +183,27 @@ export async function getServiceBySlug(slug: string): Promise<Service | null> {
     .single()
   if (error || !data) return null
   return dbToService(data)
+}
+
+/** Global rank: count visible services with a higher composite_score + 1 */
+export async function getServiceRank(slug: string): Promise<number | null> {
+  const supabase = createAnonClient()
+  const { data: svc } = await supabase
+    .from('services')
+    .select('composite_score')
+    .eq('slug', slug)
+    .single()
+  if (!svc) return null
+
+  const { count, error } = await supabase
+    .from('services')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'pending')
+    .or('npm_package.not.is.null,github_repo.not.is.null,endpoint_url.not.is.null,pypi_package.not.is.null,homepage_url.not.is.null')
+    .gt('composite_score', svc.composite_score)
+
+  if (error || count === null) return null
+  return count + 1
 }
 
 // Additional helpers for product page data

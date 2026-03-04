@@ -55,6 +55,8 @@ export interface Service {
       detail?: string
     }>
   }> | null
+  // Rank (global position by composite_score DESC)
+  rank?: number
   // Timestamps
   created_at?: string
   updated_at?: string
