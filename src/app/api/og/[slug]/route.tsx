@@ -68,6 +68,57 @@ export async function GET(
       })
     }
 
+    // Debug mode: simple image with real data (test data rendering)
+    if (request.nextUrl.searchParams.get('debug') === '3') {
+      const s = service
+      return new ImageResponse(
+        (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: 48 }}>
+            <div style={{ display: 'flex', fontSize: 48, color: '#ffffff', fontWeight: 700 }}>{s?.name ?? slug}</div>
+            <div style={{ display: 'flex', fontSize: 24, color: '#787874', marginTop: 16 }}>Score: {(s?.composite_score ?? 0).toFixed(2)}</div>
+            <div style={{ display: 'flex', fontSize: 18, color: '#58584f', marginTop: 8 }}>Status: {s?.status ?? 'unknown'}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 24 }}>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Vulnerability: {(s?.signal_vulnerability ?? 0).toFixed(1)}</div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Operational: {(s?.signal_operational ?? 0).toFixed(1)}</div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Maintenance: {(s?.signal_maintenance ?? 0).toFixed(1)}</div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Adoption: {(s?.signal_adoption ?? 0).toFixed(1)}</div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Transparency: {(s?.signal_transparency ?? 0).toFixed(1)}</div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginBottom: 6 }}>Publisher Trust: {(s?.signal_publisher_trust ?? 0).toFixed(1)}</div>
+            </div>
+          </div>
+        ),
+        { width: 1200, height: 630 }
+      )
+    }
+
+    // Debug mode: test signal bars with .map()
+    if (request.nextUrl.searchParams.get('debug') === '4' && service) {
+      const sigs = SIGNAL_KEYS.map((key) => ({
+        key,
+        label: SIGNAL_LABELS[key],
+        score: (service as Record<string, number>)[`signal_${key}`] ?? 0,
+      }))
+      return new ImageResponse(
+        (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: 48 }}>
+            <div style={{ display: 'flex', fontSize: 36, color: '#ffffff', marginBottom: 24 }}>{service.name}</div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {sigs.map((sig) => (
+                <div key={sig.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', fontSize: 13, color: '#787874', width: 190 }}>{sig.label}</div>
+                  <div style={{ display: 'flex', width: 400, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
+                    <div style={{ width: Math.max((sig.score / 5) * 400, 4), height: 14, backgroundColor: getColor(sig.score), borderRadius: 7 }} />
+                  </div>
+                  <div style={{ display: 'flex', fontSize: 14, color: '#787874', marginLeft: 12 }}>{sig.score.toFixed(1)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ),
+        { width: 1200, height: 630 }
+      )
+    }
+
     if (error || !service) {
       return new ImageResponse(
         (
