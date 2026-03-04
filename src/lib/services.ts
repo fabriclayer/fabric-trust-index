@@ -126,26 +126,31 @@ export async function getServicesForDirectory(): Promise<Service[]> {
     from += PAGE
   }
 
-  return all.map((db, i) => ({
-    name: db.name,
-    slug: db.slug,
-    publisher: db.publisher?.name ?? 'Unknown',
-    publisher_url: db.publisher?.website_url || undefined,
-    category: db.category,
-    tag: TAG_CLASSES[db.category] || '',
-    description: db.description ?? '',
-    signals: [],
-    score: db.composite_score,
-    status: db.status,
-    icon: db.icon,
-    logo_url: db.logo_url || (db.icon?.startsWith('http') ? db.icon : undefined),
-    updated: formatUpdatedAt(db.updated_at),
-    domain: extractDomain(db.publisher?.website_url),
-    github_repo: db.github_repo || undefined,
-    created_at: db.created_at || undefined,
-    updated_at: db.updated_at || undefined,
-    rank: i + 1,
-  }))
+  // Compute rank with ties: services with the same score share a rank
+  let rank = 1
+  return all.map((db, i) => {
+    if (i > 0 && db.composite_score < all[i - 1].composite_score) rank = i + 1
+    return {
+      name: db.name,
+      slug: db.slug,
+      publisher: db.publisher?.name ?? 'Unknown',
+      publisher_url: db.publisher?.website_url || undefined,
+      category: db.category,
+      tag: TAG_CLASSES[db.category] || '',
+      description: db.description ?? '',
+      signals: [],
+      score: db.composite_score,
+      status: db.status,
+      icon: db.icon,
+      logo_url: db.logo_url || (db.icon?.startsWith('http') ? db.icon : undefined),
+      updated: formatUpdatedAt(db.updated_at),
+      domain: extractDomain(db.publisher?.website_url),
+      github_repo: db.github_repo || undefined,
+      created_at: db.created_at || undefined,
+      updated_at: db.updated_at || undefined,
+      rank,
+    }
+  })
 }
 
 export async function getServices(): Promise<Service[]> {
