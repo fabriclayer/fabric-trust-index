@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   const batchSize = parseInt(request.nextUrl.searchParams.get('limit') ?? '25', 10)
+  const slugsParam = request.nextUrl.searchParams.get('slugs')
   // runStartedAt = ISO timestamp marking when this regeneration run began.
   // Services with ai_assessment_updated_at before this timestamp (or null) still need processing.
   const runStartedAt = request.nextUrl.searchParams.get('run_started_at') ?? new Date().toISOString()
@@ -19,14 +20,30 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient()
 
-    // Fetch services that need (re)generation: no assessment, or assessment older than run start
-    const { data: services, error } = await supabase
-      .from('services')
-      .select('id, slug')
-      .not('composite_score', 'is', null)
-      .or(`ai_assessment_updated_at.is.null,ai_assessment_updated_at.lt.${runStartedAt}`)
-      .order('ai_assessment_updated_at', { ascending: true, nullsFirst: true })
-      .limit(batchSize)
+    let services: { id: string; slug: string }[] | null
+    let error: unknown
+
+    if (slugsParam) {
+      // Target specific services by slug
+      const slugs = slugsParam.split(',').map(s => s.trim())
+      const result = await supabase
+        .from('services')
+        .select('id, slug')
+        .in('slug', slugs)
+      services = result.data
+      error = result.error
+    } else {
+      // Fetch services that need (re)generation: no assessment, or assessment older than run start
+      const result = await supabase
+        .from('services')
+        .select('id, slug')
+        .not('composite_score', 'is', null)
+        .or(`ai_assessment_updated_at.is.null,ai_assessment_updated_at.lt.${runStartedAt}`)
+        .order('ai_assessment_updated_at', { ascending: true, nullsFirst: true })
+        .limit(batchSize)
+      services = result.data
+      error = result.error
+    }
 
     if (error) throw error
     if (!services || services.length === 0) {
