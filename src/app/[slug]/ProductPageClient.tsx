@@ -1006,7 +1006,7 @@ export default function ProductPageClient({
           <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
             <span className="text-[1.05rem] font-semibold text-black tracking-tight">Trust Signal Breakdown</span>
             <div className="flex items-center gap-2">
-              {service.signal_scores && service.category !== 'skill' && (() => {
+              {service.signal_scores ? (() => {
                 const totalSubs = Object.values(service.signal_scores).reduce((sum, sig) => sum + (sig.sub_signals?.length ?? 0), 0)
                 const signalsWithData = service.signals_with_data ?? 0
                 const confidence = signalsWithData >= 5 ? 'high' : signalsWithData >= 3 ? 'medium' : signalsWithData >= 1 ? 'low' : 'unverified'
@@ -1021,8 +1021,7 @@ export default function ProductPageClient({
                     </span>
                   </>
                 )
-              })()}
-              {(!service.signal_scores || service.category === 'skill') && (
+              })() : (
                 <span className="font-mono text-[0.62rem] py-0.5 px-2 bg-fabric-100 text-fabric-400 rounded-full">
                   {service.signals_with_data != null
                     ? `${service.signals_with_data}/6 signals scored`
@@ -1032,8 +1031,8 @@ export default function ProductPageClient({
             </div>
           </div>
 
-          {/* Sub-signal cards (standard services with signal_scores) */}
-          {service.signal_scores && service.category !== 'skill' ? (
+          {/* Sub-signal cards (services with signal_scores) */}
+          {service.signal_scores ? (
             <div className="flex flex-col gap-1.5">
               {STANDARD_SIGNAL_KEYS.map((key, i) => {
                 const signalData = service.signal_scores?.[key]

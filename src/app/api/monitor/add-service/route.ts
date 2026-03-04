@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
     if (enriched.npm_package && !existing.npm_package) updates.npm_package = enriched.npm_package
     if (enriched.pypi_package && !existing.pypi_package) updates.pypi_package = enriched.pypi_package
     if (enriched.github_repo && !existing.github_repo && !github_repo) updates.github_repo = enriched.github_repo
+    // Reclassify if category was 'skill' (ClawHub default) — likely wrong for real services
+    if (existing.category === 'skill') updates.category = category
     if (Object.keys(updates).length > 0) {
       await supabase.from('services').update(updates).eq('slug', slug)
     }
