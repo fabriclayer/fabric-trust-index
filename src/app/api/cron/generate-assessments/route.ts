@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { generateAssessment } from '@/lib/assessment-generator'
 import { logCronRun } from '@/lib/cron-log'
@@ -11,8 +12,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const batchSize = parseInt(request.nextUrl.searchParams.get('limit') ?? '25', 10)
+  const batchSize = parseInt(request.nextUrl.searchParams.get('limit') ?? '10', 10)
   const slugsParam = request.nextUrl.searchParams.get('slugs')
+  const chain = request.nextUrl.searchParams.get('chain') === '1'
   // runStartedAt = ISO timestamp marking when this regeneration run began.
   // Services with ai_assessment_updated_at before this timestamp (or null) still need processing.
   const runStartedAt = request.nextUrl.searchParams.get('run_started_at') ?? new Date().toISOString()
@@ -77,12 +79,27 @@ export async function GET(request: NextRequest) {
 
     await logCronRun('generate-assessments', { processed: services.length, succeeded, failed, remaining: actualRemaining })
 
+    // Self-chain: fire next batch in the background if there are more to process
+    if (chain && actualRemaining > 0 && !slugsParam) {
+      const baseUrl = request.nextUrl.origin
+      after(async () => {
+        try {
+          await fetch(`${baseUrl}/api/cron/generate-assessments?limit=${batchSize}&chain=1&run_started_at=${encodeURIComponent(runStartedAt)}`, {
+            headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+          })
+        } catch (err) {
+          console.error('Self-chain failed:', err)
+        }
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       processed: services.length,
       succeeded,
       failed,
       remaining: actualRemaining,
+      chaining: chain && actualRemaining > 0,
       run_started_at: runStartedAt,
       errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
       timestamp: new Date().toISOString(),
