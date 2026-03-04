@@ -48,12 +48,12 @@ export default function ServiceCard({ service }: { service: Service }) {
         {service.description}
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-fabric-100 mt-auto">
+      <div className="flex items-center gap-2 pt-2 border-t border-fabric-100 mt-auto overflow-hidden">
         <RatingBoxes score={service.score} status={service.status} />
-        <span className={`font-mono text-[0.82rem] font-semibold tracking-tight ${scoreNumColor[service.status]}`}>
+        <span className={`font-mono text-[0.82rem] font-semibold tracking-tight shrink-0 ${scoreNumColor[service.status]}`}>
           {service.score.toFixed(2)}
         </span>
-        <span className="font-mono text-[0.45rem] font-semibold uppercase tracking-wider text-fabric-400 border border-fabric-200 rounded px-0.5 py-[0.5px] leading-tight ml-auto" title="The Fabric scoring engine is in active beta. Signals and thresholds are being calibrated as new data sources come online.">Beta</span>
+        <span className="font-mono text-[0.45rem] font-semibold uppercase tracking-wider text-fabric-400 border border-fabric-200 rounded px-0.5 py-[0.5px] leading-tight ml-auto shrink-0" title="The Fabric scoring engine is in active beta. Signals and thresholds are being calibrated as new data sources come online.">Beta</span>
       </div>
     </Link>
   )
