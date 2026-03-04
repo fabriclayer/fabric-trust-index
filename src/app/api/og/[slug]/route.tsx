@@ -37,9 +37,21 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  try {
-    const { slug } = await params
+  const { slug } = await params
 
+  // Debug mode: return minimal image to verify ImageResponse works
+  if (request.nextUrl.searchParams.get('debug') === '1') {
+    return new ImageResponse(
+      (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#ffffff', fontSize: 48 }}>
+          Debug: {slug}
+        </div>
+      ),
+      { width: 1200, height: 630 }
+    )
+  }
+
+  try {
     const supabase = createAnonClient()
     const { data: service, error } = await supabase
       .from('services')
@@ -48,6 +60,13 @@ export async function GET(
       )
       .eq('slug', slug)
       .single()
+
+    // Debug mode: return query result as JSON
+    if (request.nextUrl.searchParams.get('debug') === '2') {
+      return new Response(JSON.stringify({ service, error }, null, 2), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
     if (error || !service) {
       return new ImageResponse(
@@ -60,7 +79,7 @@ export async function GET(
       )
     }
 
-    const score = service.composite_score
+    const score = service.composite_score ?? 0
     const scoreColor = getColor(score)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pub = service.publisher as any
@@ -72,19 +91,21 @@ export async function GET(
       .toUpperCase()
 
     const signalScores: Record<string, number> = {
-      vulnerability: service.signal_vulnerability,
-      operational: service.signal_operational,
-      maintenance: service.signal_maintenance,
-      adoption: service.signal_adoption,
-      transparency: service.signal_transparency,
-      publisher_trust: service.signal_publisher_trust,
+      vulnerability: service.signal_vulnerability ?? 0,
+      operational: service.signal_operational ?? 0,
+      maintenance: service.signal_maintenance ?? 0,
+      adoption: service.signal_adoption ?? 0,
+      transparency: service.signal_transparency ?? 0,
+      publisher_trust: service.signal_publisher_trust ?? 0,
     }
 
     const signals = SIGNAL_KEYS.map((key) => ({
       key,
       label: SIGNAL_LABELS[key],
-      score: signalScores[key] ?? 0,
+      score: signalScores[key],
     }))
+
+    const statusLabel = (service.status ?? 'pending').toUpperCase()
 
     return new ImageResponse(
       (
@@ -96,7 +117,6 @@ export async function GET(
             flexDirection: 'column',
             backgroundColor: '#0a0a0a',
             padding: '48px 56px',
-            fontFamily: 'sans-serif',
           }}
         >
           {/* Top bar accent */}
@@ -107,47 +127,46 @@ export async function GET(
               left: 0,
               right: 0,
               height: 4,
-              background: `linear-gradient(90deg, ${scoreColor}, #068cff)`,
+              backgroundColor: scoreColor,
               display: 'flex',
             }}
           />
 
           {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-            {categoryLabel && (
-              <div style={{ fontSize: 14, color: '#a0a09c', letterSpacing: '0.06em', marginRight: 16 }}>
+            {categoryLabel ? (
+              <div style={{ fontSize: 14, color: '#a0a09c', letterSpacing: 1, marginRight: 16 }}>
                 {categoryLabel}
               </div>
-            )}
-            {publisherName && (
+            ) : null}
+            {publisherName ? (
               <div style={{ fontSize: 14, color: '#58584f' }}>
                 by {publisherName}
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Main content */}
           <div style={{ display: 'flex', flex: 1 }}>
             {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 48 }}>
-              <div style={{ fontSize: 52, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.03em', lineHeight: 1.1, marginBottom: 40 }}>
+              <div style={{ fontSize: 48, fontWeight: 700, color: '#ffffff', lineHeight: 1.1, marginBottom: 40 }}>
                 {service.name.length > 30 ? service.name.slice(0, 28) + '...' : service.name}
               </div>
 
               {/* Signal bars */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {signals.map((signal) => {
-                  const barWidth = Math.max((signal.score / 5) * 100, 2)
                   const barColor = getColor(signal.score)
                   return (
-                    <div key={signal.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ fontSize: 13, color: '#787874', width: 190, flexShrink: 0 }}>
+                    <div key={signal.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, color: '#787874', width: 190 }}>
                         {signal.label}
                       </div>
-                      <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7, overflow: 'hidden' }}>
-                        <div style={{ width: `${barWidth}%`, height: '100%', backgroundColor: barColor, borderRadius: 7 }} />
+                      <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
+                        <div style={{ width: `${Math.max((signal.score / 5) * 100, 2)}%`, height: 14, backgroundColor: barColor, borderRadius: 7 }} />
                       </div>
-                      <div style={{ fontSize: 14, color: barColor, width: 36, textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 14, color: barColor, width: 40, textAlign: 'right' }}>
                         {signal.score.toFixed(1)}
                       </div>
                     </div>
@@ -157,7 +176,7 @@ export async function GET(
             </div>
 
             {/* Right column: score */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 240, flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 240 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 180, height: 180, borderRadius: 90, border: `6px solid ${scoreColor}` }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>
@@ -168,10 +187,10 @@ export async function GET(
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: scoreColor }} />
-                <div style={{ fontSize: 16, color: scoreColor, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
-                  {service.status === 'pending' ? 'PENDING' : service.status.toUpperCase()}
+              <div style={{ display: 'flex', alignItems: 'center', marginTop: 16 }}>
+                <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: scoreColor, marginRight: 8 }} />
+                <div style={{ fontSize: 16, color: scoreColor, letterSpacing: 1 }}>
+                  {statusLabel}
                 </div>
               </div>
             </div>
@@ -179,8 +198,8 @@ export async function GET(
 
           {/* Footer */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, paddingTop: 20, borderTop: '1px solid #1a1a16' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 22, height: 22, borderRadius: 5, backgroundColor: '#58584f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#0a0a0a' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ width: 22, height: 22, borderRadius: 5, backgroundColor: '#58584f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#0a0a0a', marginRight: 10 }}>
                 F
               </div>
               <div style={{ fontSize: 14, color: '#58584f' }}>
@@ -202,9 +221,16 @@ export async function GET(
       }
     )
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err), stack: (err as Error)?.stack }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    })
+    // Return error as visible image so we can debug
+    const msg = err instanceof Error ? err.message : String(err)
+    return new ImageResponse(
+      (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#d03a3d', fontSize: 20, padding: 40 }}>
+          <div style={{ display: 'flex', marginBottom: 16, fontSize: 32 }}>OG Error</div>
+          <div style={{ display: 'flex', color: '#787874' }}>{msg.slice(0, 200)}</div>
+        </div>
+      ),
+      { width: 1200, height: 630 }
+    )
   }
 }
