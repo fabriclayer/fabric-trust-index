@@ -394,13 +394,13 @@ export async function addDiscoveredService(params: {
   }
 
   // Log the discovery (skip for monitor:approved — approval handler updates the existing queue entry)
-  if (!params.source.startsWith('monitor:')) {
+  if (params.source !== 'monitor:approved') {
     await supabase.from('discovery_queue').insert({
       source: params.source,
       query: params.name,
       package_name: params.name,
       status: 'completed',
-      result: { slug: params.slug, category: params.category },
+      result: { slug: params.slug, name: params.name, category: params.category },
       processed_at: new Date().toISOString(),
     })
   }
