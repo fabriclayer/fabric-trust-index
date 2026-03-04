@@ -13,7 +13,7 @@ export function githubHeaders(): Record<string, string> {
 
 export async function githubGet(path: string): Promise<unknown | null> {
   try {
-    const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders() })
+    const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders(), cache: 'no-store' })
     if (!res.ok) return null
     return res.json()
   } catch {
@@ -26,6 +26,7 @@ export async function githubExists(path: string): Promise<boolean> {
     const res = await fetch(`${GITHUB_API}${path}`, {
       method: 'HEAD',
       headers: githubHeaders(),
+      cache: 'no-store',
     })
     return res.ok
   } catch {
