@@ -53,12 +53,24 @@ export async function POST(request: NextRequest) {
     homepage_url: homepage_url || undefined,
   })
 
+  const supabase = createServerClient()
+  let isRescore = false
+
   if (insertResult !== true) {
-    return NextResponse.json({ error: `Failed to add service: ${insertResult}` }, { status: 500 })
+    // Check if it's a duplicate — if so, re-score the existing service
+    const { data: existing } = await supabase
+      .from('services')
+      .select('*')
+      .eq('slug', slug)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json({ error: `Failed to add service: ${insertResult}` }, { status: 500 })
+    }
+    isRescore = true
   }
 
-  // Fetch the newly created service and score it immediately
-  const supabase = createServerClient()
+  // Fetch the service and score it
   const { data: service } = await supabase
     .from('services')
     .select('*')
@@ -77,6 +89,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     slug,
+    rescore: isRescore,
     enriched: {
       github_repo: enriched.github_repo || undefined,
       npm_package: enriched.npm_package || undefined,

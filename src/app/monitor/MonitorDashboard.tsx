@@ -1088,7 +1088,8 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       if (res.ok) {
         const sc = data.scoring
         const msg = sc ? `Scored: ${sc.success.length} signals${sc.failed.length ? `, ${sc.failed.length} failed` : ''}` : 'Queued for scoring'
-        setResult({ ok: true, message: `Added "${form.name}" — ${msg}` })
+        const verb = data.rescore ? 'Re-scored' : 'Added'
+        setResult({ ok: true, message: `${verb} "${form.name}" — ${msg}` })
         setForm({ name: '', github_repo: '', homepage_url: '' })
         onAdded(data.slug)
       } else {
