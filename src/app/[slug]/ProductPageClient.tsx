@@ -843,11 +843,7 @@ export default function ProductPageClient({
                   {service.rank != null && (
                     <><span className="text-fabric-400">#{service.rank}</span>{' · '}</>
                   )}
-                  by {service.publisher_url ? (
-                    <a href={service.publisher_url} target="_blank" rel="noopener noreferrer" className="text-fabric-600 hover:text-pink transition-colors no-underline">{service.publisher}</a>
-                  ) : (
-                    <span className="text-fabric-600">{service.publisher}</span>
-                  )}
+                  by <a href={`/?publisher=${encodeURIComponent(service.publisher)}`} className="text-fabric-600 hover:text-pink transition-colors no-underline">{service.publisher}</a>
                 </div>
               </div>
 

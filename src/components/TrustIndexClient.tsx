@@ -49,17 +49,36 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   const router = useRouter()
   const searchParams = useSearchParams()
   const categoryParam = searchParams.get('category') || 'all'
+  const publisherParam = searchParams.get('publisher') || ''
   const [activeCategory, setActiveCategory] = useState(categoryParam)
+  const [activePublisher, setActivePublisher] = useState(publisherParam)
 
   useEffect(() => {
     setActiveCategory(categoryParam)
   }, [categoryParam])
 
+  useEffect(() => {
+    setActivePublisher(publisherParam)
+  }, [publisherParam])
+
+  const buildUrl = useCallback((params: { category?: string; publisher?: string }) => {
+    const cat = params.category ?? activeCategory
+    const pub = params.publisher ?? activePublisher
+    const parts: string[] = []
+    if (cat !== 'all') parts.push(`category=${cat}`)
+    if (pub) parts.push(`publisher=${encodeURIComponent(pub)}`)
+    return parts.length ? `/?${parts.join('&')}` : '/'
+  }, [activeCategory, activePublisher])
+
   const handleCategoryChange = useCallback((c: string) => {
     setActiveCategory(c)
-    const url = c === 'all' ? '/' : `/?category=${c}`
-    router.replace(url, { scroll: false })
-  }, [router])
+    router.replace(buildUrl({ category: c }), { scroll: false })
+  }, [router, buildUrl])
+
+  const handlePublisherClear = useCallback(() => {
+    setActivePublisher('')
+    router.replace(buildUrl({ publisher: '' }), { scroll: false })
+  }, [router, buildUrl])
   const [activeSort, setActiveSort] = useState('score-desc')
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -93,6 +112,7 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
     let result = services.filter(svc => {
       if (!activeStatuses.has(svc.status)) return false
       if (activeCategory !== 'all' && svc.category !== activeCategory) return false
+      if (activePublisher && svc.publisher !== activePublisher) return false
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
         return svc.name.toLowerCase().includes(q) ||
@@ -120,12 +140,12 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
     }
 
     return result
-  }, [services, searchQuery, activeStatuses, activeCategory, activeSort])
+  }, [services, searchQuery, activeStatuses, activeCategory, activePublisher, activeSort])
 
   // Reset display count on filter change
   useEffect(() => {
     setDisplayCount(PAGE_SIZE)
-  }, [searchQuery, activeStatuses, activeCategory, activeSort])
+  }, [searchQuery, activeStatuses, activeCategory, activePublisher, activeSort])
 
   // Infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -158,6 +178,8 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
         onToggleStatus={toggleStatus}
         activeCategory={activeCategory}
         onCategoryChange={handleCategoryChange}
+        activePublisher={activePublisher}
+        onPublisherClear={handlePublisherClear}
         activeSort={activeSort}
         onSortChange={s => setActiveSort(s)}
         searchInputRef={searchInputRef}

@@ -12,6 +12,8 @@ interface SearchToolbarProps {
   onToggleStatus: (s: string) => void
   activeCategory: string
   onCategoryChange: (c: string) => void
+  activePublisher?: string
+  onPublisherClear?: () => void
   activeSort: string
   onSortChange: (s: string) => void
   searchInputRef?: React.RefObject<HTMLInputElement | null>
@@ -175,6 +177,19 @@ export default function SearchToolbar(props: SearchToolbarProps) {
             </button>
           )}
         </div>
+
+        {/* Active publisher filter chip */}
+        {props.activePublisher && (
+          <button
+            onClick={props.onPublisherClear}
+            className="inline-flex items-center gap-1.5 font-mono text-[0.68rem] font-medium text-fabric-800 bg-[rgba(61,138,247,0.08)] border border-[rgba(61,138,247,0.2)] rounded-lg px-2.5 py-[7px] cursor-pointer transition-all hover:bg-[rgba(61,138,247,0.14)]"
+          >
+            <span className="text-fabric-500">Publisher:</span> {props.activePublisher}
+            <svg className="w-3 h-3 text-fabric-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18" /><path d="M6 6l12 12" />
+            </svg>
+          </button>
+        )}
 
         {/* Filters row — spread full width on mobile */}
         <div className="contents max-md:!flex max-md:w-full max-md:gap-2 max-md:[&>*]:flex-1">
