@@ -13,88 +13,7 @@ const COLOR_HEX = {
   red: '#d03a3d',
 } as const
 
-export async function GET(request: NextRequest) {
-  const level = request.nextUrl.searchParams.get('level') ?? '1'
-
-  // Level 1: minimal (already works)
-  if (level === '1') {
-    return new ImageResponse(
-      (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#ffffff', fontSize: 64 }}>
-          OG Test Level 1
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    )
-  }
-
-  // Level 2: use getScoreColor
-  if (level === '2') {
-    const color = COLOR_HEX[getScoreColor(4.5)]
-    return new ImageResponse(
-      (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: color, fontSize: 64 }}>
-          Score Color: {color}
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    )
-  }
-
-  // Level 3: fetch from supabase REST
-  if (level === '3') {
-    const url = `${SUPABASE_URL}/rest/v1/services?slug=eq.agentmail&select=name,composite_score&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    })
-    const rows = await res.json()
-    const name = rows?.[0]?.name ?? 'not found'
-    return new ImageResponse(
-      (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#ffffff', fontSize: 48 }}>
-          Fetched: {name}
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    )
-  }
-
-  // Level 4: fetch + getScoreColor + complex JSX
-  if (level === '4') {
-    const url = `${SUPABASE_URL}/rest/v1/services?slug=eq.agentmail&select=name,composite_score&limit=1`
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    })
-    const rows = await res.json()
-    const score = rows?.[0]?.composite_score ?? 0
-    const color = COLOR_HEX[getScoreColor(score)]
-    return new ImageResponse(
-      (
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: 48 }}>
-          <div style={{ display: 'flex', fontSize: 48, color: '#ffffff', fontWeight: 700 }}>
-            {rows?.[0]?.name ?? 'unknown'}
-          </div>
-          <div style={{ display: 'flex', fontSize: 32, color: color, marginTop: 16 }}>
-            Score: {score.toFixed(2)}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', marginTop: 24 }}>
-            <div style={{ display: 'flex', width: 400, height: 20, backgroundColor: '#1a1a16', borderRadius: 10 }}>
-              <div style={{ width: Math.max((score / 5) * 400, 4), height: 20, backgroundColor: color, borderRadius: 10 }} />
-            </div>
-          </div>
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    )
-  }
-
-  // Level 5: full render like the slug route
+async function fetchService() {
   const url = `${SUPABASE_URL}/rest/v1/services?slug=eq.agentmail&select=name,composite_score,status,signal_vulnerability,signal_operational,signal_maintenance,signal_adoption,signal_transparency,signal_publisher_trust,category,publisher:publishers!services_publisher_id_fkey(name)&limit=1`
   const res = await fetch(url, {
     headers: {
@@ -103,14 +22,15 @@ export async function GET(request: NextRequest) {
     },
   })
   const rows = await res.json()
-  const service = rows?.[0]
+  return rows?.[0] ?? null
+}
+
+export async function GET(request: NextRequest) {
+  const level = request.nextUrl.searchParams.get('level') ?? '1'
+  const service = await fetchService()
   if (!service) {
     return new ImageResponse(
-      (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#787874', fontSize: 24 }}>
-          Not found
-        </div>
-      ),
+      (<div style={{ width: '100%', height: '100%', display: 'flex', backgroundColor: '#0a0a0a', color: '#fff', fontSize: 24 }}>No data</div>),
       { width: 1200, height: 630 }
     )
   }
@@ -120,7 +40,6 @@ export async function GET(request: NextRequest) {
   const pub = service.publisher
   const publisherName: string = Array.isArray(pub) ? (pub[0]?.name ?? '') : (pub?.name ?? '')
   const statusLabel = (service.status ?? 'pending').toUpperCase()
-
   const signals = [
     { key: 'vuln', label: 'Vulnerability & Safety', score: service.signal_vulnerability ?? 0 },
     { key: 'ops', label: 'Operational Health', score: service.signal_operational ?? 0 },
@@ -130,6 +49,118 @@ export async function GET(request: NextRequest) {
     { key: 'pub', label: 'Publisher Trust', score: service.signal_publisher_trust ?? 0 },
   ]
 
+  // Level 5a: signals with map (no circle, no footer, no absolute)
+  if (level === '5a') {
+    return new ImageResponse(
+      (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: '48px 56px' }}>
+          <div style={{ display: 'flex', fontSize: 48, fontWeight: 700, color: '#ffffff', marginBottom: 40 }}>
+            {service.name}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {signals.map((sig) => {
+              const c = COLOR_HEX[getScoreColor(sig.score)]
+              return (
+                <div key={sig.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: '#787874', width: 190 }}>{sig.label}</div>
+                  <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
+                    <div style={{ width: `${Math.max((sig.score / 5) * 100, 2)}%`, height: 14, backgroundColor: c, borderRadius: 7 }} />
+                  </div>
+                  <div style={{ fontSize: 14, color: c, width: 40, textAlign: 'right' }}>{sig.score.toFixed(1)}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ),
+      { width: 1200, height: 630 }
+    )
+  }
+
+  // Level 5b: two columns (signals + circle score)
+  if (level === '5b') {
+    return new ImageResponse(
+      (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: '48px 56px' }}>
+          <div style={{ display: 'flex', fontSize: 48, fontWeight: 700, color: '#ffffff', marginBottom: 40 }}>
+            {service.name}
+          </div>
+          <div style={{ display: 'flex', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 48 }}>
+              {signals.map((sig) => {
+                const c = COLOR_HEX[getScoreColor(sig.score)]
+                return (
+                  <div key={sig.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: '#787874', width: 190 }}>{sig.label}</div>
+                    <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
+                      <div style={{ width: `${Math.max((sig.score / 5) * 100, 2)}%`, height: 14, backgroundColor: c, borderRadius: 7 }} />
+                    </div>
+                    <div style={{ fontSize: 14, color: c, width: 40, textAlign: 'right' }}>{sig.score.toFixed(1)}</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 240 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 180, height: 180, borderRadius: 90, border: `6px solid ${scoreColor}` }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{score.toFixed(2)}</div>
+                  <div style={{ fontSize: 13, color: '#58584f', marginTop: 4 }}>/ 5.00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      { width: 1200, height: 630 }
+    )
+  }
+
+  // Level 5c: 5b + footer
+  if (level === '5c') {
+    return new ImageResponse(
+      (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: '48px 56px' }}>
+          <div style={{ display: 'flex', fontSize: 48, fontWeight: 700, color: '#ffffff', marginBottom: 40 }}>
+            {service.name}
+          </div>
+          <div style={{ display: 'flex', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 48 }}>
+              {signals.map((sig) => {
+                const c = COLOR_HEX[getScoreColor(sig.score)]
+                return (
+                  <div key={sig.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: '#787874', width: 190 }}>{sig.label}</div>
+                    <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
+                      <div style={{ width: `${Math.max((sig.score / 5) * 100, 2)}%`, height: 14, backgroundColor: c, borderRadius: 7 }} />
+                    </div>
+                    <div style={{ fontSize: 14, color: c, width: 40, textAlign: 'right' }}>{sig.score.toFixed(1)}</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 240 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 180, height: 180, borderRadius: 90, border: `6px solid ${scoreColor}` }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{score.toFixed(2)}</div>
+                  <div style={{ fontSize: 13, color: '#58584f', marginTop: 4 }}>/ 5.00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, paddingTop: 20, borderTop: '1px solid #1a1a16' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ width: 22, height: 22, borderRadius: 5, backgroundColor: '#58584f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#0a0a0a', marginRight: 10 }}>F</div>
+              <div style={{ fontSize: 14, color: '#58584f' }}>Fabric Layer Trust Index</div>
+            </div>
+            <div style={{ fontSize: 13, color: '#3a3a34' }}>trust.fabriclayer.ai</div>
+          </div>
+        </div>
+      ),
+      { width: 1200, height: 630 }
+    )
+  }
+
+  // Level 5d: 5c + header row + status dot + absolute top bar (full)
   return new ImageResponse(
     (
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: '48px 56px' }}>
@@ -139,9 +170,7 @@ export async function GET(request: NextRequest) {
         </div>
         <div style={{ display: 'flex', flex: 1 }}>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 48 }}>
-            <div style={{ fontSize: 48, fontWeight: 700, color: '#ffffff', lineHeight: 1.1, marginBottom: 40 }}>
-              {service.name}
-            </div>
+            <div style={{ fontSize: 48, fontWeight: 700, color: '#ffffff', lineHeight: 1.1, marginBottom: 40 }}>{service.name}</div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {signals.map((sig) => {
                 const c = COLOR_HEX[getScoreColor(sig.score)]
