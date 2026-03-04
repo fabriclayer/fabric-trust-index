@@ -4,7 +4,7 @@ import { logApiUsage } from '@/lib/api-usage'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-4-5-20250929'
-const MAX_TOKENS = 150
+const MAX_TOKENS = 350
 
 const SYSTEM_PROMPT = `Write a 2-3 sentence trust assessment (50-75 words max) for the given service.
 
