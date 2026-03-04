@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { addDiscoveredService, classifyCategory, deriveCapabilities } from '@/lib/discovery/pipeline'
 import { resolveServiceMetadata } from '@/lib/discovery/enrich'
@@ -68,23 +69,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Failed to add service: ${insertResult}` }, { status: 500 })
     }
     isRescore = true
+
+    // Log re-score to discovery_queue so it appears in Added Services list
+    await supabase.from('discovery_queue').insert({
+      source: 'monitor:manual',
+      query: name,
+      package_name: name,
+      status: 'completed',
+      result: { slug, name, category },
+      processed_at: new Date().toISOString(),
+    })
   }
 
-  // Fetch the service and score it
+  // Fetch the service for scoring
   const { data: service } = await supabase
     .from('services')
     .select('*')
     .eq('slug', slug)
     .single()
 
-  let scoring = { success: [] as string[], failed: [] as string[] }
-  if (service) {
-    try {
-      scoring = await runAllCollectors(service)
-    } catch (err) {
-      console.error(`Scoring failed for ${slug}:`, err)
+  // Score in the background so the form responds immediately
+  after(async () => {
+    if (service) {
+      try {
+        await runAllCollectors(service)
+      } catch (err) {
+        console.error(`Scoring failed for ${slug}:`, err)
+      }
     }
-  }
+  })
 
   return NextResponse.json({
     ok: true,
@@ -95,9 +108,6 @@ export async function POST(request: NextRequest) {
       npm_package: enriched.npm_package || undefined,
       pypi_package: enriched.pypi_package || undefined,
     },
-    scoring: {
-      success: scoring.success,
-      failed: scoring.failed,
-    },
+    scoring: { queued: true },
   })
 }
