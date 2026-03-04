@@ -468,8 +468,14 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     modifiers.push('vulnerability_patch_available')
   }
 
-  // Recompute composite score with weight redistribution
-  const signalInputs = signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
+  // Recompute composite score with weight redistribution.
+  // Safety: a score of 0 is always treated as "has data" — it's a genuine penalty,
+  // not missing data. Without this, signals returning 0 with has_data=false get their
+  // weight redistributed, inflating the composite score.
+  const signalInputs = signals.map((score, i) => ({
+    score,
+    has_data: signalHasData[i] || score === 0,
+  }))
   const { score: compositeScore } = computeCompositeWithRedistribution(signalInputs)
 
   // Override rules

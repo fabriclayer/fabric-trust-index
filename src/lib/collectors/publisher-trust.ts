@@ -127,10 +127,13 @@ export const publisherTrustCollector: Collector = {
       signal_name: 'publisher_trust',
       score: 0,
       sub_signals: [
-        { name: 'track_record', score: 0, weight: 0.30, has_data: false },
-        { name: 'org_maturity', score: 0, weight: 0.30, has_data: false },
-        { name: 'community_standing', score: 0, weight: 0.20, has_data: false },
-        { name: 'cross_platform_presence', score: 0, weight: 0.20, has_data: false },
+        // has_data: true — an unverifiable publisher IS a data point (negative signal).
+        // Without this, the 0.15 weight gets redistributed to other signals,
+        // inflating the composite score for services with unknown publishers.
+        { name: 'track_record', score: 0, weight: 0.30, has_data: true },
+        { name: 'org_maturity', score: 0, weight: 0.30, has_data: true },
+        { name: 'community_standing', score: 0, weight: 0.20, has_data: true },
+        { name: 'cross_platform_presence', score: 0, weight: 0.20, has_data: true },
       ],
       metadata: {},
       sources: [],
