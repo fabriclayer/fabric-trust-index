@@ -1039,22 +1039,14 @@ export default function ProductPageClient({
                 const signalData = service.signal_scores?.[key]
                 const isLowScore = service.signals[i] < 3.00
                 const isFirst = i === 0
-                return signalData?.sub_signals ? (
+                return (
                   <SignalCard
                     key={key}
                     signalKey={key}
                     score={service.signals[i]}
                     weight={SIGNAL_LABELS[i].weight}
-                    subSignals={signalData.sub_signals}
+                    subSignals={signalData?.sub_signals ?? []}
                     defaultExpanded={false}
-                  />
-                ) : (
-                  <SignalRow
-                    key={key}
-                    name={SIGNAL_LABELS[i].name}
-                    score={service.signals[i]}
-                    weight={SIGNAL_LABELS[i].weight}
-                    detail={SIGNAL_LABELS[i].detail}
                   />
                 )
               })}
