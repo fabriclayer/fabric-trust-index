@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { addDiscoveredService, classifyCategory, deriveCapabilities } from '@/lib/discovery/pipeline'
 import { resolveServiceMetadata } from '@/lib/discovery/enrich'
 import { runAllCollectors } from '@/lib/collectors/runner'
+import { generateAssessment } from '@/lib/assessment-generator'
 
 export const maxDuration = 300
 
@@ -101,13 +102,18 @@ export async function POST(request: NextRequest) {
     .eq('slug', slug)
     .single()
 
-  // Score in the background so the form responds immediately
+  // Score and generate assessment in the background so the form responds immediately
   after(async () => {
     if (service) {
       try {
         await runAllCollectors(service)
       } catch (err) {
         console.error(`Scoring failed for ${slug}:`, err)
+      }
+      try {
+        await generateAssessment(service.id)
+      } catch (err) {
+        console.error(`Assessment failed for ${slug}:`, err)
       }
     }
   })
