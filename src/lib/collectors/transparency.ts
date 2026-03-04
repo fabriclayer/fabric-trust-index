@@ -206,7 +206,16 @@ export const transparencyCollector: Collector = {
     }
 
     // ── Sub-signal 3: security_policy (0.20) ──
-    const hasSecurity = await githubExists(`/repos/${repo}/contents/SECURITY.md`)
+    let hasSecurity = await githubExists(`/repos/${repo}/contents/SECURITY.md`)
+    let securitySource = 'repo'
+
+    // Fallback: check org-level .github repo (GitHub inheritance)
+    if (!hasSecurity) {
+      const org = repo.split('/')[0]
+      hasSecurity = await githubExists(`/repos/${org}/.github/contents/SECURITY.md`)
+      if (hasSecurity) securitySource = 'org'
+    }
+
     checklist.security_md = hasSecurity
 
     const securityPolicySubSignal: SubSignalScore = {
@@ -214,7 +223,9 @@ export const transparencyCollector: Collector = {
       score: hasSecurity ? 5.0 : 2.0,
       weight: 0.20,
       has_data: true,
-      detail: hasSecurity ? 'SECURITY.md present' : 'No SECURITY.md found',
+      detail: hasSecurity
+        ? (securitySource === 'org' ? 'SECURITY.md inherited from org .github repo' : 'SECURITY.md present')
+        : 'No SECURITY.md found',
     }
 
     // ── Sub-signal 4: changelog (0.25) ──
