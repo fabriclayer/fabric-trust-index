@@ -191,21 +191,14 @@ export async function getServiceBySlug(slug: string): Promise<Service | null> {
 }
 
 /** Global rank: count visible services with a higher composite_score + 1 */
-export async function getServiceRank(slug: string): Promise<number | null> {
+export async function getServiceRank(score: number): Promise<number | null> {
   const supabase = createAnonClient()
-  const { data: svc } = await supabase
-    .from('services')
-    .select('composite_score')
-    .eq('slug', slug)
-    .single()
-  if (!svc) return null
-
   const { count, error } = await supabase
     .from('services')
     .select('id', { count: 'exact', head: true })
     .neq('status', 'pending')
     .or('npm_package.not.is.null,github_repo.not.is.null,endpoint_url.not.is.null,pypi_package.not.is.null,homepage_url.not.is.null')
-    .gt('composite_score', svc.composite_score)
+    .gt('composite_score', score)
 
   if (error || count === null) return null
   return count + 1

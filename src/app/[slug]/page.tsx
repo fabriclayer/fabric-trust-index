@@ -101,7 +101,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const { getServiceRank } = await import('@/lib/services')
   const [detailData, rank] = await Promise.all([
     service.id ? loadDetailData(service.id) : Promise.resolve(null),
-    getServiceRank(slug),
+    getServiceRank(service.score),
   ])
   if (rank) service.rank = rank
 
