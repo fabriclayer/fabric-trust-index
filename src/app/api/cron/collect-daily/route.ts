@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       query = query.is('signal_scores', null)
     }
     const { data: services, count } = await query
-      .order('id', { ascending: true })
+      .order('composite_score', { ascending: false, nullsFirst: false })
       .range(offset, offset + batchSize - 1)
 
     if (!services || services.length === 0) {
