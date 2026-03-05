@@ -1133,7 +1133,7 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
             <input value={form.homepage_url} onChange={e => setForm(p => ({ ...p, homepage_url: e.target.value }))} placeholder="https://..." style={inputStyle} />
           </div>
         </div>
-        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t4, marginTop: 8 }}>Slug, publisher, category, description, npm/pypi packages are resolved automatically via enrichment pipeline</div>
+        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t4, marginTop: 8 }}>Slug, publisher, category, description, logo, docs, social links, npm/pypi packages are resolved automatically via enrichment pipeline</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
           <button type="submit" disabled={submitting || !form.name} style={{
             fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: '#fff', background: C.blue,

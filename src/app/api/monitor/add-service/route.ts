@@ -15,7 +15,14 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, github_repo, homepage_url } = body
+  const { name, homepage_url } = body
+  // Normalize github_repo: strip full URL to owner/repo format
+  let github_repo: string | undefined = body.github_repo
+  if (github_repo) {
+    github_repo = github_repo
+      .replace(/^https?:\/\/github\.com\//, '')
+      .replace(/\/$/, '')
+  }
 
   if (!name) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -28,31 +35,34 @@ export async function POST(request: NextRequest) {
   const githubOrg = github_repo ? github_repo.split('/')[0] : undefined
   const publisher = githubOrg || name
 
-  // Auto-detect category from any available info
-  const category = classifyCategory([], slug)
-
-  // Run enrichment to find npm/pypi packages
+  // Run enrichment to discover metadata from GitHub, npm, PyPI
   const enriched = await resolveServiceMetadata({
     slug,
     name,
     github_org: githubOrg,
     github_repo: github_repo || undefined,
+    homepage_url: homepage_url || undefined,
   })
+
+  // Use enriched topics + slug for better category classification
+  const categoryKeywords = enriched.category_keywords ?? []
+  const category = classifyCategory(categoryKeywords, slug)
 
   const insertResult = await addDiscoveredService({
     name,
     slug,
     publisher,
-    description: '',
+    description: enriched.description || '',
     category,
     npm_package: enriched.npm_package,
     pypi_package: enriched.pypi_package,
     github_repo: github_repo || enriched.github_repo || undefined,
     github_org: githubOrg,
     source: 'monitor:manual',
-    capabilities: deriveCapabilities([]),
-    tags: [],
-    homepage_url: homepage_url || undefined,
+    capabilities: deriveCapabilities(categoryKeywords),
+    tags: categoryKeywords,
+    homepage_url: homepage_url || enriched.homepage_url || undefined,
+    language: enriched.language,
   })
 
   const supabase = createServerClient()
@@ -95,6 +105,30 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  // Apply enriched metadata to the service record
+  const metaUpdates: Record<string, string | null> = {}
+  if (enriched.description && !isRescore) metaUpdates.description = enriched.description
+  if (enriched.logo_url) metaUpdates.logo_url = enriched.logo_url
+  if (enriched.docs_url) metaUpdates.docs_url = enriched.docs_url
+  if (enriched.x_url) metaUpdates.x_url = enriched.x_url
+  if (enriched.discord_url) metaUpdates.discord_url = enriched.discord_url
+  if (enriched.license) metaUpdates.license = enriched.license
+  if (enriched.endpoint_url) metaUpdates.endpoint_url = enriched.endpoint_url
+  if (Object.keys(metaUpdates).length > 0) {
+    await supabase.from('services').update(metaUpdates).eq('slug', slug)
+  }
+
+  // Also update publisher with website_url if we found a homepage
+  if (enriched.homepage_url || homepage_url) {
+    const { data: svc } = await supabase.from('services').select('publisher_id').eq('slug', slug).single()
+    if (svc?.publisher_id) {
+      const { data: pub } = await supabase.from('publishers').select('website_url').eq('id', svc.publisher_id).single()
+      if (pub && !pub.website_url) {
+        await supabase.from('publishers').update({ website_url: homepage_url || enriched.homepage_url }).eq('id', svc.publisher_id)
+      }
+    }
+  }
+
   // Fetch the service for scoring
   const { data: service } = await supabase
     .from('services')
@@ -126,6 +160,13 @@ export async function POST(request: NextRequest) {
       github_repo: enriched.github_repo || undefined,
       npm_package: enriched.npm_package || undefined,
       pypi_package: enriched.pypi_package || undefined,
+      description: enriched.description ? true : undefined,
+      logo_url: enriched.logo_url ? true : undefined,
+      docs_url: enriched.docs_url || undefined,
+      x_url: enriched.x_url || undefined,
+      discord_url: enriched.discord_url || undefined,
+      license: enriched.license || undefined,
+      language: enriched.language || undefined,
     },
     scoring: { queued: true },
   })
