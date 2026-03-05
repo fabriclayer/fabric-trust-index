@@ -212,13 +212,7 @@ export const publisherTrustCollector: Collector = {
     // Use the higher of internal vs external
     trackRecordScore = Math.max(internalScore, externalScore)
 
-    // Verified publisher floor
-    if (publisher.verified_publisher) {
-      trackRecordScore = Math.max(trackRecordScore, 4.0)
-      metadata.verified_publisher = true
-    }
-
-    trackRecordDetail = `Internal: ${internalScore.toFixed(1)} (${siblingCount} services), External: ${externalScore.toFixed(1)} (${followers} followers, ${totalOrgStars} stars)${publisher.verified_publisher ? ', verified' : ''}`
+    trackRecordDetail = `Internal: ${internalScore.toFixed(1)} (${siblingCount} services), External: ${externalScore.toFixed(1)} (${followers} followers, ${totalOrgStars} stars)`
 
     // ── Sub-signal 2: org_maturity (0.30) ──
     let orgMaturityScore = 0
