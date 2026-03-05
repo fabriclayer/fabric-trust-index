@@ -13,26 +13,29 @@ const COLOR_HEX = {
   red: '#d03a3d',
 } as const
 
-const SIGNAL_LABELS: Record<string, string> = {
-  vulnerability: 'Vulnerability & Safety',
-  operational: 'Operational Health',
-  maintenance: 'Maintenance Activity',
-  adoption: 'Adoption',
-  transparency: 'Transparency',
-  publisher_trust: 'Publisher Trust',
+const RATING_PATH = "M0,14.57v94.17c0,8.05,6.52,14.57,14.57,14.57h94.17c8.05,0,14.57-6.52,14.57-14.57V14.57c0-8.05-6.52-14.57-14.57-14.57H14.57C6.52,0,0,6.52,0,14.57ZM72.96,19.4l7.51,5.41-3.57,30.98,16.03-21.88,6.81,4.91-16.79,23.14-13.59-9.91,3.6-32.65ZM31.62,33.12l28.33,12.98-15.83-22.06,6.82-4.91,16.79,23.08-13.61,9.92-29.9-13.51,7.4-5.5ZM24.42,82.22l21.23-23.06-25.9,8.28-2.63-7.97,27.17-8.81,5.18,15.99-22.09,24.25-2.96-8.68ZM68.91,104.19l-15.35-27.39-.1,27.29-8.49.04v-28.57s16.89-.04,16.89-.04l16.22,28.51-9.17.16ZM103.46,68.68l-30.49,6.14,25.61,8.48-2.51,8.04-27.14-8.8,5.19-16.02,32.08-6.63-2.74,8.79Z"
+
+const LETTER_COLORS = [
+  { bg: '#EEF2FF', text: '#4338CA' },
+  { bg: '#F0FDF4', text: '#166534' },
+  { bg: '#FFF7ED', text: '#C2410C' },
+  { bg: '#FDF2F8', text: '#BE185D' },
+  { bg: '#F0F9FF', text: '#0369A1' },
+  { bg: '#FEF3C7', text: '#B45309' },
+  { bg: '#F5F3FF', text: '#7C3AED' },
+  { bg: '#ECFDF5', text: '#047857' },
+  { bg: '#FFF1F2', text: '#BE123C' },
+  { bg: '#E0F2FE', text: '#0C4A6E' },
+]
+
+function nameToColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return LETTER_COLORS[Math.abs(hash) % LETTER_COLORS.length]
 }
 
-const SIGNAL_KEYS = [
-  'vulnerability',
-  'operational',
-  'maintenance',
-  'adoption',
-  'transparency',
-  'publisher_trust',
-] as const
-
 async function fetchService(slug: string) {
-  const url = `${SUPABASE_URL}/rest/v1/services?slug=eq.${encodeURIComponent(slug)}&select=name,composite_score,status,signal_vulnerability,signal_operational,signal_maintenance,signal_adoption,signal_transparency,signal_publisher_trust,category,publisher:publishers!services_publisher_id_fkey(name)&limit=1`
+  const url = `${SUPABASE_URL}/rest/v1/services?slug=eq.${encodeURIComponent(slug)}&select=name,composite_score,status,category,description,logo_url,github_repo,publisher:publishers!services_publisher_id_fkey(name)&limit=1`
   const res = await fetch(url, {
     headers: {
       apikey: SUPABASE_ANON_KEY,
@@ -42,6 +45,30 @@ async function fetchService(slug: string) {
   if (!res.ok) return null
   const rows = await res.json()
   return rows?.[0] ?? null
+}
+
+async function fetchRank(score: number): Promise<number> {
+  const url = `${SUPABASE_URL}/rest/v1/services?select=id&status=neq.pending&or=(npm_package.not.is.null,github_repo.not.is.null,endpoint_url.not.is.null,pypi_package.not.is.null,homepage_url.not.is.null)&composite_score=gt.${score}`
+  const res = await fetch(url, {
+    method: 'HEAD',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Prefer: 'count=exact',
+    },
+  })
+  const range = res.headers.get('content-range') ?? ''
+  const total = parseInt(range.split('/')[1] ?? '0', 10)
+  return (isNaN(total) ? 0 : total) + 1
+}
+
+function getLogoUrl(service: { logo_url?: string; github_repo?: string }): string | null {
+  if (service.logo_url) return service.logo_url
+  if (service.github_repo) {
+    const owner = service.github_repo.split('/')[0]
+    if (owner) return `https://github.com/${owner}.png?size=160`
+  }
+  return null
 }
 
 export async function GET(
@@ -54,7 +81,7 @@ export async function GET(
   if (!service) {
     return new ImageResponse(
       (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#787874', fontSize: 24 }}>
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', color: '#a0a09c', fontSize: 24, fontFamily: 'sans-serif' }}>
           Service not found
         </div>
       ),
@@ -63,68 +90,221 @@ export async function GET(
   }
 
   const score = service.composite_score ?? 0
+  const status = service.status ?? 'pending'
   const scoreColor = COLOR_HEX[getScoreColor(score)]
   const pub = service.publisher
   const publisherName: string = Array.isArray(pub) ? (pub[0]?.name ?? '') : (pub?.name ?? '')
+  const description = (service.description ?? '').slice(0, 160)
+  const category = (service.category ?? 'infra').replace(/-/g, ' ')
+  const logoUrl = getLogoUrl(service)
 
-  const signals = SIGNAL_KEYS.map((key) => ({
-    key,
-    label: SIGNAL_LABELS[key],
-    score: (service[`signal_${key}`] as number) ?? 0,
-  }))
+  const rank = await fetchRank(score)
+
+  // Build rating boxes
+  const full = Math.floor(score)
+  const frac = score - full
+  const boxSize = 44
+  const boxGap = 8
+
+  const ratingBoxes = []
+  for (let i = 1; i <= 5; i++) {
+    let fillPct = 0
+    if (i <= full) fillPct = 100
+    else if (i === full + 1) fillPct = Math.round(frac * 100)
+
+    ratingBoxes.push(
+      <div key={i} style={{ display: 'flex', position: 'relative', width: boxSize, height: boxSize, flexShrink: 0 }}>
+        {/* Gray background */}
+        <svg viewBox="0 0 123.32 123.32" width={boxSize} height={boxSize} style={{ position: 'absolute', top: 0, left: 0 }}>
+          <path d={RATING_PATH} fill="#e6e6e6" />
+        </svg>
+        {/* Colored fill */}
+        {fillPct > 0 && (
+          <div style={{ display: 'flex', position: 'absolute', top: 0, left: 0, width: `${fillPct}%`, height: '100%', overflow: 'hidden' }}>
+            <svg viewBox="0 0 123.32 123.32" width={boxSize} height={boxSize} style={{ flexShrink: 0 }}>
+              <path d={RATING_PATH} fill={scoreColor} />
+            </svg>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Logo element
+  const logoElement = logoUrl ? (
+    <img
+      src={logoUrl}
+      width={80}
+      height={80}
+      style={{
+        borderRadius: 20,
+        border: '1px solid #e8e8e6',
+        objectFit: 'cover',
+        flexShrink: 0,
+      }}
+    />
+  ) : (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 80,
+      height: 80,
+      borderRadius: 20,
+      backgroundColor: nameToColor(service.name).bg,
+      color: nameToColor(service.name).text,
+      fontSize: 32,
+      fontWeight: 600,
+      flexShrink: 0,
+      border: `1px solid ${nameToColor(service.name).text}20`,
+    }}>
+      {service.name.replace(/^@/, '').charAt(0).toUpperCase()}
+    </div>
+  )
 
   return new ImageResponse(
     (
-      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', padding: '48px 56px' }}>
-        {/* Top bar accent (flow, not absolute) */}
-        <div style={{ display: 'flex', width: 1200, height: 4, backgroundColor: scoreColor, marginTop: -48, marginLeft: -56, marginBottom: 44 }} />
-
-        {/* Title + publisher */}
-        <div style={{ display: 'flex', fontSize: 48, fontWeight: 700, color: '#ffffff', marginBottom: 8 }}>
-          {service.name.length > 30 ? service.name.slice(0, 28) + '...' : service.name}
-        </div>
-        {publisherName ? (
-          <div style={{ display: 'flex', fontSize: 14, color: '#58584f', marginBottom: 32 }}>by {publisherName}</div>
-        ) : (
-          <div style={{ display: 'flex', marginBottom: 32 }} />
-        )}
-
-        {/* Main content */}
-        <div style={{ display: 'flex', flex: 1 }}>
-          {/* Left: signal bars */}
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 48 }}>
-            {signals.map((sig) => {
-              const c = COLOR_HEX[getScoreColor(sig.score)]
-              return (
-                <div key={sig.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, color: '#787874', width: 190 }}>{sig.label}</div>
-                  <div style={{ display: 'flex', flex: 1, height: 14, backgroundColor: '#1a1a16', borderRadius: 7 }}>
-                    <div style={{ width: `${Math.max((sig.score / 5) * 100, 2)}%`, height: 14, backgroundColor: c, borderRadius: 7 }} />
-                  </div>
-                  <div style={{ fontSize: 14, color: c, width: 40, textAlign: 'right' }}>{sig.score.toFixed(1)}</div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Right: score circle */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 240 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 180, height: 180, borderRadius: 90, border: `6px solid ${scoreColor}` }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{score.toFixed(2)}</div>
-                <div style={{ fontSize: 13, color: '#58584f', marginTop: 4 }}>/ 5.00</div>
+      <div style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f5f5f3',
+        padding: 40,
+      }}>
+        {/* Card */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: '#ffffff',
+          border: '1px solid #e8e8e6',
+          borderRadius: 24,
+          padding: '48px 56px',
+          width: 1120,
+          height: 550,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+        }}>
+          {/* Header: Logo + Name + Publisher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
+            {logoElement}
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+              <div style={{
+                display: 'flex',
+                fontSize: 40,
+                fontWeight: 700,
+                color: '#0a0a0a',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+              }}>
+                {service.name.length > 36 ? service.name.slice(0, 34) + '...' : service.name}
               </div>
+              {publisherName && (
+                <div style={{
+                  display: 'flex',
+                  fontSize: 18,
+                  color: '#a0a09c',
+                  marginTop: 4,
+                }}>
+                  {publisherName}
+                </div>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, paddingTop: 20, borderTop: '1px solid #1a1a16' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ width: 22, height: 22, borderRadius: 5, backgroundColor: '#58584f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#0a0a0a', marginRight: 10 }}>F</div>
-            <div style={{ fontSize: 14, color: '#58584f' }}>Fabric Layer Trust Index</div>
+          {/* Rank + Category */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{
+              display: 'flex',
+              fontSize: 16,
+              fontWeight: 600,
+              color: scoreColor,
+            }}>
+              #{rank}
+            </div>
+            <div style={{
+              display: 'flex',
+              fontSize: 13,
+              fontWeight: 500,
+              color: '#c8c8c4',
+              border: '1px solid #e8e8e6',
+              borderRadius: 20,
+              padding: '4px 14px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}>
+              {category}
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: '#3a3a34' }}>trust.fabriclayer.ai</div>
+
+          {/* Description */}
+          <div style={{
+            display: 'flex',
+            fontSize: 22,
+            lineHeight: 1.5,
+            color: '#58584f',
+            flex: 1,
+          }}>
+            {description || 'No description available.'}
+          </div>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', width: '100%', height: 1, backgroundColor: '#f0f0ee', marginBottom: 24 }} />
+
+          {/* Rating boxes + Score + Beta */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
+            {ratingBoxes}
+            <div style={{
+              display: 'flex',
+              fontSize: 36,
+              fontWeight: 700,
+              color: scoreColor,
+              marginLeft: 12,
+              letterSpacing: '-0.02em',
+            }}>
+              {score.toFixed(2)}
+            </div>
+            <div style={{
+              display: 'flex',
+              fontSize: 10,
+              fontWeight: 600,
+              color: '#a0a09c',
+              border: '1px solid #e8e8e6',
+              borderRadius: 4,
+              padding: '2px 6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginLeft: 'auto',
+            }}>
+              Beta
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                backgroundColor: '#0a0a0a',
+                color: '#ffffff',
+                fontSize: 14,
+                fontWeight: 700,
+              }}>
+                F
+              </div>
+              <div style={{ display: 'flex', fontSize: 14, color: '#a0a09c' }}>
+                Fabric Layer Trust Index
+              </div>
+            </div>
+            <div style={{ display: 'flex', fontSize: 14, color: '#c8c8c4' }}>
+              trust.fabriclayer.ai
+            </div>
+          </div>
         </div>
       </div>
     ),
