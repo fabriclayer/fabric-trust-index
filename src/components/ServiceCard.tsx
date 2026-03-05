@@ -39,7 +39,7 @@ export default function ServiceCard({ service }: { service: Service }) {
 
       <div className="flex items-center gap-1.5">
         {service.rank != null && (
-          <span className="font-mono text-[0.64rem] text-[#fe83e0] font-medium">#{service.rank}</span>
+          <span className={`font-mono text-[0.64rem] font-medium ${scoreNumColor[service.status] || 'text-fabric-400'}`}>#{service.rank}</span>
         )}
         <CategoryTag tag={service.tag} category={service.category} />
       </div>
