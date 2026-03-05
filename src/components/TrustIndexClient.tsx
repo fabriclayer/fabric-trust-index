@@ -44,12 +44,13 @@ export default function TrustIndexClient({ services, incidents = [] }: { service
   }, [])
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(queryParam)
   const [activeStatuses, setActiveStatuses] = useState<Set<string>>(new Set(['trusted', 'caution', 'blocked']))
   const router = useRouter()
   const searchParams = useSearchParams()
   const categoryParam = searchParams.get('category') || 'all'
   const publisherParam = searchParams.get('publisher') || ''
+  const queryParam = searchParams.get('q') || ''
   const [activeCategory, setActiveCategory] = useState(categoryParam)
   const [activePublisher, setActivePublisher] = useState(publisherParam)
 
