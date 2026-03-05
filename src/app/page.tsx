@@ -11,7 +11,7 @@ async function loadIncidents() {
   return await getRecentIncidents(50)
 }
 
-export const revalidate = 600 // ISR: revalidate every 10 minutes
+export const revalidate = 120 // ISR: revalidate every 2 minutes
 
 export default async function TrustIndexPage() {
   try {
