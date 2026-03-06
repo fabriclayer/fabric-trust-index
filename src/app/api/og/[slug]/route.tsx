@@ -254,24 +254,18 @@ export async function GET(
               </div>
               <div style={{
                 display: 'flex',
-                fontSize: 10,
+                fontSize: 30,
                 fontWeight: 600,
                 color: '#a0a09c',
                 border: '1px solid #e8e8e6',
-                borderRadius: 4,
-                padding: '2px 6px',
+                borderRadius: 8,
+                padding: '6px 16px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
                 marginLeft: 'auto',
+                alignSelf: 'flex-end',
               }}>
                 Beta
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <div style={{ display: 'flex', fontSize: 14, color: '#c8c8c4' }}>
-                trust.fabriclayer.ai
               </div>
             </div>
           </div>
