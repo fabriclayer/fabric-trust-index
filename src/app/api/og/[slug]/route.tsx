@@ -180,7 +180,7 @@ export async function GET(
           backgroundColor: '#ffffff',
           border: '1px solid #e8e8e6',
           borderRadius: 24,
-          padding: '48px 56px 24px',
+          padding: '48px 56px 14px',
           width: 1120,
           height: 550,
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
