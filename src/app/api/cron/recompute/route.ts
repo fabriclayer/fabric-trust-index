@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
         genuineZeros.push(SIGNAL_ORDER[i])
       }
     }
-    if (status === 'trusted' && genuineZeros.length > 0) {
+    if (!service.skip_zero_cap && status === 'trusted' && genuineZeros.length > 0) {
       status = 'caution'
       modifiers.push('zero_signal_override')
     }
@@ -291,17 +291,19 @@ export async function POST(request: NextRequest) {
       finalScore = Math.min(finalScore, 0.99)
     } else if (modifiers.includes('vulnerability_patch_available')) {
       finalScore = Math.min(finalScore, 2.99)
-    } else if (modifiers.includes('zero_signal_override')) {
+    } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
       finalScore = Math.min(finalScore, 2.99)
     }
 
     // Trusted gate: must have vuln data + 4 signals with data to be trusted
     const signalsWithData = signalHasData.filter(Boolean).length
-    const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithData)
-    if (gateResult.gated) {
-      finalScore = gateResult.score
-      status = gateResult.status as 'trusted' | 'caution' | 'blocked'
-      modifiers.push('trusted_gate')
+    if (!service.skip_zero_cap) {
+      const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithData)
+      if (gateResult.gated) {
+        finalScore = gateResult.score
+        status = gateResult.status as 'trusted' | 'caution' | 'blocked'
+        modifiers.push('trusted_gate')
+      }
     }
 
     // Update the service
