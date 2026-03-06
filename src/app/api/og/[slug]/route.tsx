@@ -186,7 +186,7 @@ export async function GET(
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
         }}>
           {/* Header: Logo + Name */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
             {logoElement}
             <div style={{
               display: 'flex',
