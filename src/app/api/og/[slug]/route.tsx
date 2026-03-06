@@ -103,8 +103,8 @@ export async function GET(
   // Build rating boxes
   const full = Math.floor(score)
   const frac = score - full
-  const boxSize = 44
-  const boxGap = 8
+  const boxSize = 88
+  const boxGap = 12
 
   const ratingBoxes = []
   for (let i = 1; i <= 5; i++) {
@@ -134,10 +134,10 @@ export async function GET(
   const logoElement = logoUrl ? (
     <img
       src={logoUrl}
-      width={80}
-      height={80}
+      width={160}
+      height={160}
       style={{
-        borderRadius: 20,
+        borderRadius: 40,
         border: '1px solid #e8e8e6',
         objectFit: 'cover',
         flexShrink: 0,
@@ -148,12 +148,12 @@ export async function GET(
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      width: 80,
-      height: 80,
-      borderRadius: 20,
+      width: 160,
+      height: 160,
+      borderRadius: 40,
       backgroundColor: nameToColor(service.name).bg,
       color: nameToColor(service.name).text,
-      fontSize: 32,
+      fontSize: 64,
       fontWeight: 600,
       flexShrink: 0,
       border: `1px solid ${nameToColor(service.name).text}20`,
@@ -191,13 +191,13 @@ export async function GET(
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
               <div style={{
                 display: 'flex',
-                fontSize: 40,
+                fontSize: 80,
                 fontWeight: 700,
                 color: '#0a0a0a',
                 letterSpacing: '-0.02em',
                 lineHeight: 1.1,
               }}>
-                {service.name.length > 36 ? service.name.slice(0, 34) + '...' : service.name}
+                {service.name.length > 20 ? service.name.slice(0, 18) + '...' : service.name}
               </div>
               {publisherName && (
                 <div style={{
@@ -216,7 +216,7 @@ export async function GET(
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <div style={{
               display: 'flex',
-              fontSize: 16,
+              fontSize: 32,
               fontWeight: 600,
               color: scoreColor,
             }}>
@@ -256,10 +256,10 @@ export async function GET(
             {ratingBoxes}
             <div style={{
               display: 'flex',
-              fontSize: 36,
+              fontSize: 72,
               fontWeight: 700,
               color: scoreColor,
-              marginLeft: 12,
+              marginLeft: 16,
               letterSpacing: '-0.02em',
             }}>
               {score.toFixed(2)}
@@ -281,26 +281,7 @@ export async function GET(
           </div>
 
           {/* Footer */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                backgroundColor: '#0a0a0a',
-                color: '#ffffff',
-                fontSize: 14,
-                fontWeight: 700,
-              }}>
-                F
-              </div>
-              <div style={{ display: 'flex', fontSize: 14, color: '#a0a09c' }}>
-                Fabric Layer Trust Index
-              </div>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
             <div style={{ display: 'flex', fontSize: 14, color: '#c8c8c4' }}>
               trust.fabriclayer.ai
             </div>
