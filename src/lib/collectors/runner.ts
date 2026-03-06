@@ -483,7 +483,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   // 1. Zero signal override — only triggers for genuinely evaluated zeros, not defaults
   const hasGenuineZero = collectorResults.some(cr => isGenuineZero(cr))
-  if (status === 'trusted' && hasGenuineZero) {
+  if (!service.skip_zero_cap && status === 'trusted' && hasGenuineZero) {
     status = 'caution'
     modifiers.push('zero_signal_override')
   }
@@ -534,7 +534,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('vulnerability_patch_available')) {
     finalScore = Math.min(finalScore, 2.99)
-  } else if (modifiers.includes('zero_signal_override')) {
+  } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 2.99)
   }
 
@@ -554,11 +554,13 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
 
   // Trusted gate: must have vuln data + 4 signals with data to be trusted
   const signalsWithRealData = signalHasData.filter(Boolean).length
-  const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithRealData)
-  if (gateResult.gated) {
-    finalScore = gateResult.score
-    status = gateResult.status as 'trusted' | 'caution' | 'blocked'
-    modifiers.push('trusted_gate')
+  if (!service.skip_zero_cap) {
+    const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithRealData)
+    if (gateResult.gated) {
+      finalScore = gateResult.score
+      status = gateResult.status as 'trusted' | 'caution' | 'blocked'
+      modifiers.push('trusted_gate')
+    }
   }
 
   updates.raw_composite_score = compositeScore
@@ -711,7 +713,7 @@ export async function runCollectors(
     if (existingModifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
     if (existingModifiers.includes('vulnerability_patch_available')) modifiers.push('vulnerability_patch_available')
   }
-  if (!ranAll && existingModifiers.includes('zero_signal_override')) {
+  if (!service.skip_zero_cap && !ranAll && existingModifiers.includes('zero_signal_override')) {
     modifiers.push('zero_signal_override')
   }
   // Carry forward transfer/ownership/archived/deprecated modifiers
@@ -752,7 +754,7 @@ export async function runCollectors(
   let status = getStatus(compositeScore)
 
   // 1. Zero signal override — only re-evaluate if all 6 collectors ran
-  if (ranAll) {
+  if (!service.skip_zero_cap && ranAll) {
     const hasGenuineZeroPartial = collectorResults.some(cr => isGenuineZero(cr))
     if (status === 'trusted' && hasGenuineZeroPartial && !modifiers.includes('zero_signal_override')) {
       modifiers.push('zero_signal_override')
@@ -816,7 +818,7 @@ export async function runCollectors(
   if (modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
     status = 'blocked'
   }
-  if (modifiers.includes('zero_signal_override') && status === 'trusted') {
+  if (!service.skip_zero_cap && modifiers.includes('zero_signal_override') && status === 'trusted') {
     status = 'caution'
   }
   if (modifiers.includes('repo_transferred') && status === 'trusted') {
@@ -832,7 +834,7 @@ export async function runCollectors(
     finalScore = Math.min(finalScore, 0.99)
   } else if (modifiers.includes('vulnerability_patch_available')) {
     finalScore = Math.min(finalScore, 2.99)
-  } else if (modifiers.includes('zero_signal_override')) {
+  } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
     finalScore = Math.min(finalScore, 2.99)
   }
 
@@ -852,11 +854,13 @@ export async function runCollectors(
 
   // Trusted gate: must have vuln data + 4 signals with data to be trusted
   const signalsWithDataPartial = signalHasDataPartial.filter(Boolean).length
-  const gateResultPartial = applyTrustedGate(finalScore, status, signalHasDataPartial[0], signalsWithDataPartial)
-  if (gateResultPartial.gated) {
-    finalScore = gateResultPartial.score
-    status = gateResultPartial.status as 'trusted' | 'caution' | 'blocked'
-    if (!modifiers.includes('trusted_gate')) modifiers.push('trusted_gate')
+  if (!service.skip_zero_cap) {
+    const gateResultPartial = applyTrustedGate(finalScore, status, signalHasDataPartial[0], signalsWithDataPartial)
+    if (gateResultPartial.gated) {
+      finalScore = gateResultPartial.score
+      status = gateResultPartial.status as 'trusted' | 'caution' | 'blocked'
+      if (!modifiers.includes('trusted_gate')) modifiers.push('trusted_gate')
+    }
   }
 
   // Update composite, status, modifiers, and overridden signal values

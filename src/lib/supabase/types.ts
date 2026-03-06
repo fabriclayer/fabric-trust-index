@@ -170,6 +170,8 @@ export interface DbService {
   dependency_count: number | null
   dependencies_raw: string | null
 
+  skip_zero_cap: boolean
+
   created_at: string
   updated_at: string
 
