@@ -237,39 +237,42 @@ export async function GET(
             {description || 'No description available.'}
           </div>
 
-          {/* Rating boxes + Score + Beta — pushed to bottom */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: boxGap, marginTop: 'auto' }}>
-            {ratingBoxes}
-            <div style={{
-              display: 'flex',
-              fontSize: 72,
-              fontWeight: 700,
-              color: scoreColor,
-              marginLeft: 16,
-              letterSpacing: '-0.02em',
-            }}>
-              {score.toFixed(2)}
+          {/* Bottom section — pushed to bottom of card */}
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto' }}>
+            {/* Rating boxes + Score + Beta */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
+              {ratingBoxes}
+              <div style={{
+                display: 'flex',
+                fontSize: 72,
+                fontWeight: 700,
+                color: scoreColor,
+                marginLeft: 16,
+                letterSpacing: '-0.02em',
+              }}>
+                {score.toFixed(2)}
+              </div>
+              <div style={{
+                display: 'flex',
+                fontSize: 10,
+                fontWeight: 600,
+                color: '#a0a09c',
+                border: '1px solid #e8e8e6',
+                borderRadius: 4,
+                padding: '2px 6px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginLeft: 'auto',
+              }}>
+                Beta
+              </div>
             </div>
-            <div style={{
-              display: 'flex',
-              fontSize: 10,
-              fontWeight: 600,
-              color: '#a0a09c',
-              border: '1px solid #e8e8e6',
-              borderRadius: 4,
-              padding: '2px 6px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginLeft: 'auto',
-            }}>
-              Beta
-            </div>
-          </div>
 
-          {/* Footer */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-            <div style={{ display: 'flex', fontSize: 14, color: '#c8c8c4' }}>
-              trust.fabriclayer.ai
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <div style={{ display: 'flex', fontSize: 14, color: '#c8c8c4' }}>
+                trust.fabriclayer.ai
+              </div>
             </div>
           </div>
         </div>
