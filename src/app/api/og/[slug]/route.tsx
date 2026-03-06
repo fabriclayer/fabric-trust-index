@@ -180,9 +180,9 @@ export async function GET(
           backgroundColor: '#ffffff',
           border: '1px solid #e8e8e6',
           borderRadius: 24,
-          padding: '48px 56px',
+          padding: '48px 56px 24px',
           width: 1120,
-          flex: 1,
+          height: 550,
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
         }}>
           {/* Header: Logo + Name */}
@@ -238,7 +238,7 @@ export async function GET(
           </div>
 
           {/* Bottom section — pushed to bottom of card */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: 60 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto' }}>
             {/* Rating boxes + Score + Beta */}
             <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
               {ratingBoxes}
