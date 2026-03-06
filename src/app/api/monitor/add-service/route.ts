@@ -163,9 +163,16 @@ export async function POST(request: NextRequest) {
     }
     const repos = (await res.json()) as Array<{ name: string; archived: boolean; full_name: string }>
 
-    // Filter out archived repos and non-product repos
-    const SKIP_PATTERNS = /^(examples?|docs?|documentation|\.github|blog|website|landing|homepage|demo|tutorial|awesome-)$/i
-    const activeRepos = repos.filter(r => !r.archived && !SKIP_PATTERNS.test(r.name))
+    // Filter out archived repos and non-product repos (SDKs, integrations, docs, examples)
+    const SKIP_PATTERNS = /^(examples?|docs?|documentation|\.github|blog|website|landing|homepage|demo|tutorials?)$/i
+    const SKIP_SUFFIXES = /[-_](sdk|examples?|docs?|demo)$|^(awesome-|langchain-|llamaindex-)/i
+    const SKIP_INTEGRATIONS = /^(n8n[-_]|cua[-_]|\.)/i
+    const activeRepos = repos.filter(r =>
+      !r.archived &&
+      !SKIP_PATTERNS.test(r.name) &&
+      !SKIP_SUFFIXES.test(r.name) &&
+      !SKIP_INTEGRATIONS.test(r.name)
+    )
 
     if (activeRepos.length === 0) {
       return NextResponse.json({ error: `No active repos found for org "${orgName}"` }, { status: 404 })
