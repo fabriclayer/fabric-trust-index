@@ -182,7 +182,7 @@ export async function GET(
           borderRadius: 24,
           padding: '48px 56px',
           width: 1120,
-          height: 550,
+          flex: 1,
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
         }}>
           {/* Header: Logo + Name */}
