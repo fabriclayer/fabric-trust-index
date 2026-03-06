@@ -238,7 +238,7 @@ export async function GET(
           </div>
 
           {/* Bottom section — pushed to bottom of card */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: 20 }}>
             {/* Rating boxes + Score + Beta */}
             <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
               {ratingBoxes}
