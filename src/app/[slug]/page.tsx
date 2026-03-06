@@ -76,7 +76,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       type: 'article',
       images: [
         {
-          url: `https://trust.fabriclayer.ai/api/og/${slug}?v=2`,
+          url: `https://trust.fabriclayer.ai/api/og/${slug}`,
           width: 1200,
           height: 630,
         },
@@ -87,7 +87,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       site: '@fabriclayer',
       title: `${service.name} Trust Score: ${service.score.toFixed(2)}/5.00`,
       description: ogDescription,
-      images: [`https://trust.fabriclayer.ai/api/og/${slug}?v=2`],
+      images: [`https://trust.fabriclayer.ai/api/og/${slug}`],
     },
   }
 }
