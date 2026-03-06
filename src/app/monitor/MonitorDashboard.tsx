@@ -1071,11 +1071,11 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
   const [open, setOpen] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const [form, setForm] = useState({ name: '', github_repo: '', homepage_url: '' })
+  const [form, setForm] = useState({ name: '', github_repo: '', homepage_url: '', x_url: '' })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name) return
+    if (!form.name && !form.github_repo) return
     setSubmitting(true)
     setResult(null)
     try {
@@ -1086,10 +1086,15 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       })
       const data = await res.json()
       if (res.ok) {
-        const verb = data.rescore ? 'Re-scored' : 'Added'
-        setResult({ ok: true, message: `${verb} "${form.name}" — Scoring in background` })
-        setForm({ name: '', github_repo: '', homepage_url: '' })
-        onAdded(data.slug)
+        if (data.org) {
+          setResult({ ok: true, message: `Added ${data.added.length} repos from ${data.org} — Scoring in background` })
+          if (data.added.length > 0) onAdded(data.added[0])
+        } else {
+          const verb = data.rescore ? 'Re-scored' : 'Added'
+          setResult({ ok: true, message: `${verb} "${form.name}" — Scoring in background` })
+          onAdded(data.slug)
+        }
+        setForm({ name: '', github_repo: '', homepage_url: '', x_url: '' })
       } else {
         setResult({ ok: false, message: data.error || 'Failed to add service' })
       }
@@ -1119,26 +1124,30 @@ function ManualEntryForm({ onAdded }: { onAdded: (slug: string) => void }) {
       <button onClick={() => { setOpen(false); setResult(null) }} style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
     }>
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
           <div>
             <label style={labelStyle}>Name *</label>
             <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. CodePilot Pro" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>GitHub Repo</label>
-            <input value={form.github_repo} onChange={e => setForm(p => ({ ...p, github_repo: e.target.value }))} placeholder="owner/repo" style={inputStyle} />
+            <input value={form.github_repo} onChange={e => setForm(p => ({ ...p, github_repo: e.target.value }))} placeholder="owner/repo or org URL" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Homepage URL</label>
             <input value={form.homepage_url} onChange={e => setForm(p => ({ ...p, homepage_url: e.target.value }))} placeholder="https://..." style={inputStyle} />
           </div>
+          <div>
+            <label style={labelStyle}>X / Twitter</label>
+            <input value={form.x_url} onChange={e => setForm(p => ({ ...p, x_url: e.target.value }))} placeholder="https://x.com/..." style={inputStyle} />
+          </div>
         </div>
-        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t4, marginTop: 8 }}>Slug, publisher, category, description, logo, docs, social links, npm/pypi packages are resolved automatically via enrichment pipeline</div>
+        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t4, marginTop: 8 }}>Paste a GitHub org URL to add all repos. Slug, publisher, category, description, logo, docs, social links, npm/pypi packages are resolved automatically.</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-          <button type="submit" disabled={submitting || !form.name} style={{
+          <button type="submit" disabled={submitting || (!form.name && !form.github_repo)} style={{
             fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: '#fff', background: C.blue,
             border: 'none', borderRadius: 8, padding: '8px 20px', cursor: submitting ? 'not-allowed' : 'pointer',
-            opacity: submitting || !form.name ? 0.5 : 1,
+            opacity: submitting || (!form.name && !form.github_repo) ? 0.5 : 1,
           }}>{submitting ? 'Adding...' : 'Add to Index'}</button>
           {result && (
             <Mono style={{ fontSize: 11, color: result.ok ? C.green : C.red }}>{result.message}</Mono>
