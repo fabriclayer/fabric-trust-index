@@ -185,30 +185,20 @@ export async function GET(
           height: 550,
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
         }}>
-          {/* Header: Logo + Name + Publisher */}
+          {/* Header: Logo + Name */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
             {logoElement}
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-              <div style={{
-                display: 'flex',
-                fontSize: 80,
-                fontWeight: 700,
-                color: '#0a0a0a',
-                letterSpacing: '-0.02em',
-                lineHeight: 1.1,
-              }}>
-                {service.name.length > 20 ? service.name.slice(0, 18) + '...' : service.name}
-              </div>
-              {publisherName && (
-                <div style={{
-                  display: 'flex',
-                  fontSize: 18,
-                  color: '#a0a09c',
-                  marginTop: 4,
-                }}>
-                  {publisherName}
-                </div>
-              )}
+            <div style={{
+              display: 'flex',
+              fontSize: 80,
+              fontWeight: 700,
+              color: '#0a0a0a',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.1,
+              flex: 1,
+              minWidth: 0,
+            }}>
+              {service.name.length > 20 ? service.name.slice(0, 18) + '...' : service.name}
             </div>
           </div>
 
@@ -243,16 +233,12 @@ export async function GET(
             fontSize: 22,
             lineHeight: 1.5,
             color: '#58584f',
-            flex: 1,
           }}>
             {description || 'No description available.'}
           </div>
 
-          {/* Divider */}
-          <div style={{ display: 'flex', width: '100%', height: 1, backgroundColor: '#f0f0ee', marginBottom: 24 }} />
-
-          {/* Rating boxes + Score + Beta */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
+          {/* Rating boxes + Score + Beta — pushed to bottom */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: boxGap, marginTop: 'auto' }}>
             {ratingBoxes}
             <div style={{
               display: 'flex',
