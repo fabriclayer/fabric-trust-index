@@ -168,104 +168,90 @@ export async function GET(
         width: '100%',
         height: '100%',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'transparent',
-        padding: 40,
+        flexDirection: 'column',
+        backgroundColor: '#ffffff',
+        padding: '48px 56px',
       }}>
-        {/* Card */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: '#ffffff',
-          border: '1px solid #e8e8e6',
-          borderRadius: 24,
-          padding: '48px 56px',
-          width: 1120,
-          height: 550,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-        }}>
-          {/* Header: Logo + Name */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
-            {logoElement}
-            <div style={{
-              display: 'flex',
-              fontSize: 80,
-              fontWeight: 700,
-              color: '#0a0a0a',
-              letterSpacing: '-0.02em',
-              lineHeight: 1.1,
-              flex: 1,
-              minWidth: 0,
-            }}>
-              {service.name.length > 20 ? service.name.slice(0, 18) + '...' : service.name}
-            </div>
-          </div>
-
-          {/* Rank + Category */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <div style={{
-              display: 'flex',
-              fontSize: 32,
-              fontWeight: 600,
-              color: scoreColor,
-            }}>
-              #{rank}
-            </div>
-            <div style={{
-              display: 'flex',
-              fontSize: 13,
-              fontWeight: 500,
-              color: '#c8c8c4',
-              border: '1px solid #e8e8e6',
-              borderRadius: 20,
-              padding: '4px 14px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}>
-              {category}
-            </div>
-          </div>
-
-          {/* Description */}
+        {/* Header: Logo + Name */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
+          {logoElement}
           <div style={{
             display: 'flex',
-            fontSize: 22,
-            lineHeight: 1.5,
-            color: '#58584f',
+            fontSize: 80,
+            fontWeight: 700,
+            color: '#0a0a0a',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.1,
+            flex: 1,
+            minWidth: 0,
           }}>
-            {description || 'No description available.'}
+            {service.name.length > 20 ? service.name.slice(0, 18) + '...' : service.name}
           </div>
+        </div>
 
-          {/* Bottom section — pushed to bottom of card */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto' }}>
-            {/* Rating boxes + Score + Beta */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
-              {ratingBoxes}
-              <div style={{
-                display: 'flex',
-                fontSize: 72,
-                fontWeight: 700,
-                color: scoreColor,
-                marginLeft: 16,
-                letterSpacing: '-0.02em',
-              }}>
-                {score.toFixed(2)}
-              </div>
-              <div style={{
-                display: 'flex',
-                fontSize: 30,
-                fontWeight: 600,
-                color: '#a0a09c',
-                border: '1px solid #e8e8e6',
-                borderRadius: 8,
-                padding: '4px 14px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginLeft: 'auto',
-              }}>
-                Beta
-              </div>
+        {/* Rank + Category */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{
+            display: 'flex',
+            fontSize: 32,
+            fontWeight: 600,
+            color: scoreColor,
+          }}>
+            #{rank}
+          </div>
+          <div style={{
+            display: 'flex',
+            fontSize: 13,
+            fontWeight: 500,
+            color: '#c8c8c4',
+            border: '1px solid #e8e8e6',
+            borderRadius: 20,
+            padding: '4px 14px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}>
+            {category}
+          </div>
+        </div>
+
+        {/* Description */}
+        <div style={{
+          display: 'flex',
+          fontSize: 22,
+          lineHeight: 1.5,
+          color: '#58584f',
+        }}>
+          {description || 'No description available.'}
+        </div>
+
+        {/* Bottom section — pushed to bottom */}
+        <div style={{ display: 'flex', flexDirection: 'column', marginTop: 'auto' }}>
+          {/* Rating boxes + Score + Beta */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: boxGap }}>
+            {ratingBoxes}
+            <div style={{
+              display: 'flex',
+              fontSize: 72,
+              fontWeight: 700,
+              color: scoreColor,
+              marginLeft: 16,
+              letterSpacing: '-0.02em',
+            }}>
+              {score.toFixed(2)}
+            </div>
+            <div style={{
+              display: 'flex',
+              fontSize: 30,
+              fontWeight: 600,
+              color: '#a0a09c',
+              border: '1px solid #e8e8e6',
+              borderRadius: 8,
+              padding: '4px 14px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginLeft: 'auto',
+            }}>
+              Beta
             </div>
           </div>
         </div>
