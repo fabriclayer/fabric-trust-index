@@ -254,12 +254,12 @@ export async function GET(
               </div>
               <div style={{
                 display: 'flex',
-                fontSize: 10,
+                fontSize: 30,
                 fontWeight: 600,
                 color: '#a0a09c',
                 border: '1px solid #e8e8e6',
-                borderRadius: 4,
-                padding: '2px 6px',
+                borderRadius: 8,
+                padding: '4px 14px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
                 marginLeft: 'auto',
