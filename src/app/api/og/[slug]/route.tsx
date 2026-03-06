@@ -170,7 +170,7 @@ export async function GET(
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#f5f5f3',
+        backgroundColor: 'transparent',
         padding: 40,
       }}>
         {/* Card */}
