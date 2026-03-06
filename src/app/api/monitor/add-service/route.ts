@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const skipped: string[] = []
 
     for (const repo of activeRepos) {
-      const serviceName = repoNameToTitle(repo.name)
+      const serviceName = repoNameToTitle(`${orgName}-${repo.name}`)
       const result = await addSingleService({
         name: serviceName,
         github_repo: repo.full_name,
