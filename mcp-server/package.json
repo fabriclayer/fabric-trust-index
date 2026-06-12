@@ -1,0 +1,33 @@
+{
+  "name": "@fabriclayer/trust-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Fabric Trust Index — check trust scores for AI services",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "fabric-trust-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "trust",
+    "ai",
+    "security",
+    "fabric"
+  ]
+}
