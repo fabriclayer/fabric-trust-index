@@ -8,7 +8,8 @@ import { adoptionCollector } from './adoption'
 import { transparencyCollector } from './transparency'
 import { publisherTrustCollector } from './publisher-trust'
 import { collectSupplyChain } from './supply-chain'
-import { SIGNAL_ORDER, computeCompositeWithRedistribution, getStatus, getConfidenceLevel, applyTrustedGate } from '@/lib/scoring/thresholds'
+import { SIGNAL_ORDER } from '@/lib/scoring/thresholds'
+import { score as scoreEngine, buildInputs, extractBlockFlags, countEvaluated, type SignalInput } from '@/lib/scoring/engine'
 
 import { resolveGitHubRepo } from '@/lib/discovery/github-resolver'
 import { sendTelegramAlert } from '@/lib/alerts/telegram'
@@ -420,7 +421,7 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
       const cr: CollectorResult = result.value
       updates[`signal_${signalKey}`] = cr.score
       signals.push(cr.score)
-      signalHasData.push(cr.sub_signals?.some(s => s.has_data) ?? false)
+      signalHasData.push(cr.evaluated ?? (cr.sub_signals?.some(s => s.has_data) ?? false))
       signalScores[signalKey] = { score: cr.score, sub_signals: cr.sub_signals ?? [] }
       success.push(signalKey)
       collectorResults.push({ key: signalKey, result: cr })
@@ -445,129 +446,76 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
     }
   }
 
-  // ── Vulnerability signal overrides (apply BEFORE composite) ──
-  // Three tiers based on CVE patch status for payment safety:
-  //   Tier 1 (no_patch): critical/high unpatched → signal=0, blocked
-  //   Tier 2 (patch_available): critical/high with fix available → signal=1.5, caution cap
-  //   Tier 3 (all patched): no override, normal scoring
-  const modifiers: string[] = []
+  // ── Score via the new pure engine ──
+  const reasons: string[] = []
   const oldComposite = service.composite_score
   const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
 
-  if (vulnResult?.result.metadata.has_critical_or_high_unpatched) {
-    // Tier 1: No patch exists for critical/high CVE → force signal to 0
-    signals[0] = 0
-    updates.signal_vulnerability = 0
-    modifiers.push('vulnerability_zero_override')
-  } else if (vulnResult?.result.metadata.has_critical_or_high_patch_available) {
-    // Tier 2: Patch available but not applied → cap signal at 1.5
-    if (signals[0] > 1.5) {
-      signals[0] = 1.5
-      updates.signal_vulnerability = 1.5
-    }
-    modifiers.push('vulnerability_patch_available')
-  }
+  // Build block flags from vulnerability collector metadata
+  const blockFlags = vulnResult
+    ? extractBlockFlags(vulnResult.result.metadata as { has_critical_or_high_unpatched?: boolean; has_critical_or_high_patch_available?: boolean })
+    : []
 
-  // Recompute composite score with weight redistribution.
-  // Safety: a score of 0 is always treated as "has data" — it's a genuine penalty,
-  // not missing data. Without this, signals returning 0 with has_data=false get their
-  // weight redistributed, inflating the composite score.
-  const signalInputs = signals.map((score, i) => ({
-    score,
-    has_data: signalHasData[i] || score === 0,
-  }))
-  const { score: compositeScore } = computeCompositeWithRedistribution(signalInputs)
-
-  // Override rules
-  let status = getStatus(compositeScore)
-
-  // 1. Zero signal override — only triggers for genuinely evaluated zeros, not defaults
-  const hasGenuineZero = collectorResults.some(cr => isGenuineZero(cr))
-  if (!service.skip_zero_cap && status === 'trusted' && hasGenuineZero) {
-    status = 'caution'
-    modifiers.push('zero_signal_override')
-  }
-
-  // 2. Vulnerability status overrides (from tiered system above)
-  if (modifiers.includes('vulnerability_zero_override')) {
-    status = 'blocked'
-  } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
-    status = 'caution'
-  }
-
-  // 3. Repo archived override — archived repos should never score trusted
+  // Collector-level overrides that feed into reasons (not engine flags)
   const maintResult2 = collectorResults.find(r => r?.key === 'maintenance')
-  if (maintResult2?.result.metadata.repo_archived) {
-    status = 'blocked'
-    modifiers.push('repo_archived')
-  }
-
-  // 4. Repo ownership transfer override — different owner is a supply chain risk
-  if (maintResult2?.result.metadata.repo_transferred) {
-    if (status === 'trusted') status = 'caution'
-    modifiers.push('repo_transferred')
-  }
-
-  // 5. npm deprecated override — deprecated packages should never score trusted
   const pubResult2 = collectorResults.find(r => r?.key === 'publisher_trust')
-  if (pubResult2?.result.metadata.npm_deprecated) {
-    status = 'blocked'
-    modifiers.push('npm_deprecated')
-  }
 
-  // 6. npm owner changed override — use pre-fetched metadata to avoid race
+  if (maintResult2?.result.metadata.repo_archived) reasons.push('repo_archived')
+  if (maintResult2?.result.metadata.repo_transferred) reasons.push('repo_transferred')
+  if (pubResult2?.result.metadata.npm_deprecated) reasons.push('npm_deprecated')
+
+  // npm owner changed detection
   if (pubResult2?.result.metadata.npm_maintainers) {
     const currMaintainers = pubResult2.result.metadata.npm_maintainers as string[]
     const prevMaintainers = (prevPubTrustMeta?.npm_maintainers ?? []) as string[]
     if (currMaintainers.length > 0 && prevMaintainers.length > 0) {
       const removed = prevMaintainers.filter((m: string) => !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase()))
-      if (removed.length > 0) {
-        if (status === 'trusted') status = 'caution'
-        modifiers.push('npm_owner_changed')
-      }
+      if (removed.length > 0) reasons.push('npm_owner_changed')
     }
   }
 
-  // Cap composite_score to match forced status range
-  let finalScore = compositeScore
-  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
-    finalScore = Math.min(finalScore, 0.99)
-  } else if (modifiers.includes('vulnerability_patch_available')) {
-    finalScore = Math.min(finalScore, 2.99)
-  } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
-    finalScore = Math.min(finalScore, 2.99)
+  // Build engine inputs: use evaluated field from collector, fallback to sub_signal has_data
+  const engineInputs = buildInputs(signals, signalHasData)
+  const engineResult = scoreEngine(engineInputs, blockFlags)
+
+  // Merge engine reasons with collector-level reasons
+  const allReasons = [...engineResult.reasons, ...reasons]
+  let finalScore = engineResult.score
+  let status = engineResult.status
+
+  // Post-engine overrides for status-forcing reasons
+  if (reasons.includes('repo_archived') || reasons.includes('npm_deprecated')) {
+    status = 'blocked'
+    if (finalScore !== null) finalScore = Math.min(finalScore, 0.99)
+  }
+  if (reasons.includes('repo_transferred') && status === 'trusted') {
+    status = 'caution'
+  }
+  if (reasons.includes('npm_owner_changed') && status === 'trusted') {
+    status = 'caution'
   }
 
-  // Repo transfer penalty: freeze + apply -1.0
-  if (modifiers.includes('repo_transferred')) {
-    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
-    finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
-    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
-  }
-
-  // npm owner changed penalty
-  if (modifiers.includes('npm_owner_changed')) {
-    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
-    finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
-    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
-  }
-
-  // Trusted gate: must have vuln data + 4 signals with data to be trusted
-  const signalsWithRealData = signalHasData.filter(Boolean).length
-  if (!service.skip_zero_cap) {
-    const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithRealData)
-    if (gateResult.gated) {
-      finalScore = gateResult.score
-      status = gateResult.status as 'trusted' | 'caution' | 'blocked'
-      modifiers.push('trusted_gate')
+  // Penalty score caps for supply chain risks
+  if (finalScore !== null) {
+    if (reasons.includes('repo_transferred')) {
+      finalScore = Math.min(finalScore, oldComposite)
+      finalScore = Math.max(finalScore - 1.0, 0.5)
+      finalScore = Math.min(finalScore, 2.99)
+    }
+    if (reasons.includes('npm_owner_changed')) {
+      finalScore = Math.min(finalScore, oldComposite)
+      finalScore = Math.max(finalScore - 0.5, 0.5)
+      finalScore = Math.min(finalScore, 2.99)
     }
   }
 
-  updates.raw_composite_score = compositeScore
-  updates.composite_score = finalScore
-  updates.status = status
-  updates.active_modifiers = modifiers
-  updates.score_confidence = signalsWithRealData / SIGNAL_ORDER.length
+  const signalsWithRealData = countEvaluated(engineInputs)
+
+  updates.raw_composite_score = engineResult.score
+  updates.composite_score = finalScore ?? 0
+  updates.status = status === 'unverified' ? 'pending' : status
+  updates.active_modifiers = allReasons
+  updates.score_confidence = engineResult.coverage
   updates.signals_with_data = signalsWithRealData
   updates.signal_scores = signalScores
 
@@ -581,12 +529,12 @@ export async function runAllCollectors(service: DbService, options?: { skipSuppl
   await supabase.from('signal_history').insert({
     service_id: service.id,
     signal_name: 'composite',
-    score: finalScore,
-    metadata: { modifiers, signals_with_data: signalsWithRealData },
+    score: finalScore ?? 0,
+    metadata: { reasons: allReasons, signals_with_data: signalsWithRealData },
   })
 
   // Detect and create incidents (pass pre-fetched publisher_trust metadata to avoid race)
-  await detectIncidents(service, oldComposite, finalScore, collectorResults, prevPubTrustMeta)
+  await detectIncidents(service, oldComposite, finalScore ?? 0, collectorResults, prevPubTrustMeta)
 
   // AI assessments are regenerated weekly via manual trigger on the monitor dashboard.
   // No longer auto-generated during scoring runs.
@@ -702,94 +650,47 @@ export async function runCollectors(
   )
 
   const existingModifiers: string[] = freshService.active_modifiers ?? []
-  const modifiers: string[] = []
+  const carriedReasons: string[] = []
   const ranVulnerability = updatedKeys.includes('vulnerability')
-  const ranAll = updatedKeys.length === SIGNAL_ORDER.length
-
-  // Carry forward modifiers for signals NOT re-run in this partial run
   const ranMaintenance = updatedKeys.includes('maintenance')
   const ranPublisherTrust = updatedKeys.includes('publisher_trust')
-  if (!ranVulnerability) {
-    if (existingModifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
-    if (existingModifiers.includes('vulnerability_patch_available')) modifiers.push('vulnerability_patch_available')
-  }
-  if (!service.skip_zero_cap && !ranAll && existingModifiers.includes('zero_signal_override')) {
-    modifiers.push('zero_signal_override')
-  }
-  // Carry forward transfer/ownership/archived/deprecated modifiers
+
+  // Carry forward reasons for signals NOT re-run
   if (!ranMaintenance) {
-    if (existingModifiers.includes('repo_transferred')) modifiers.push('repo_transferred')
-    if (existingModifiers.includes('repo_archived')) modifiers.push('repo_archived')
+    if (existingModifiers.includes('repo_transferred')) carriedReasons.push('repo_transferred')
+    if (existingModifiers.includes('repo_archived')) carriedReasons.push('repo_archived')
   }
   if (!ranPublisherTrust) {
-    if (existingModifiers.includes('npm_owner_changed')) modifiers.push('npm_owner_changed')
-    if (existingModifiers.includes('npm_deprecated')) modifiers.push('npm_deprecated')
+    if (existingModifiers.includes('npm_owner_changed')) carriedReasons.push('npm_owner_changed')
+    if (existingModifiers.includes('npm_deprecated')) carriedReasons.push('npm_deprecated')
   }
 
-  // ── Vulnerability signal overrides (apply BEFORE composite) ──
-  // Three tiers: no_patch → signal=0, patch_available → signal≤1.5, all patched → normal
+  // Build block flags
+  const blockFlagsPartial: import('@/lib/scoring/engine').BlockFlag[] = []
   if (ranVulnerability) {
-    const vulnResult = collectorResults.find(r => r?.key === 'vulnerability')
-    if (vulnResult?.result.metadata.has_critical_or_high_unpatched) {
-      signals[0] = 0
-      if (!modifiers.includes('vulnerability_zero_override')) modifiers.push('vulnerability_zero_override')
-    } else if (vulnResult?.result.metadata.has_critical_or_high_patch_available) {
-      if (signals[0] > 1.5) signals[0] = 1.5
-      if (!modifiers.includes('vulnerability_patch_available')) modifiers.push('vulnerability_patch_available')
+    const vulnResultPartial = collectorResults.find(r => r?.key === 'vulnerability')
+    if (vulnResultPartial) {
+      blockFlagsPartial.push(...extractBlockFlags(vulnResultPartial.result.metadata as { has_critical_or_high_unpatched?: boolean; has_critical_or_high_patch_available?: boolean }))
     }
-  } else if (modifiers.includes('vulnerability_zero_override')) {
-    // Carry forward: force signal to 0 for composite calculation
-    signals[0] = 0
-  } else if (modifiers.includes('vulnerability_patch_available')) {
-    // Carry forward: cap signal at 1.5 for composite calculation
-    if (signals[0] > 1.5) signals[0] = 1.5
-  }
-
-  // Recompute composite with weight redistribution
-  const signalInputsPartial = signals.map((score, i) => ({ score, has_data: signalHasDataPartial[i] }))
-  const { score: compositeScore } = computeCompositeWithRedistribution(signalInputsPartial)
-  const oldComposite = freshService.composite_score
-
-  // Override rules
-  let status = getStatus(compositeScore)
-
-  // 1. Zero signal override — only re-evaluate if all 6 collectors ran
-  if (!service.skip_zero_cap && ranAll) {
-    const hasGenuineZeroPartial = collectorResults.some(cr => isGenuineZero(cr))
-    if (status === 'trusted' && hasGenuineZeroPartial && !modifiers.includes('zero_signal_override')) {
-      modifiers.push('zero_signal_override')
+  } else {
+    // Carry forward CVE flags
+    if (existingModifiers.includes('vulnerability_zero_override') || existingModifiers.includes('cve_unpatched_critical')) {
+      blockFlagsPartial.push({ type: 'cve_unpatched_critical' })
+    }
+    if (existingModifiers.includes('vulnerability_patch_available') || existingModifiers.includes('cve_patch_available')) {
+      blockFlagsPartial.push({ type: 'cve_patch_available' })
     }
   }
 
-  // 2. Vulnerability status overrides (from tiered system)
-  if (modifiers.includes('vulnerability_zero_override')) {
-    status = 'blocked'
-  } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
-    status = 'caution'
-  }
-
-  // 3. Repo archived/transferred overrides — re-evaluate if maintenance was re-run
+  // New collector-level reasons from re-run collectors
   if (ranMaintenance) {
     const maintResultPartial = collectorResults.find(r => r?.key === 'maintenance')
-    if (maintResultPartial?.result.metadata.repo_archived && !modifiers.includes('repo_archived')) {
-      modifiers.push('repo_archived')
-    }
-    if (maintResultPartial?.result.metadata.repo_transferred && !modifiers.includes('repo_transferred')) {
-      modifiers.push('repo_transferred')
-    }
+    if (maintResultPartial?.result.metadata.repo_archived) carriedReasons.push('repo_archived')
+    if (maintResultPartial?.result.metadata.repo_transferred) carriedReasons.push('repo_transferred')
   }
-
-  // 4. npm deprecated override — re-evaluate if publisher_trust was re-run
-  if (ranPublisherTrust) {
-    const pubResultDeprecated = collectorResults.find(r => r?.key === 'publisher_trust')
-    if (pubResultDeprecated?.result.metadata.npm_deprecated && !modifiers.includes('npm_deprecated')) {
-      modifiers.push('npm_deprecated')
-    }
-  }
-
-  // 5. npm owner changed override — re-evaluate if publisher_trust was re-run
   if (ranPublisherTrust) {
     const pubResultPartial = collectorResults.find(r => r?.key === 'publisher_trust')
+    if (pubResultPartial?.result.metadata.npm_deprecated) carriedReasons.push('npm_deprecated')
     if (pubResultPartial?.result.metadata.npm_maintainers) {
       const currMaintainers = pubResultPartial.result.metadata.npm_maintainers as string[]
       if (currMaintainers.length > 0) {
@@ -806,76 +707,53 @@ export async function runCollectors(
           const removed = prevMaintainersPartial.filter((m: string) =>
             !new Set(currMaintainers.map(c => c.toLowerCase())).has(m.toLowerCase())
           )
-          if (removed.length > 0 && !modifiers.includes('npm_owner_changed')) {
-            modifiers.push('npm_owner_changed')
-          }
+          if (removed.length > 0) carriedReasons.push('npm_owner_changed')
         }
       }
     }
   }
 
-  // Apply remaining status overrides
-  if (modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
+  // Score via engine
+  const engineInputsPartial = buildInputs(signals, signalHasDataPartial)
+  const engineResultPartial = scoreEngine(engineInputsPartial, blockFlagsPartial)
+  const oldComposite = freshService.composite_score
+
+  const allReasonsPartial = [...new Set([...engineResultPartial.reasons, ...carriedReasons])]
+  let finalScore = engineResultPartial.score
+  let status = engineResultPartial.status
+
+  // Post-engine overrides
+  if (carriedReasons.includes('repo_archived') || carriedReasons.includes('npm_deprecated')) {
     status = 'blocked'
+    if (finalScore !== null) finalScore = Math.min(finalScore, 0.99)
   }
-  if (!service.skip_zero_cap && modifiers.includes('zero_signal_override') && status === 'trusted') {
-    status = 'caution'
-  }
-  if (modifiers.includes('repo_transferred') && status === 'trusted') {
-    status = 'caution'
-  }
-  if (modifiers.includes('npm_owner_changed') && status === 'trusted') {
-    status = 'caution'
-  }
+  if (carriedReasons.includes('repo_transferred') && status === 'trusted') status = 'caution'
+  if (carriedReasons.includes('npm_owner_changed') && status === 'trusted') status = 'caution'
 
-  // Cap composite_score to match forced status range
-  let finalScore = compositeScore
-  if (modifiers.includes('vulnerability_zero_override') || modifiers.includes('repo_archived') || modifiers.includes('npm_deprecated')) {
-    finalScore = Math.min(finalScore, 0.99)
-  } else if (modifiers.includes('vulnerability_patch_available')) {
-    finalScore = Math.min(finalScore, 2.99)
-  } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
-    finalScore = Math.min(finalScore, 2.99)
-  }
-
-  // Repo transfer penalty: freeze + apply -1.0
-  if (modifiers.includes('repo_transferred')) {
-    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
-    finalScore = Math.max(finalScore - 1.0, 0.5)    // Apply -1.0 penalty
-    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
-  }
-
-  // npm owner changed penalty
-  if (modifiers.includes('npm_owner_changed')) {
-    finalScore = Math.min(finalScore, oldComposite) // Freeze: can't go up
-    finalScore = Math.max(finalScore - 0.5, 0.5)    // Apply -0.5 penalty
-    finalScore = Math.min(finalScore, 2.99)          // Cap at caution range
-  }
-
-  // Trusted gate: must have vuln data + 4 signals with data to be trusted
-  const signalsWithDataPartial = signalHasDataPartial.filter(Boolean).length
-  if (!service.skip_zero_cap) {
-    const gateResultPartial = applyTrustedGate(finalScore, status, signalHasDataPartial[0], signalsWithDataPartial)
-    if (gateResultPartial.gated) {
-      finalScore = gateResultPartial.score
-      status = gateResultPartial.status as 'trusted' | 'caution' | 'blocked'
-      if (!modifiers.includes('trusted_gate')) modifiers.push('trusted_gate')
+  if (finalScore !== null) {
+    if (carriedReasons.includes('repo_transferred')) {
+      finalScore = Math.min(finalScore, oldComposite)
+      finalScore = Math.max(finalScore - 1.0, 0.5)
+      finalScore = Math.min(finalScore, 2.99)
+    }
+    if (carriedReasons.includes('npm_owner_changed')) {
+      finalScore = Math.min(finalScore, oldComposite)
+      finalScore = Math.max(finalScore - 0.5, 0.5)
+      finalScore = Math.min(finalScore, 2.99)
     }
   }
 
-  // Update composite, status, modifiers, and overridden signal values
+  const signalsWithDataPartial = countEvaluated(engineInputsPartial)
+
+  // Update composite, status, reasons, and overridden signal values
   const partialUpdate: Record<string, unknown> = {
-    raw_composite_score: compositeScore,
-    composite_score: finalScore,
-    status,
-    active_modifiers: modifiers,
+    raw_composite_score: engineResultPartial.score,
+    composite_score: finalScore ?? 0,
+    status: status === 'unverified' ? 'pending' : status,
+    active_modifiers: allReasonsPartial,
     signal_scores: signalScoresPartial,
-  }
-  // Persist overridden vulnerability signal value
-  if (modifiers.includes('vulnerability_zero_override')) {
-    partialUpdate.signal_vulnerability = 0
-  } else if (modifiers.includes('vulnerability_patch_available') && signals[0] <= 1.5) {
-    partialUpdate.signal_vulnerability = signals[0]
+    score_confidence: engineResultPartial.coverage,
+    signals_with_data: signalsWithDataPartial,
   }
 
   await supabase
@@ -887,12 +765,12 @@ export async function runCollectors(
   await supabase.from('signal_history').insert({
     service_id: service.id,
     signal_name: 'composite',
-    score: finalScore,
-    metadata: { modifiers, partial_run: updatedKeys, signals_with_data: signalsWithDataPartial },
+    score: finalScore ?? 0,
+    metadata: { reasons: allReasonsPartial, partial_run: updatedKeys, signals_with_data: signalsWithDataPartial },
   })
 
-  // Detect incidents (M1: always call, internal thresholds handle filtering)
-  await detectIncidents(service, oldComposite, finalScore, collectorResults)
+  // Detect incidents
+  await detectIncidents(service, oldComposite, finalScore ?? 0, collectorResults)
 }
 
 /**

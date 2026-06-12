@@ -9,6 +9,7 @@ export function collectFreshness(
     return {
       signal_name: 'freshness',
       score: 2.5,
+      evaluated: false,
       metadata: { reason: 'api_unavailable' },
       sources: [],
     }
@@ -52,6 +53,7 @@ export function collectFreshness(
   return {
     signal_name: 'freshness',
     score: clampScore(scaled),
+    evaluated: true,
     metadata: details,
     sources: ['clawhub:api'],
   }

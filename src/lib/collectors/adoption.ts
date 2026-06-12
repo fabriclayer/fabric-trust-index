@@ -146,6 +146,7 @@ export const adoptionCollector: Collector = {
         ],
         metadata: { reason: 'no_download_data' },
         sources: [],
+        evaluated: false,
       }
     }
 
@@ -235,6 +236,7 @@ export const adoptionCollector: Collector = {
         dependent_packages_status: 'not_available_phase1',
       },
       sources,
+      evaluated: true,
     }
   },
 }

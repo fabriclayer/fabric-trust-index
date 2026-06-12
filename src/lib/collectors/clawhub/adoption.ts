@@ -9,6 +9,7 @@ export function collectAdoption(
     return {
       signal_name: 'adoption',
       score: 2.5,
+      evaluated: false,
       metadata: { reason: 'api_unavailable' },
       sources: [],
     }
@@ -43,6 +44,7 @@ export function collectAdoption(
   return {
     signal_name: 'adoption',
     score: clampScore(scaled),
+    evaluated: true,
     metadata: details,
     sources: ['clawhub:api'],
   }

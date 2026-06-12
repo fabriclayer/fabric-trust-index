@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { SIGNAL_ORDER, computeComposite, computeCompositeWithRedistribution, getStatus, applyTrustedGate } from '@/lib/scoring/thresholds'
+import { SIGNAL_ORDER } from '@/lib/scoring/thresholds'
+import { score as scoreEngine, buildInputs, countEvaluated, type BlockFlag } from '@/lib/scoring/engine'
 
 export const maxDuration = 300
 
@@ -225,97 +226,40 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Store pre-override composite for raw_composite_score
-    let rawComposite: number
-    if (serviceSignalScores) {
-      rawComposite = computeCompositeWithRedistribution(
-        signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
-      ).score
-    } else {
-      rawComposite = computeComposite(signals)
-    }
-
-    // Vulnerability tiered overrides — modify signals BEFORE final composite
+    // Build block flags from pre-fetched vulnerability status
+    const blockFlags: BlockFlag[] = []
     if (!fallbackSignals.has('vulnerability')) {
       const hasUnpatched = vulnUnpatchedSet.has(service.id) ||
         (service.active_modifiers ?? []).includes('vulnerability_zero_override')
       const hasPatchAvail = vulnPatchAvailSet.has(service.id) ||
         (service.active_modifiers ?? []).includes('vulnerability_patch_available')
 
-      if (hasUnpatched) {
-        signals[0] = 0
-        signalUpdates.signal_vulnerability = 0
-        modifiers.push('vulnerability_zero_override')
-      } else if (hasPatchAvail) {
-        if (signals[0] > 1.5) {
-          signals[0] = 1.5
-          signalUpdates.signal_vulnerability = 1.5
-        }
-        modifiers.push('vulnerability_patch_available')
-      }
+      if (hasUnpatched) blockFlags.push({ type: 'cve_unpatched_critical' })
+      else if (hasPatchAvail) blockFlags.push({ type: 'cve_patch_available' })
     }
 
-    // Recompute composite with any signal overrides applied
-    let compositeScore: number
-    if (serviceSignalScores) {
-      compositeScore = computeCompositeWithRedistribution(
-        signals.map((score, i) => ({ score, has_data: signalHasData[i] }))
-      ).score
-    } else {
-      compositeScore = computeComposite(signals)
-    }
-    let status = getStatus(compositeScore)
+    // Score via the pure engine
+    const engineInputs = buildInputs(signals, signalHasData)
+    const engineResult = scoreEngine(engineInputs, blockFlags)
 
-    // Zero signal override — only for genuinely evaluated zeros (not fallbacks/stale)
-    const genuineZeros: string[] = []
-    for (let i = 0; i < SIGNAL_ORDER.length; i++) {
-      if (signals[i] === 0 && !fallbackSignals.has(SIGNAL_ORDER[i])) {
-        genuineZeros.push(SIGNAL_ORDER[i])
-      }
-    }
-    if (!service.skip_zero_cap && status === 'trusted' && genuineZeros.length > 0) {
-      status = 'caution'
-      modifiers.push('zero_signal_override')
-    }
+    const allReasons = [...engineResult.reasons, ...modifiers]
+    let finalScore = engineResult.score
+    let status = engineResult.status
 
-    // Apply vulnerability status overrides
-    if (modifiers.includes('vulnerability_zero_override')) {
-      status = 'blocked'
-    } else if (modifiers.includes('vulnerability_patch_available') && status === 'trusted') {
-      status = 'caution'
-    }
-
-    // Cap composite_score to match forced status range
-    let finalScore = compositeScore
-    if (modifiers.includes('vulnerability_zero_override')) {
-      finalScore = Math.min(finalScore, 0.99)
-    } else if (modifiers.includes('vulnerability_patch_available')) {
-      finalScore = Math.min(finalScore, 2.99)
-    } else if (!service.skip_zero_cap && modifiers.includes('zero_signal_override')) {
-      finalScore = Math.min(finalScore, 2.99)
-    }
-
-    // Trusted gate: must have vuln data + 4 signals with data to be trusted
-    const signalsWithData = signalHasData.filter(Boolean).length
-    if (!service.skip_zero_cap) {
-      const gateResult = applyTrustedGate(finalScore, status, signalHasData[0], signalsWithData)
-      if (gateResult.gated) {
-        finalScore = gateResult.score
-        status = gateResult.status as 'trusted' | 'caution' | 'blocked'
-        modifiers.push('trusted_gate')
-      }
-    }
+    // Map unverified to pending for DB compatibility
+    const dbStatus = status === 'unverified' ? 'pending' as const : status
+    const signalsWithData = countEvaluated(engineInputs)
 
     // Update the service
     await supabase
       .from('services')
       .update({
         ...signalUpdates,
-        raw_composite_score: rawComposite,
-        composite_score: finalScore,
-        status,
-        active_modifiers: modifiers,
-        score_confidence: signalsWithData / SIGNAL_ORDER.length,
+        raw_composite_score: engineResult.score,
+        composite_score: finalScore ?? 0,
+        status: dbStatus,
+        active_modifiers: allReasons,
+        score_confidence: engineResult.coverage,
         signals_with_data: signalsWithData,
       })
       .eq('id', service.id)
@@ -324,15 +268,15 @@ export async function POST(request: NextRequest) {
       name: service.name,
       old_composite: service.composite_score,
       old_status: service.status,
-      composite_score: finalScore,
-      status,
+      composite_score: finalScore ?? 0,
+      status: dbStatus,
       signal_vulnerability: signals[0],
       signal_operational: signals[1],
       signal_maintenance: signals[2],
       signal_adoption: signals[3],
       signal_transparency: signals[4],
       signal_publisher_trust: signals[5],
-      active_modifiers: modifiers,
+      active_modifiers: allReasons,
       adjustments,
     })
   }

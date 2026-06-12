@@ -125,6 +125,7 @@ export const operationalHealthCollector: Collector = {
         ],
         metadata: { reason: 'no_endpoint_configured' },
         sources: [],
+        evaluated: false,
       }
     }
 
@@ -177,6 +178,7 @@ export const operationalHealthCollector: Collector = {
         sub_signals,
         metadata: { first_check: true, is_up: result.isUp, latency_ms: result.latencyMs, source_type: sourceType },
         sources: [monitorUrl],
+        evaluated: true,
       }
     }
 
@@ -253,6 +255,7 @@ export const operationalHealthCollector: Collector = {
         degraded_checks: degradedCount,
       },
       sources: [monitorUrl],
+      evaluated: true,
     }
   },
 }

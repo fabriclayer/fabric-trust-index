@@ -12,6 +12,7 @@ export interface SubSignalScore {
 export interface CollectorResult {
   signal_name: string
   score: number // 0.0–5.0
+  evaluated: boolean // true = real data inspected; false = entity does not exist
   sub_signals?: SubSignalScore[]
   metadata: Record<string, unknown>
   sources: string[]

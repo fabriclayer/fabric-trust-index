@@ -9,6 +9,7 @@ export async function collectPublisherReputation(
     return {
       signal_name: 'publisher_reputation',
       score: 2.5,
+      evaluated: false,
       metadata: { reason: 'no_owner' },
       sources: [],
     }
@@ -37,6 +38,7 @@ export async function collectPublisherReputation(
     return {
       signal_name: 'publisher_reputation',
       score: 2.5,
+      evaluated: false,
       metadata: { reason: 'github_user_not_found', handle: ownerHandle },
       sources: [],
     }
@@ -87,6 +89,7 @@ export async function collectPublisherReputation(
   return {
     signal_name: 'publisher_reputation',
     score: clampScore(scaled),
+    evaluated: true,
     metadata: details,
     sources: [`github:users/${ownerHandle}`],
   }

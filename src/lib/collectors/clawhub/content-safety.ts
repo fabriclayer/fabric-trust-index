@@ -105,6 +105,7 @@ export async function collectContentSafety(
     return {
       signal_name: 'content_safety',
       score: 2.5,
+      evaluated: false,
       metadata: { reason: 'skill_not_found' },
       sources: [],
     }
@@ -180,6 +181,7 @@ export async function collectContentSafety(
   return {
     signal_name: 'content_safety',
     score: clampScore(score),
+    evaluated: true,
     metadata: {
       findings,
       contentLength: content.length,

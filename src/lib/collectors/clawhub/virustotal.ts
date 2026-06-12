@@ -56,6 +56,7 @@ export async function collectVirusTotalScan(
       return {
         signal_name: 'virustotal_scan',
         score: clampScore(score),
+        evaluated: true,
         metadata,
         sources: [`virustotal:${report.sha256}`],
       }
@@ -69,6 +70,7 @@ export async function collectVirusTotalScan(
     return {
       signal_name: 'virustotal_scan',
       score: 2.5,
+      evaluated: false,
       metadata: { source: 'none', reason: 'api_unavailable' },
       sources: [],
     }
@@ -83,6 +85,7 @@ export async function collectVirusTotalScan(
     return {
       signal_name: 'virustotal_scan',
       score: 2.5,
+      evaluated: false,
       metadata,
       sources: ['clawhub:api'],
     }
@@ -108,6 +111,7 @@ export async function collectVirusTotalScan(
   return {
     signal_name: 'virustotal_scan',
     score: clampScore(score),
+    evaluated: true,
     metadata,
     sources: ['clawhub:api'],
   }

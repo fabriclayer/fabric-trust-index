@@ -46,6 +46,7 @@ export const transparencyCollector: Collector = {
         ],
         metadata: { reason: 'no_github_repo' },
         sources: [],
+        evaluated: false,
       }
     }
 
@@ -69,6 +70,7 @@ export const transparencyCollector: Collector = {
         ],
         metadata: { reason: 'repo_not_accessible' },
         sources: [`github:${repo}`],
+        evaluated: false,
       }
     }
 
@@ -298,6 +300,7 @@ export const transparencyCollector: Collector = {
         has_releases: hasReleases,
       },
       sources,
+      evaluated: true,
     }
   },
 }

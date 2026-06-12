@@ -137,6 +137,7 @@ export const publisherTrustCollector: Collector = {
       ],
       metadata: {},
       sources: [],
+      evaluated: false,
     }
 
     // Get publisher info
@@ -388,6 +389,7 @@ export const publisherTrustCollector: Collector = {
       sub_signals,
       metadata,
       sources,
+      evaluated: true,
     }
   },
 }

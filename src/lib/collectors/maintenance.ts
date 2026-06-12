@@ -50,6 +50,7 @@ export const maintenanceCollector: Collector = {
         ],
         metadata: { reason: 'no_github_repo' },
         sources: [],
+        evaluated: false,
       }
     }
 
@@ -76,6 +77,7 @@ export const maintenanceCollector: Collector = {
         ],
         metadata: { reason: 'repo_not_accessible' },
         sources,
+        evaluated: false,
       }
     }
 
@@ -286,6 +288,7 @@ export const maintenanceCollector: Collector = {
       sub_signals,
       metadata,
       sources,
+      evaluated: true,
     }
   },
 }

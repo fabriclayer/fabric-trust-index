@@ -78,6 +78,7 @@ export function collectTransparency(
   return {
     signal_name: 'transparency',
     score: clampScore(score),
+    evaluated: true,
     metadata: { checks, tagCount, contentLength: skillContent?.length ?? 0 },
     sources: data ? ['clawhub:api'] : [],
   }
