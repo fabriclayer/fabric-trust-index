@@ -126,6 +126,15 @@ export async function getServicesForDirectory(): Promise<Service[]> {
     from += PAGE
   }
 
+  // Sort: status group (trusted > caution > blocked > pending) then score DESC
+  const statusOrder: Record<string, number> = { trusted: 0, caution: 1, blocked: 2, pending: 3 }
+  all.sort((a, b) => {
+    const sa = statusOrder[a.status] ?? 3
+    const sb = statusOrder[b.status] ?? 3
+    if (sa !== sb) return sa - sb
+    return b.composite_score - a.composite_score
+  })
+
   // Compute rank with ties: services with the same score share a rank
   let rank = 1
   return all.map((db, i) => {

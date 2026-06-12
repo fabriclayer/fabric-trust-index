@@ -14,6 +14,10 @@ const scoreNumColor: Record<string, string> = {
 }
 
 export default function ServiceCard({ service }: { service: Service }) {
+  const coverage = service.score_confidence ?? 1.0
+  const isUnverified = coverage < 0.40
+  const isLowConfidence = coverage >= 0.40 && coverage < 0.60
+
   return (
     <Link
       href={`/${service.slug}`}
@@ -50,9 +54,18 @@ export default function ServiceCard({ service }: { service: Service }) {
 
       <div className="flex items-center gap-2 pt-2 border-t border-fabric-100 mt-auto overflow-hidden">
         <RatingBoxes score={service.score} status={service.status} />
-        <span className={`font-mono text-[0.82rem] font-semibold tracking-tight shrink-0 ${scoreNumColor[service.status]}`}>
-          {service.score.toFixed(2)}
-        </span>
+        {isUnverified ? (
+          <span className="font-mono text-[0.72rem] text-fabric-400 shrink-0">
+            Unverified, {service.signals_with_data ?? 0} of 6 signals evaluated
+          </span>
+        ) : (
+          <span className={`font-mono text-[0.82rem] font-semibold tracking-tight shrink-0 ${scoreNumColor[service.status]}`}>
+            {service.score.toFixed(2)}
+          </span>
+        )}
+        {isLowConfidence && !isUnverified && (
+          <span className="font-mono text-[0.45rem] font-semibold uppercase tracking-wider text-[#f7931e] border border-[#f7931e]/30 rounded px-0.5 py-[0.5px] leading-tight shrink-0" title="This score has limited signal coverage (3 to 4 of 6 signals evaluated). Accuracy improves as more data sources become available.">Low confidence</span>
+        )}
         <span className="font-mono text-[0.45rem] font-semibold uppercase tracking-wider text-fabric-400 border border-fabric-200 rounded px-0.5 py-[0.5px] leading-tight ml-auto shrink-0" title="The Fabric scoring engine is in active beta. Signals and thresholds are being calibrated as new data sources come online.">Beta</span>
       </div>
     </Link>
