@@ -56,6 +56,21 @@ export interface Database {
         Insert: Omit<DbDiscoveryQueue, 'id' | 'created_at'>
         Update: Partial<Omit<DbDiscoveryQueue, 'id'>>
       }
+      api_accounts: {
+        Row: DbApiAccount
+        Insert: Omit<DbApiAccount, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<DbApiAccount, 'id'>>
+      }
+      api_requests: {
+        Row: DbApiRequest
+        Insert: Omit<DbApiRequest, 'id' | 'created_at'>
+        Update: Partial<Omit<DbApiRequest, 'id'>>
+      }
+      publisher_subscriptions: {
+        Row: DbPublisherSubscription
+        Insert: Omit<DbPublisherSubscription, 'id' | 'created_at'>
+        Update: Partial<Omit<DbPublisherSubscription, 'id'>>
+      }
       issue_reports: {
         Row: DbIssueReport
         Insert: Omit<DbIssueReport, 'id' | 'created_at'>
@@ -270,6 +285,8 @@ export interface DbApiKey {
   name: string | null
   rate_limit: number
   active: boolean
+  account_id: string | null
+  revoked_at: string | null
   created_at: string
   last_used_at: string | null
 }
@@ -303,6 +320,35 @@ export interface DbServiceRequest {
   url: string | null
   email: string | null
   status: 'pending' | 'reviewing' | 'indexed' | 'declined'
+  created_at: string
+}
+
+export interface DbApiAccount {
+  id: string
+  email: string
+  plan: 'free' | 'pro' | 'publisher' | 'enterprise'
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  subscription_status: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DbApiRequest {
+  id: number
+  api_key_id: string | null
+  account_id: string | null
+  endpoint: string
+  status: number
+  created_at: string
+}
+
+export interface DbPublisherSubscription {
+  id: string
+  account_id: string
+  service_id: string
+  verified: boolean
+  alert_email: string | null
   created_at: string
 }
 
