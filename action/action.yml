@@ -1,0 +1,39 @@
+name: 'Fabric Trust Check'
+description: 'Check trust scores for your AI dependencies using the Fabric Trust Index'
+author: 'Fabric Layer'
+
+inputs:
+  api-key:
+    description: 'Fabric Trust API key (fl_live_...). Get one free at https://trust.fabriclayer.ai/api-access'
+    required: false
+  slugs:
+    description: 'Comma-separated list of service slugs to check. If empty, auto-detects from package.json/requirements.txt'
+    required: false
+  fail-on-blocked:
+    description: 'Fail the workflow if any dependency has a "blocked" trust status'
+    required: false
+    default: 'true'
+  fail-on-unverified:
+    description: 'Fail the workflow if any dependency has an "unverified" trust status'
+    required: false
+    default: 'false'
+  api-url:
+    description: 'Custom API base URL'
+    required: false
+    default: 'https://trust.fabriclayer.ai'
+
+outputs:
+  results:
+    description: 'JSON array of trust check results'
+  blocked-count:
+    description: 'Number of blocked dependencies found'
+  caution-count:
+    description: 'Number of caution dependencies found'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'shield'
+  color: 'purple'

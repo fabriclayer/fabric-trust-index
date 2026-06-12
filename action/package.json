@@ -1,0 +1,10 @@
+{
+  "name": "@fabriclayer/trust-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action to check trust scores for AI dependencies",
+  "main": "index.js",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  }
+}
