@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "npx tsx src/scripts/validate-scoring.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
